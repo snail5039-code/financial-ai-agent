@@ -1,0 +1,30 @@
+# 환경 변수 및 비밀 설정
+.env
+.env.*
+!.env.example
+
+# 패키지 및 Python 캐시
+node_modules/
+__pycache__/
+*.pyc
+
+# 운영체제 및 로그
+.DS_Store
+Thumbs.db
+*.log
+
+# 편집기 설정
+.vscode/
+.idea/
+
+# 임시 및 캐시 파일
+*.tmp
+*.temp
+*.cache
+*.bak
+*.swp
+*.swo
+~$*
+.cache/
+tmp/
+temp/
