@@ -16,6 +16,7 @@
 - 알림 수신 설정: 채널·유형·심각도 기준과 화면용 테스트 알림 미리보기
 - 백테스트·전략 검증 요약: 기간·전략별 가상 지표, 월별 결과와 편향·과최적화 한계
 - 전략 비교·리밸런싱 제안: 전략별 목표 비중, 화면용 조정 제안과 승인 전 실행 경계
+- 시나리오·스트레스 테스트: 금리·반도체·환율·유동성 충격별 가상 손실과 대응 후보
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -32,6 +33,7 @@
 - `mockup/financial-dashboard/notification-settings-1440x900.png`
 - `mockup/financial-dashboard/backtest-summary-1440x900.png`
 - `mockup/financial-dashboard/rebalance-plan-1440x900.png`
+- `mockup/financial-dashboard/stress-test-1440x900.png`
 
 ## 로컬 실행
 
