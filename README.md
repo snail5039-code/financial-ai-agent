@@ -9,6 +9,7 @@
 - 승인 대기 목록·주문 상세: 네 개의 가상 주문 비교, 상태 필터, 독립적인 반려·모의승인 상태
 - 에이전트 실행 기록·검증 비교: 결정별 처리 단계, 최초 제안과 검증 후 결과, 가상 출처 감사 정보
 - 투자 정책 설정: 위험 한도와 차단 규칙 입력, 충돌 검사, DEC-1042 가상 적용 미리보기
+- 주간 투자 리포트: 자산·손익 변화, 벤치마크 비교, 처리 기록, 주요 위험과 데이터 한계
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -16,6 +17,8 @@
 - `mockup/financial-dashboard/financial-dashboard-1440x900.png`
 - `mockup/financial-dashboard/company-detail-1440x900.png`
 - `mockup/financial-dashboard/approval-queue-1440x900.png`
+- `mockup/financial-dashboard/audit-log-1440x900.png`
+- `mockup/financial-dashboard/policy-settings-1440x900.png`
 
 ## 로컬 실행
 

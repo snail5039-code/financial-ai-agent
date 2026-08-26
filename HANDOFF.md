@@ -96,6 +96,12 @@
 
 현재 로컬 `main`과 `origin/main`은 `2c4eea3`에서 일치한다.
 
+### 투자 정책 설정
+
+- 커밋: `118a4de`
+- 메시지: `투자 정책 설정 화면 목업 추가`
+- `main`과 `origin/main`에 반영됨
+
 ## 4. 현재 구현된 화면
 
 위치: `mockup/financial-dashboard/`
@@ -109,7 +115,9 @@
 4. `audit-log.html` — 에이전트 실행 기록·검증 비교
    - 결정 3건, 처리 타임라인, 최초 제안/검증 후 결과, 출처 상태
 5. `policy-settings.html` — 투자 정책 설정
-   - 현재 **구현 중이며 독립 검증 전**
+   - 위험 한도, 차단 규칙, DEC-1042 가상 적용 미리보기
+6. `weekly-report.html` — 주간 투자 리포트
+   - 자산·손익 변화, 벤치마크 비교, 에이전트 처리 기록, 주요 위험과 데이터 한계
 
 각 완료 화면에는 대응하는 `*-1440x900.png` 캡처가 있다.
 
@@ -126,21 +134,7 @@
 
 ## 6. 현재 미커밋 작업
 
-다음 파일은 투자 정책 화면 작업으로 변경되었으며 아직 커밋·푸시하면 안 된다.
-
-- 수정: `README.md`
-- 수정: `mockup/financial-dashboard/README.md`
-- 수정: `mockup/financial-dashboard/approval-queue.html`
-- 수정: `mockup/financial-dashboard/audit-log.html`
-- 수정: `mockup/financial-dashboard/company-detail.html`
-- 수정: `mockup/financial-dashboard/index.html`
-- 신규: `mockup/financial-dashboard/policy-settings.html`
-- 신규: `mockup/financial-dashboard/policy-settings.css`
-- 신규: `mockup/financial-dashboard/policy-settings-layout-fix.css`
-- 신규: `mockup/financial-dashboard/policy-settings.js`
-- 신규: `mockup/financial-dashboard/policy-settings-1440x900.png`
-
-기존 사용자 변경을 삭제하거나 되돌리지 말고 위 상태에서 이어간다.
+현재 미커밋 작업은 주간 투자 리포트 화면 작업이다. 기존 사용자 변경을 삭제하거나 되돌리지 말고 현재 상태에서 이어간다.
 
 ## 7. 투자 정책 화면 현재 상태
 
@@ -208,13 +202,17 @@ DEC-1042 가상 적용 미리보기:
 
 ## 9. 그다음 제품 단계
 
-정책 화면이 통과·푸시되면 다음은 **주간 투자 리포트 화면**이다.
+정책 화면은 통과·푸시되었고 다음은 **주간 투자 리포트 화면**이다.
 
 - 자산·손익 변화와 벤치마크 비교
 - AI 제안, 모의승인, 반려, 무효화 기록
 - 주요 위험과 데이터 한계
 - 기간·기준 통화·가상 데이터 고지
 - 기존 화면과 연결 후 전체 화면 통합 검증
+
+현재 `MOCKUP-006-I` 구현이 완료됐다. 신규 파일은 `weekly-report.html`, `weekly-report.css`, `weekly-report.js`, `weekly-report-1440x900.png`이며 기존 화면의 투자 리포트 링크를 `weekly-report.html`로 연결했다. 관리자 브라우저 점검에서는 1440×900 앱 창 1392×852, 본문 815px, 우측 인스펙터 352px, 가로 오버플로 없음, 콘솔 오류 없음, 정책 차단 선택 시 인스펙터 갱신, 기간 선택 `aria-pressed` 갱신을 확인했다.
+
+검증자 3세대의 `MOCKUP-006-V` 1차 판정은 `실패`였다. 높음 문제는 기간 버튼을 `1개월`로 바꿔도 주간 기간·손익·수익률이 유지되는 점이었고, 보통 문제는 현금 비중의 총자산 기준이 리포트 종료 총자산과 다른 점이었다. `MOCKUP-006-I-R1` 재작업으로 기간 선택 시 날짜, 시작·종료 총자산, 손익, 포트폴리오 수익률, 벤치마크, 초과수익, 막대, 계산식, 인스펙터 근거가 함께 갱신되도록 수정했다. 현금 비중 근거는 종료 총자산 130,180,000원과 현금성 자산 23,953,000원 기준 18.4%로 통일했다. 관리자 재점검에서 `1개월`은 `2026.07.26~2026.08.25`, `+4,580,000원`, `+3.65%`, `KOSPI +2.14%`, `+1.51%p`로 갱신되었고, `3개월`은 `2026.05.26~2026.08.25`, `+8,280,000원`으로 갱신되었다. 검증자 3세대의 `MOCKUP-006-V-R1` 재검증은 `통과`이며 남은 중대·높음·보통·낮음 문제는 없다.
 
 ## 10. 로컬 실행
 
@@ -230,6 +228,7 @@ python -m http.server 4173 --bind 127.0.0.1
 - 승인 대기: `http://127.0.0.1:4173/approval-queue.html`
 - 감사 로그: `http://127.0.0.1:4173/audit-log.html`
 - 투자 정책: `http://127.0.0.1:4173/policy-settings.html`
+- 주간 투자 리포트: `http://127.0.0.1:4173/weekly-report.html`
 
 ## 11. 안전 및 운영 주의
 
@@ -238,3 +237,4 @@ python -m http.server 4173 --bind 127.0.0.1
 - 비밀키, 토큰, 개인정보를 문서·커밋·화면에 넣지 않는다.
 - 공개 검색이나 신규 스킬이 필요하면 후보의 출처·권한·설치 영향을 사용자에게 먼저 보고하고 승인받는다.
 - 현재 별도의 신규 스킬 설치는 없다.
+- 이 프로젝트에서 사용자가 `커밋`을 지시하면 별도 반대 지시가 없는 한 `commit`과 `push origin main`까지 완료하는 뜻으로 해석한다.
