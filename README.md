@@ -12,6 +12,7 @@
 - 주간 투자 리포트: 자산·손익 변화, 벤치마크 비교, 처리 기록, 주요 위험과 데이터 한계
 - 데이터 연결 상태: 공시·가격·증권사·DB 연결의 미연결 상태와 출처 품질 점검
 - 모의 거래 내역: 기간·상태 필터, 가상 제안 이력, 비용 한계와 관련 기록 인스펙터
+- 리스크 알림·차단 이벤트: 심각도·카테고리 필터, 가상 위험 원인과 사용자 확인 인스펙터
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -24,6 +25,7 @@
 - `mockup/financial-dashboard/weekly-report-1440x900.png`
 - `mockup/financial-dashboard/data-connections-1440x900.png`
 - `mockup/financial-dashboard/trade-history-1440x900.png`
+- `mockup/financial-dashboard/risk-alerts-1440x900.png`
 
 ## 로컬 실행
 
