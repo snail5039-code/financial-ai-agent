@@ -14,6 +14,7 @@
 - 모의 거래 내역: 기간·상태 필터, 가상 제안 이력, 비용 한계와 관련 기록 인스펙터
 - 리스크 알림·차단 이벤트: 심각도·카테고리 필터, 가상 위험 원인과 사용자 확인 인스펙터
 - 알림 수신 설정: 채널·유형·심각도 기준과 화면용 테스트 알림 미리보기
+- 백테스트·전략 검증 요약: 기간·전략별 가상 지표, 월별 결과와 편향·과최적화 한계
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -28,6 +29,7 @@
 - `mockup/financial-dashboard/trade-history-1440x900.png`
 - `mockup/financial-dashboard/risk-alerts-1440x900.png`
 - `mockup/financial-dashboard/notification-settings-1440x900.png`
+- `mockup/financial-dashboard/backtest-summary-1440x900.png`
 
 ## 로컬 실행
 
