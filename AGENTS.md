@@ -124,3 +124,11 @@
 - 역할 작업의 도구 승인이 반복될 가능성이 있으면 관리자가 동일한 안전 작업을 관리자 작업에서 직접 수행하거나 승인 팝업이 없는 대체 절차를 사용한다.
 - 시스템이 사용자 본인에게만 요구하는 보안 승인은 관리자가 대신 클릭하거나 우회할 수 없다. 이 경우 해당 행동을 중단하고 사용자 승인 없이 가능한 대안을 우선한다.
 - 실제 거래, 외부 전송, 배포, 영구 삭제 등 사용자 승인이 강제된 행동은 이 라우팅 규칙으로 관리자에게 위임되지 않는다.
+
+## 11. 컨텍스트 절약형 인수 문서 읽기
+
+- `HANDOFF.md`가 길어진 경우 새 작업은 먼저 `docs/handoff/00-readme.md`의 단계별 안내를 따른다.
+- 기본 인수 확인은 `AGENTS.md` 전체와 `docs/handoff/01-current-state.md`, `docs/handoff/02-active-roles.md`를 우선 읽어 수행한다.
+- 새 화면을 기획·구현·검증할 때는 필요한 범위에 따라 `docs/handoff/03-completed-screens.md`, `docs/handoff/04-next-candidates.md`, `docs/handoff/05-validation-runbook.md`를 추가로 읽는다.
+- 이전 세부 이력, 분할 문서와 실제 상태의 불일치, 감사 근거 확인이 필요할 때만 `HANDOFF.md` 전체를 읽는다.
+- 세대교체 또는 새 역할 작업 첫 메시지에는 `AGENTS.md` 전체 읽기와 `docs/handoff/` 단계별 문서 참조를 명시한다. `HANDOFF.md` 전체 읽기는 필요한 경우에만 요구한다.

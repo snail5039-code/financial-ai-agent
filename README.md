@@ -18,6 +18,8 @@
 - 전략 비교·리밸런싱 제안: 전략별 목표 비중, 화면용 조정 제안과 승인 전 실행 경계
 - 시나리오·스트레스 테스트: 금리·반도체·환율·유동성 충격별 가상 손실과 대응 후보
 - 포트폴리오 건강: 정책·데이터·리스크·승인·전략·스트레스 항목을 묶은 운영 전 체크리스트
+- 세금·수수료 영향 점검: 승인 전 가상 주문별 수수료·세금·슬리피지·환전 비용과 순손익 비교
+- 사용자 승인 이력·결정 회고: 승인·반려·보류 당시 근거, 사용자 메모, 가상 경로 비교 확인
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -36,6 +38,8 @@
 - `mockup/financial-dashboard/rebalance-plan-1440x900.png`
 - `mockup/financial-dashboard/stress-test-1440x900.png`
 - `mockup/financial-dashboard/portfolio-health-1440x900.png`
+- `mockup/financial-dashboard/tax-fee-impact-1440x900.png`
+- `mockup/financial-dashboard/decision-review-1440x900.png`
 
 ## 로컬 실행
 
@@ -65,6 +69,7 @@ http://127.0.0.1:4173/mockup/financial-dashboard/
 - `FINANCIAL_AI_AGENT_IDEA.md`: 프로젝트 개념과 에이전트 구조
 - `FINANCIAL_AI_AGENT_IMPLEMENTATION.md`: 구현 방향과 기술 검토
 - `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
+- `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서
 - `mockup/financial-dashboard/`: 실행 가능한 정적 HTML/CSS/JavaScript와 화면 캡처
 - 그 밖의 루트 Markdown 파일: 작업공간에서 검토한 서비스 및 제품 아이디어 문서
 
