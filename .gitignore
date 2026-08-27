@@ -7,6 +7,8 @@
 node_modules/
 __pycache__/
 *.pyc
+dist/
+*.tsbuildinfo
 
 # 운영체제 및 로그
 .DS_Store

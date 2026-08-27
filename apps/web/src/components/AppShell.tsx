@@ -1,0 +1,126 @@
+import {
+  Activity,
+  Bell,
+  BookOpenCheck,
+  CircleDollarSign,
+  ClipboardCheck,
+  FileClock,
+  Gauge,
+  History,
+  LayoutDashboard,
+  ListChecks,
+  RefreshCw,
+  Scale,
+  Search,
+  Settings,
+  ShieldAlert,
+  SlidersHorizontal,
+  SplitSquareHorizontal,
+  TableProperties,
+  Waypoints
+} from "lucide-react";
+import type { NavItem, PageKey } from "../types/dashboard";
+import { DataBoundaryNotice } from "./DataBoundaryNotice";
+
+const NAV_ITEMS: ReadonlyArray<NavItem> = [
+  { group: "투자 운영", label: "포트폴리오", icon: LayoutDashboard, page: "dashboard" },
+  { group: "투자 운영", label: "계좌", icon: CircleDollarSign },
+  { group: "투자 운영", label: "거래 내역", icon: History },
+  { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert },
+  { group: "투자 운영", label: "백테스트", icon: Gauge },
+  { group: "투자 운영", label: "전략 조정", icon: SlidersHorizontal },
+  { group: "투자 운영", label: "변경 비교", icon: SplitSquareHorizontal },
+  { group: "투자 운영", label: "근거 패킷", icon: ClipboardCheck, page: "evidence" },
+  { group: "에이전트", label: "분석 에이전트", icon: Activity },
+  { group: "에이전트", label: "검증 에이전트", icon: BookOpenCheck },
+  { group: "에이전트", label: "승인 대기", icon: ListChecks, page: "approvals", badge: "4" },
+  { group: "문서", label: "투자 리포트", icon: TableProperties },
+  { group: "문서", label: "감사 로그", icon: FileClock },
+  { group: "설정", label: "투자 정책", icon: Scale },
+  { group: "설정", label: "알림 설정", icon: Bell },
+  { group: "설정", label: "데이터 연결", icon: Settings }
+];
+
+const NAV_GROUPS: ReadonlyArray<NavItem["group"]> = ["투자 운영", "에이전트", "문서", "설정"];
+
+interface AppShellProps {
+  title: string;
+  accountLabel: string;
+  lastSync: string;
+  activePage: PageKey;
+  onNavigate: (page: PageKey) => void;
+  main: React.ReactNode;
+  inspector: React.ReactNode;
+}
+
+export function AppShell({ title, accountLabel, lastSync, activePage, onNavigate, main, inspector }: AppShellProps) {
+  return (
+    <main className="app-shell" aria-label="금융 AI 모의투자 프론트엔드">
+      <header className="titlebar">
+        <div className="title-left">
+          <div className="traffic" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+          <button className="icon-button" aria-label="사이드바 접기">
+            <Waypoints size={16} />
+          </button>
+          <strong>{title}</strong>
+        </div>
+        <div className="title-center">
+          <button className="account-switcher">{accountLabel}</button>
+          <span className="paper-badge">모의투자</span>
+        </div>
+        <div className="title-right">
+          <span>마지막 동기화 {lastSync}</span>
+          <button className="icon-button" aria-label="검색">
+            <Search size={15} />
+          </button>
+          <button className="icon-button" aria-label="새로고침">
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </header>
+
+      <div className="workspace">
+        <aside className="sidebar">
+          <nav aria-label="주요 메뉴">
+            {NAV_GROUPS.map((group) => (
+              <div key={group} className="nav-group">
+                <p className="nav-label">{group}</p>
+                {NAV_ITEMS
+                  .filter((item) => item.group === group)
+                  .map((item) => {
+                    const Icon = item.icon;
+                    const isActive = item.page === activePage;
+                    return (
+                      <button
+                        className={isActive ? "nav-item active" : "nav-item"}
+                        key={item.label}
+                        type="button"
+                        data-nav-label={item.label}
+                        data-nav-group={item.group}
+                        aria-current={isActive ? "page" : undefined}
+                        aria-disabled={item.page ? undefined : true}
+                        onClick={() => {
+                          if (item.page) onNavigate(item.page);
+                        }}
+                      >
+                        <Icon size={15} aria-hidden="true" />
+                        <span>{item.label}</span>
+                        {item.badge ? <b>{item.badge}</b> : null}
+                      </button>
+                    );
+                  })}
+              </div>
+            ))}
+          </nav>
+          <DataBoundaryNotice compact />
+        </aside>
+        {main}
+        {inspector}
+      </div>
+    </main>
+  );
+}
