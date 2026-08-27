@@ -7,7 +7,7 @@
 
 ## 1. 프로젝트 목적
 
-금융 AI의 제안, 독립 검증, 사용자 승인 과정을 투명하게 보여주는 macOS 스타일 데스크톱 목업을 제작한다. 현재 단계는 **화면과 로컬 인터랙션 검증**이며 실제 금융 데이터, 계좌, 주문, AI 실행, API 및 DB는 연결하지 않는다.
+금융 AI의 제안, 독립 검증, 사용자 승인 과정을 투명하게 보여주는 macOS 스타일 데스크톱 목업을 제작한다. 현재 단계는 **MOCKUP-020 후보 정리 및 기획 준비**이며 실제 금융 데이터, 계좌, 주문, AI 실행, API 및 DB는 연결하지 않는다.
 
 모든 담당자는 루트의 `AGENTS.md`를 최우선으로 따른다. 표준 순서는 `기획자 → 관리자 승인 → 구현자 → 독립 검증자 → 재작업 → 관리자 인수`이다.
 
@@ -237,11 +237,25 @@
 
 ### 사용자 승인 이력·결정 회고
 
-- 커밋: 미실행
+- 커밋: `13e0e6f`
 - 파일: `decision-review.html`, `decision-review.css`, `decision-review.js`, `decision-review-1440x900.png`
 - `MOCKUP-016-V` 대체 독립 검증 실패 후 R1 재검증에서 통과됨
 
-현재 로컬 `main`과 `origin/main`은 `8e5fb60 포트폴리오 건강 화면 목업 추가`에서 일치해야 하며, `MOCKUP-015`와 `MOCKUP-016` 변경은 아직 커밋·푸시하지 않았다.
+### 에이전트별 역할 상태판
+
+- 커밋: 미실행
+- 파일: `agent-role-status.html`, `agent-role-status.css`, `agent-role-status.js`, `agent-role-status-1440x900.png`
+- `MOCKUP-017-I` 구현으로 제안자·검증자·정책 감시자·승인 관리자 4개 역할의 가상 상태, 대기 사유, 충돌·실패 이력, 사용자 승인 필요 항목을 표시했다.
+- 실제 금융 데이터·계좌·주문·API·DB와 실제 AI 실행 상태는 연결하지 않았다.
+
+### 포트폴리오 변경 전/후 비교
+
+- 커밋: 미실행
+- 파일: `portfolio-change-compare.html`, `portfolio-change-compare.css`, `portfolio-change-compare.js`, `portfolio-change-compare-1440x900.png`
+- `MOCKUP-018-I` 구현으로 승인 전 현재·변경 후 비중, 현금 변화, 예상 위험 변화, 정책 확인 항목, DEC-1056 승인 대기 연결을 표시했다.
+- 실제 금융 데이터·계좌·주문·체결·API·DB와 실제 환율·시세 조회는 연결하지 않았다.
+
+현재 로컬 `main`과 `origin/main`은 `13e0e6f 세금 수수료와 결정 회고 목업 추가`에서 일치해야 하며, `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019` 변경은 아직 커밋·푸시하지 않았다.
 
 ## 4. 현재 구현된 화면
 
@@ -279,6 +293,12 @@
     - 승인 전 가상 주문별 수수료·세금·슬리피지·환전 비용과 순손익 비교
 16. `decision-review.html` — 사용자 승인 이력·결정 회고
     - 승인·반려·보류 당시 근거, 사용자 메모, 가상 경로 비교
+17. `agent-role-status.html` — 에이전트별 역할 상태판
+    - 제안자·검증자·정책 감시자·승인 관리자 상태, 대기 사유, 충돌·검증 실패 이력
+18. `portfolio-change-compare.html` — 포트폴리오 변경 전/후 비교
+    - 승인 전 현재·변경 후 비중, 현금·위험 변화, 정책 확인 항목
+19. `evidence-packet.html` — 승인 전 근거 패킷
+    - 결정 후보별 계산·정책·비용·출처·리스크·역할 확인과 사용자 승인 경계
 
 각 완료 화면에는 대응하는 `*-1440x900.png` 캡처가 있다.
 
@@ -295,7 +315,7 @@
 
 ## 6. 현재 미커밋 작업
 
-컨텍스트 절약용 인수 문서 분할과 `MOCKUP-015`, `MOCKUP-016` 완료 반영이 미커밋 상태다.
+컨텍스트 절약용 인수 문서 분할과 `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019` 구현·문서 반영이 미커밋 상태다.
 
 - 신규: `docs/handoff/00-readme.md`
 - 신규: `docs/handoff/01-current-state.md`
@@ -311,9 +331,21 @@
 - 신규: `mockup/financial-dashboard/decision-review.css`
 - 신규: `mockup/financial-dashboard/decision-review.js`
 - 신규: `mockup/financial-dashboard/decision-review-1440x900.png`
+- 신규: `mockup/financial-dashboard/agent-role-status.html`
+- 신규: `mockup/financial-dashboard/agent-role-status.css`
+- 신규: `mockup/financial-dashboard/agent-role-status.js`
+- 신규: `mockup/financial-dashboard/agent-role-status-1440x900.png`
+- 신규: `mockup/financial-dashboard/portfolio-change-compare.html`
+- 신규: `mockup/financial-dashboard/portfolio-change-compare.css`
+- 신규: `mockup/financial-dashboard/portfolio-change-compare.js`
+- 신규: `mockup/financial-dashboard/portfolio-change-compare-1440x900.png`
+- 신규: `mockup/financial-dashboard/evidence-packet.html`
+- 신규: `mockup/financial-dashboard/evidence-packet.css`
+- 신규: `mockup/financial-dashboard/evidence-packet.js`
+- 신규: `mockup/financial-dashboard/evidence-packet-1440x900.png`
 - 수정: `HANDOFF.md`, `README.md`, `mockup/financial-dashboard/README.md`, 기존 목업 HTML 내비게이션 파일들
 
-로컬 `main`과 `origin/main`은 마지막 완료 커밋 `8e5fb60 포트폴리오 건강 화면 목업 추가`에서 일치했고, 위 변경은 아직 커밋·푸시하지 않았다.
+로컬 `main`과 `origin/main`은 마지막 완료 커밋 `13e0e6f 세금 수수료와 결정 회고 목업 추가`에서 일치해야 하며, 위 변경은 아직 커밋·푸시하지 않았다.
 
 ## 7. 투자 정책 화면 현재 상태
 
@@ -428,7 +460,7 @@ DEC-1042 가상 적용 미리보기:
   - 중대·높음·보통·낮음 문제 없음
   - 기존 사이드바 검증자 6세대는 MOCKUP-012 검증 턴이 완료됐으나 관리자 읽기 결과 본문이 비어, 별도 읽기 전용 독립 검증으로 파일 존재, PNG 헤더와 크기, JS 문법, 금지 패턴, 1440×900 레이아웃, 전략·제안 선택 상호작용, 링크, 안전 문구를 대체 확인했다.
 
-현재 다음 제품 단계는 사용자 또는 관리자가 새 화면 범위를 정한 뒤 `MOCKUP-017`로 시작한다.
+MOCKUP-012 이후 후속 화면은 아래 완료 이력에 이어 기록한다.
 
 **시나리오·스트레스 테스트 화면**은 `MOCKUP-013`으로 완료되었다.
 
@@ -508,7 +540,52 @@ MOCKUP-013 완료 및 커밋 뒤에는 사용자 지시에 따라 관리자·기
   - 남은 이슈 없음
 - 커밋·푸시는 아직 실행하지 않았다.
 
-다음 제품 단계는 사용자 또는 관리자가 새 화면 범위를 정한 뒤 `MOCKUP-017`로 시작한다. 후보는 `docs/handoff/04-next-candidates.md`를 우선 참조하며, 현재 1순위는 `에이전트별 역할 상태판`이다.
+**에이전트별 역할 상태판**은 `MOCKUP-017`로 구현 및 독립 검증까지 완료했다.
+
+- 실제 금융 데이터, 계좌, 주문, 체결, API, DB, 실제 AI 실행 상태 연결 없이 화면용 고정 예시만 표시한다.
+- 역할은 `제안자`, `검증자`, `정책 감시자`, `승인 관리자` 4개로 고정했다.
+- 상태 필터 `전체/대기/승인 필요/실패 이력`과 역할 목록 선택에 따라 중앙 타임라인과 우측 인스펙터가 함께 갱신된다.
+- 빈 결과 상태에서는 이전 선택과 기본 관련 링크가 남지 않도록 초기화한다.
+- 신규 파일: `agent-role-status.html`, `agent-role-status.css`, `agent-role-status.js`, `agent-role-status-1440x900.png`
+- `MOCKUP-017-V` 대체 독립 검증: 통과
+- 커밋·푸시는 아직 실행하지 않았다.
+
+**포트폴리오 변경 전/후 비교**는 `MOCKUP-018`로 구현 및 독립 검증까지 완료했다.
+
+- 실제 금융 데이터, 계좌, 주문, 체결, API, DB, 실제 환율·시세 조회 없이 화면용 고정 예시만 표시한다.
+- 기준 총액은 `10,000,000원`, 기준 시각은 `2026.08.27 15:20 KST 화면 예시`다.
+- 자산 6개(`현금성 자산`, `KODEX 200`, `삼성전자`, `SK하이닉스`, `NAVER`, `TIGER 미국S&P500`)의 현재·변경 후 비중을 비교한다.
+- 상태 필터 `전체/비중 증가/비중 감소/확인 필요`와 자산 선택에 따라 우측 인스펙터가 갱신된다.
+- 빈 결과 상태에서는 이전 선택과 기본 관련 링크가 남지 않도록 초기화한다.
+- 신규 파일: `portfolio-change-compare.html`, `portfolio-change-compare.css`, `portfolio-change-compare.js`, `portfolio-change-compare-1440x900.png`
+- `MOCKUP-018-V` 대체 독립 검증: 통과
+  - 중대·높음·보통·낮음 문제 없음
+  - `node --check portfolio-change-compare.js` 통과
+  - PNG 헤더 `89 50 4E 47 0D 0A 1A 0A` 및 1440×900 크기 확인
+  - 1440×900 렌더에서 앱 창 1392×852, 문서 scrollWidth/clientWidth 1440/1440, 가로 오버플로 없음 확인
+  - 필터 `전체/비중 증가/비중 감소/확인 필요`와 자산 선택 시 목록·우측 인스펙터 갱신 확인
+  - 금지 연결·저장 패턴과 외부 URL/API 패턴 없음, 실제 금융 연결 금지 준수 확인
+- 커밋·푸시는 아직 실행하지 않았다.
+
+**승인 전 근거 패킷**은 `MOCKUP-019`로 구현 및 독립 검증까지 완료했다.
+
+- 실제 금융 데이터, 계좌, 주문, 체결, API, DB, 실제 공시·시세 조회 없이 화면용 고정 예시만 표시한다.
+- 결정 4건은 `DEC-1056` 삼성전자 비중 +2% 후보, `DEC-1054` Apple 소액 매수 후보, `DEC-1050` KODEX 200 비중 유지 점검, `DEC-1052` SK하이닉스 매도 보류 후보로 구성했다.
+- 근거 항목은 계산 재현성, 정책 한도, 세금·수수료·슬리피지, 출처 연결 상태, 리스크 알림, 역할별 확인, 사용자 승인 필요를 표시한다.
+- 필터는 `전체/확인 완료/확인 필요/차단`이며 선택 항목이 숨겨지면 첫 보이는 결정으로 자동 선택된다.
+- 빈 결과 상태에서는 이전 선택, 근거 목록, 기본 관련 링크를 비운다.
+- 신규 파일: `evidence-packet.html`, `evidence-packet.css`, `evidence-packet.js`, `evidence-packet-1440x900.png`
+- `MOCKUP-019-V` 대체 독립 검증: 통과
+  - 중대·높음·보통·낮음 문제 없음
+  - `node --check evidence-packet.js` 통과
+  - PNG 헤더 `89 50 4E 47 0D 0A 1A 0A` 및 1440×900 크기 확인
+  - 1440×900 렌더에서 앱 창 1392×852, 내부 열 223/815/352, 하단 877px, 가로 오버플로와 콘솔 오류 없음 확인
+  - 결정 4건과 필터 `전체/확인 완료/확인 필요/차단`, 선택 시 근거 카드·우측 인스펙터 갱신 확인
+  - 전체 HTML 19개에서 `evidence-packet.html` 진입 링크 확인
+  - 금지 연결·저장 패턴과 외부 URL/API 패턴 없음, 실제 금융 연결 금지 준수 확인
+- 커밋·푸시는 아직 실행하지 않았다.
+
+다음 제품 단계는 사용자 또는 관리자가 새 화면 범위를 정해 `MOCKUP-020`으로 시작한다. 후보는 `docs/handoff/04-next-candidates.md`에서 새로 정리한다.
 
 ## 11. 로컬 실행
 
@@ -531,10 +608,13 @@ python -m http.server 4173 --bind 127.0.0.1
 - 알림 설정: `http://127.0.0.1:4173/notification-settings.html`
 - 백테스트 요약: `http://127.0.0.1:4173/backtest-summary.html`
 - 전략 조정: `http://127.0.0.1:4173/rebalance-plan.html`
+- 변경 비교: `http://127.0.0.1:4173/portfolio-change-compare.html`
+- 근거 패킷: `http://127.0.0.1:4173/evidence-packet.html`
 - 스트레스 테스트: `http://127.0.0.1:4173/stress-test.html`
 - 포트폴리오 건강: `http://127.0.0.1:4173/portfolio-health.html`
 - 세금·수수료 영향 점검: `http://127.0.0.1:4173/tax-fee-impact.html`
 - 결정 회고: `http://127.0.0.1:4173/decision-review.html`
+- 역할 상태: `http://127.0.0.1:4173/agent-role-status.html`
 
 ## 12. 안전 및 운영 주의
 

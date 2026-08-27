@@ -16,10 +16,13 @@
 - 알림 수신 설정: 채널·유형·심각도 기준과 화면용 테스트 알림 미리보기
 - 백테스트·전략 검증 요약: 기간·전략별 가상 지표, 월별 결과와 편향·과최적화 한계
 - 전략 비교·리밸런싱 제안: 전략별 목표 비중, 화면용 조정 제안과 승인 전 실행 경계
+- 포트폴리오 변경 전/후 비교: 승인 전 현재·변경 후 비중, 현금·위험 변화, 정책 확인 항목 비교
+- 승인 전 근거 패킷: 결정 후보별 계산·정책·비용·출처·리스크·역할 확인과 사용자 승인 경계 묶음
 - 시나리오·스트레스 테스트: 금리·반도체·환율·유동성 충격별 가상 손실과 대응 후보
 - 포트폴리오 건강: 정책·데이터·리스크·승인·전략·스트레스 항목을 묶은 운영 전 체크리스트
 - 세금·수수료 영향 점검: 승인 전 가상 주문별 수수료·세금·슬리피지·환전 비용과 순손익 비교
 - 사용자 승인 이력·결정 회고: 승인·반려·보류 당시 근거, 사용자 메모, 가상 경로 비교 확인
+- 에이전트별 역할 상태판: 제안자·검증자·정책 감시자·승인 관리자 상태와 대기·충돌 이력 확인
 - 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
 
 화면 캡처는 다음 파일에서 확인할 수 있습니다.
@@ -36,10 +39,13 @@
 - `mockup/financial-dashboard/notification-settings-1440x900.png`
 - `mockup/financial-dashboard/backtest-summary-1440x900.png`
 - `mockup/financial-dashboard/rebalance-plan-1440x900.png`
+- `mockup/financial-dashboard/portfolio-change-compare-1440x900.png`
+- `mockup/financial-dashboard/evidence-packet-1440x900.png`
 - `mockup/financial-dashboard/stress-test-1440x900.png`
 - `mockup/financial-dashboard/portfolio-health-1440x900.png`
 - `mockup/financial-dashboard/tax-fee-impact-1440x900.png`
 - `mockup/financial-dashboard/decision-review-1440x900.png`
+- `mockup/financial-dashboard/agent-role-status-1440x900.png`
 
 ## 로컬 실행
 
@@ -62,6 +68,7 @@ http://127.0.0.1:4173/mockup/financial-dashboard/
 - 실제 공시 검증을 수행하지 않았으며 확인되지 않은 정보는 투자 판단에 사용할 수 없습니다.
 - 이 프로젝트는 투자 권유가 아니며 수익이나 손실 회피를 보장하지 않습니다.
 - 모의승인 동작은 브라우저 화면 상태만 변경하며 실제 주문을 생성하지 않습니다.
+- 사용자 승인 전 금융 행동은 없으며, 목업에서는 승인 후에도 실제 매수·매도·체결이 발생하지 않습니다.
 
 ## 문서 구조
 
