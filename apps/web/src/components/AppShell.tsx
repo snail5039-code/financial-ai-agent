@@ -29,7 +29,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert },
   { group: "투자 운영", label: "백테스트", icon: Gauge },
   { group: "투자 운영", label: "전략 조정", icon: SlidersHorizontal },
-  { group: "투자 운영", label: "변경 비교", icon: SplitSquareHorizontal },
+  { group: "투자 운영", label: "변경 비교", icon: SplitSquareHorizontal, page: "compare" },
   { group: "투자 운영", label: "근거 패킷", icon: ClipboardCheck, page: "evidence" },
   { group: "에이전트", label: "분석 에이전트", icon: Activity },
   { group: "에이전트", label: "검증 에이전트", icon: BookOpenCheck },

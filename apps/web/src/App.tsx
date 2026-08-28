@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApprovalQueuePage } from "./pages/ApprovalQueuePage";
 import { EvidencePacketPage } from "./pages/EvidencePacketPage";
+import { PortfolioChangeComparePage } from "./pages/PortfolioChangeComparePage";
 import type { PageKey } from "./types/dashboard";
 
 export function App() {
@@ -13,6 +14,10 @@ export function App() {
 
   if (page === "evidence") {
     return <EvidencePacketPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "compare") {
+    return <PortfolioChangeComparePage activePage={page} onNavigate={setPage} />;
   }
 
   return <DashboardPage activePage={page} onNavigate={setPage} />;

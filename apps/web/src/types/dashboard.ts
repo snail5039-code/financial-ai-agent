@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
-export type PageKey = "dashboard" | "approvals" | "evidence";
+export type PageKey = "dashboard" | "approvals" | "evidence" | "compare";
 
 export interface NavItem {
   label: string;
@@ -72,4 +72,45 @@ export interface DashboardData {
     checks: Array<{ label: string; value: string; tone: Tone }>;
     invalidConditions: string[];
   };
+}
+
+export type PortfolioChangeFilter = "all" | "up" | "down" | "check" | "none";
+
+export interface PortfolioChangeAsset {
+  id: string;
+  name: string;
+  ticker: string;
+  currentWeight: number;
+  nextWeight: number;
+  amountChange: number;
+  direction: "up" | "down";
+  policyLabel: string;
+  policyType: "pass" | "check" | "block";
+  riskLabel: string;
+  policyCheck: string;
+  sourceState: string;
+  summary: string;
+}
+
+export interface PortfolioChangeCompareData {
+  id: string;
+  title: string;
+  summary: string;
+  baseAmount: number;
+  generatedAt: string;
+  dataAsOf: string;
+  sourceLabel: string;
+  isMock: true;
+  paperOnly: true;
+  executed: false;
+  externalConnections: 0;
+  safetyCopy: string;
+  stats: {
+    cashChange: string;
+    riskChange: string;
+    maxDrawdownChange: string;
+    sectorConcentrationChange: string;
+    approvalState: string;
+  };
+  assets: PortfolioChangeAsset[];
 }
