@@ -11,7 +11,10 @@ export type PageKey =
   | "policy"
   | "data"
   | "trades"
-  | "risks";
+  | "risks"
+  | "notifications"
+  | "backtest"
+  | "rebalance";
 
 export interface NavItem {
   label: string;

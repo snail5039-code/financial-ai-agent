@@ -2,11 +2,14 @@ import { useState } from "react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApprovalQueuePage } from "./pages/ApprovalQueuePage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { BacktestSummaryPage } from "./pages/BacktestSummaryPage";
 import { CompanyDetailPage } from "./pages/CompanyDetailPage";
 import { DataConnectionsPage } from "./pages/DataConnectionsPage";
 import { EvidencePacketPage } from "./pages/EvidencePacketPage";
+import { NotificationSettingsPage } from "./pages/NotificationSettingsPage";
 import { PolicySettingsPage } from "./pages/PolicySettingsPage";
 import { PortfolioChangeComparePage } from "./pages/PortfolioChangeComparePage";
+import { RebalancePlanPage } from "./pages/RebalancePlanPage";
 import { RiskAlertsPage } from "./pages/RiskAlertsPage";
 import { TradeHistoryPage } from "./pages/TradeHistoryPage";
 import type { PageKey } from "./types/dashboard";
@@ -48,6 +51,18 @@ export function App() {
 
   if (page === "risks") {
     return <RiskAlertsPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "notifications") {
+    return <NotificationSettingsPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "backtest") {
+    return <BacktestSummaryPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "rebalance") {
+    return <RebalancePlanPage activePage={page} onNavigate={setPage} />;
   }
 
   return <DashboardPage activePage={page} onNavigate={setPage} />;
