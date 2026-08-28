@@ -8,8 +8,13 @@
   display: flex;
   height: 96px;
   justify-content: space-between;
+  gap: 14px;
   border-bottom: 1px solid var(--line);
   padding: 14px 22px;
+}
+
+.company-header > div {
+  min-width: 0;
 }
 
 .inline-link {
@@ -28,6 +33,7 @@
   align-items: baseline;
   gap: 8px;
   margin-top: 4px;
+  min-width: 0;
 }
 
 .company-title h1 {
@@ -47,9 +53,12 @@
   color: var(--orange);
   font-size: 10px;
   font-weight: 600;
+  line-height: 13px;
+  overflow-wrap: anywhere;
 }
 
 .company-header time {
+  flex: 0 0 auto;
   margin-top: 6px;
   color: var(--text-muted);
   font-size: 10px;
@@ -89,11 +98,15 @@
 .price-summary dl div {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .price-summary dd {
   margin: 0;
   font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .mini-chart {
@@ -141,6 +154,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .company-section-label h2 {
@@ -151,6 +166,9 @@
 .company-section-label span {
   color: var(--text-muted);
   font-size: 9.5px;
+  line-height: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .metric-grid {
@@ -163,6 +181,7 @@
 
 .metric-grid > div {
   height: 48px;
+  min-width: 0;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   padding: 6px 9px;
@@ -177,17 +196,22 @@
 .metric-grid span {
   color: var(--text-muted);
   font-size: 9px;
+  line-height: 11px;
 }
 
 .metric-grid strong {
   margin-top: 1px;
   font-size: 13px;
+  line-height: 15px;
+  overflow-wrap: anywhere;
 }
 
 .metric-grid small {
   margin-top: 1px;
   color: #777;
   font-size: 8.5px;
+  line-height: 10px;
+  overflow-wrap: anywhere;
 }
 
 .ai-evidence {
@@ -198,9 +222,13 @@
 
 .evidence-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   margin-top: 6px;
+}
+
+.evidence-columns > div {
+  min-width: 0;
 }
 
 .evidence-columns h3 {
@@ -214,25 +242,31 @@
 }
 
 .detail-choice {
-  display: flex;
+  display: grid;
   width: 100%;
   height: 36px;
-  align-items: center;
-  justify-content: space-between;
+  min-width: 0;
+  align-content: center;
+  gap: 2px;
   border: 0;
   border-top: 1px solid #ececef;
   background: #fff;
-  padding: 5px 6px;
+  padding: 4px 6px;
   text-align: left;
 }
 
 .detail-choice b {
+  min-width: 0;
   font-size: 10px;
+  line-height: 12px;
+  overflow-wrap: anywhere;
 }
 
 .detail-choice span {
   color: var(--text-muted);
   font-size: 8.5px;
+  line-height: 10px;
+  overflow-wrap: anywhere;
 }
 
 .detail-choice[aria-pressed="true"],
@@ -255,8 +289,9 @@
   display: grid;
   width: 100%;
   height: 41px;
-  grid-template-columns: 104px 1fr auto;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
   align-items: center;
+  column-gap: 8px;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: #fff;
@@ -271,11 +306,16 @@
 
 .filing-choice > b {
   font-size: 10px;
+  line-height: 13px;
+  overflow-wrap: anywhere;
 }
 
 .filing-choice time {
   color: var(--text-muted);
   font-size: 9px;
+  line-height: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .filing-warning {
@@ -283,6 +323,8 @@
   color: var(--orange);
   font-size: 9.5px;
   font-weight: 600;
+  line-height: 12px;
+  overflow-wrap: anywhere;
 }
 
 .company-inspector {
@@ -324,6 +366,7 @@
 
 .company-inspector p {
   line-height: 16px;
+  overflow-wrap: anywhere;
 }
 
 .company-inspector dl {
@@ -333,11 +376,14 @@
 .company-inspector dl div {
   display: flex;
   justify-content: space-between;
+  gap: 10px;
   line-height: 22px;
 }
 
 .company-inspector dd {
   font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .inspector-caution {
@@ -367,10 +413,12 @@
 
 .inspector-source strong {
   margin: 5px 0;
+  overflow-wrap: anywhere;
 }
 
 .inspector-source small {
   color: var(--orange);
+  overflow-wrap: anywhere;
 }
 
 .company-inspector-actions {
@@ -382,7 +430,7 @@
 .company-inspector-actions button {
   display: flex;
   width: 100%;
-  height: 31px;
+  min-height: 31px;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -401,4 +449,7 @@
   color: var(--orange);
   font-size: 9px;
   font-weight: 600;
+  line-height: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
 }

@@ -8,8 +8,13 @@
   display: flex;
   height: 86px;
   justify-content: space-between;
+  gap: 14px;
   border-bottom: 1px solid var(--line);
   padding: 13px 22px;
+}
+
+.audit-header > div {
+  min-width: 0;
 }
 
 .audit-header h1 {
@@ -20,9 +25,12 @@
 .audit-header p {
   margin: 2px 0;
   color: var(--text-muted);
+  line-height: 14px;
+  overflow-wrap: anywhere;
 }
 
 .audit-header > div:last-child {
+  flex: 0 0 auto;
   text-align: right;
 }
 
@@ -43,6 +51,7 @@
 }
 
 .audit-decisions button {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
@@ -57,6 +66,8 @@
 
 .audit-decisions b {
   margin: 2px 0 4px;
+  line-height: 13px;
+  overflow-wrap: anywhere;
 }
 
 .audit-decisions button[aria-selected="true"],
@@ -83,6 +94,9 @@
   float: right;
   color: var(--text-muted);
   font-weight: 400;
+  max-width: 50%;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .audit-timeline > div {
@@ -158,16 +172,19 @@
 .audit-sources header {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .audit-compare label {
+  flex: 0 0 auto;
   font-size: 9.5px;
 }
 
 .compare-head,
 .compare-row {
   display: grid;
-  grid-template-columns: 132px 1fr 1fr;
+  grid-template-columns: 118px minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
 }
 
@@ -181,11 +198,17 @@
 .compare-head > *,
 .compare-row > * {
   padding: 0 9px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .compare-row {
-  height: 42px;
+  min-height: 42px;
   border-bottom: 1px solid var(--line);
+}
+
+.compare-row b {
+  line-height: 14px;
 }
 
 .compare-row.changed {
@@ -205,6 +228,8 @@
 .audit-compare > p {
   color: var(--orange);
   font-size: 8.5px;
+  line-height: 12px;
+  overflow-wrap: anywhere;
 }
 
 .audit-sources {
@@ -215,6 +240,9 @@
 .audit-sources header span {
   color: var(--text-muted);
   font-size: 9px;
+  line-height: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .audit-sources > div {
@@ -224,9 +252,10 @@
 .audit-sources button {
   display: grid;
   width: 100%;
-  height: 52px;
-  grid-template-columns: 180px 1fr 90px;
+  min-height: 52px;
+  grid-template-columns: 146px minmax(0, 1fr) 76px;
   align-items: center;
+  column-gap: 8px;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: #fff;
@@ -236,16 +265,23 @@
 .audit-sources button b,
 .audit-sources button small {
   display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .audit-sources button small {
   color: var(--text-muted);
   font-size: 8.5px;
+  line-height: 11px;
 }
 
 .audit-sources button strong {
+  display: block;
+  min-height: 15px;
   color: var(--orange);
+  line-height: 15px;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .audit-inspector {
@@ -281,6 +317,7 @@
 
 .audit-inspector p {
   line-height: 16px;
+  overflow-wrap: anywhere;
 }
 
 .audit-inspector dl {
@@ -290,11 +327,14 @@
 .audit-inspector dl div {
   display: flex;
   justify-content: space-between;
+  gap: 10px;
   line-height: 21px;
 }
 
 .audit-inspector dd {
   font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .audit-risk {
@@ -323,6 +363,9 @@
   background: #eef6ff;
   color: #075da8;
   font-weight: 650;
+  line-height: 13px;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .audit-inspector footer p {
@@ -332,6 +375,8 @@
   color: #6d4b12;
   padding: 7px 9px;
   font-size: 10px;
+  line-height: 13px;
+  overflow-wrap: anywhere;
 }
 
 .audit-inspector footer small {
@@ -339,5 +384,7 @@
   margin-top: 7px;
   color: var(--orange);
   font-size: 8.5px;
+  line-height: 11px;
   text-align: center;
+  overflow-wrap: anywhere;
 }
