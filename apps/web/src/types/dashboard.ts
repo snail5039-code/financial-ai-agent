@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
-export type PageKey = "dashboard" | "approvals" | "evidence" | "compare";
+export type PageKey = "dashboard" | "company" | "approvals" | "evidence" | "compare" | "audit" | "policy";
 
 export interface NavItem {
   label: string;

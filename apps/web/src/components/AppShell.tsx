@@ -2,6 +2,7 @@ import {
   Activity,
   Bell,
   BookOpenCheck,
+  Building2,
   CircleDollarSign,
   ClipboardCheck,
   FileClock,
@@ -24,6 +25,7 @@ import { DataBoundaryNotice } from "./DataBoundaryNotice";
 
 const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "투자 운영", label: "포트폴리오", icon: LayoutDashboard, page: "dashboard" },
+  { group: "투자 운영", label: "기업 상세", icon: Building2, page: "company" },
   { group: "투자 운영", label: "계좌", icon: CircleDollarSign },
   { group: "투자 운영", label: "거래 내역", icon: History },
   { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert },
@@ -35,8 +37,8 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "에이전트", label: "검증 에이전트", icon: BookOpenCheck },
   { group: "에이전트", label: "승인 대기", icon: ListChecks, page: "approvals", badge: "4" },
   { group: "문서", label: "투자 리포트", icon: TableProperties },
-  { group: "문서", label: "감사 로그", icon: FileClock },
-  { group: "설정", label: "투자 정책", icon: Scale },
+  { group: "문서", label: "감사 로그", icon: FileClock, page: "audit" },
+  { group: "설정", label: "투자 정책", icon: Scale, page: "policy" },
   { group: "설정", label: "알림 설정", icon: Bell },
   { group: "설정", label: "데이터 연결", icon: Settings }
 ];
