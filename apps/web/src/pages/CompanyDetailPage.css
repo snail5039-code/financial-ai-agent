@@ -67,10 +67,14 @@
 .price-holding {
   display: grid;
   height: 168px;
-  grid-template-columns: 276px 1fr;
-  gap: 16px;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 20px;
   border-bottom: 1px solid var(--line);
   padding: 14px 22px;
+}
+
+.price-summary {
+  min-width: 0;
 }
 
 .price-summary > span,
@@ -90,27 +94,33 @@
 
 .price-summary dl {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px 14px;
-  margin: 10px 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 16px;
+  margin: 9px 0 0;
 }
 
 .price-summary dl div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
+  align-items: baseline;
+}
+
+.price-summary dt {
+  white-space: nowrap;
 }
 
 .price-summary dd {
   margin: 0;
   font-weight: 600;
   text-align: right;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .mini-chart {
   position: relative;
+  min-width: 0;
   padding-top: 13px;
 }
 
@@ -145,9 +155,9 @@
 }
 
 .key-metrics {
-  height: 150px;
+  height: 164px;
   border-bottom: 1px solid var(--line);
-  padding: 12px 22px;
+  padding: 13px 22px;
 }
 
 .company-section-label {
@@ -174,17 +184,17 @@
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  margin-top: 9px;
+  margin-top: 10px;
   border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
 }
 
 .metric-grid > div {
-  height: 48px;
+  height: 54px;
   min-width: 0;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: 6px 9px;
+  padding: 7px 10px;
 }
 
 .metric-grid span,
@@ -200,24 +210,24 @@
 }
 
 .metric-grid strong {
-  margin-top: 1px;
+  margin-top: 2px;
   font-size: 13px;
   line-height: 15px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .metric-grid small {
-  margin-top: 1px;
+  margin-top: 2px;
   color: #777;
   font-size: 8.5px;
-  line-height: 10px;
-  overflow-wrap: anywhere;
+  line-height: 11px;
+  white-space: nowrap;
 }
 
 .ai-evidence {
-  height: 184px;
+  height: 194px;
   border-bottom: 1px solid var(--line);
-  padding: 11px 22px;
+  padding: 12px 22px;
 }
 
 .evidence-columns {
@@ -232,7 +242,7 @@
 }
 
 .evidence-columns h3 {
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   color: var(--text-muted);
   font-size: 9.5px;
 }
@@ -244,7 +254,7 @@
 .detail-choice {
   display: grid;
   width: 100%;
-  height: 36px;
+  height: 40px;
   min-width: 0;
   align-content: center;
   gap: 2px;
@@ -259,14 +269,18 @@
   min-width: 0;
   font-size: 10px;
   line-height: 12px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-choice span {
   color: var(--text-muted);
   font-size: 8.5px;
   line-height: 10px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-choice[aria-pressed="true"],
@@ -276,7 +290,7 @@
 }
 
 .filings {
-  height: 202px;
+  height: 178px;
   padding: 11px 22px;
 }
 
@@ -288,7 +302,7 @@
 .filing-choice {
   display: grid;
   width: 100%;
-  height: 41px;
+  height: 38px;
   grid-template-columns: 96px minmax(0, 1fr) 96px;
   align-items: center;
   column-gap: 8px;
@@ -319,7 +333,7 @@
 }
 
 .filing-warning {
-  margin: 7px 0 0;
+  margin: 6px 0 0;
   color: var(--orange);
   font-size: 9.5px;
   font-weight: 600;
