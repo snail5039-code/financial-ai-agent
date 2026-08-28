@@ -14,7 +14,10 @@ export type PageKey =
   | "risks"
   | "notifications"
   | "backtest"
-  | "rebalance";
+  | "rebalance"
+  | "weekly"
+  | "stress"
+  | "health";
 
 export interface NavItem {
   label: string;

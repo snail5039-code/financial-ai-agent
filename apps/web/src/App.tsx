@@ -8,10 +8,13 @@ import { DataConnectionsPage } from "./pages/DataConnectionsPage";
 import { EvidencePacketPage } from "./pages/EvidencePacketPage";
 import { NotificationSettingsPage } from "./pages/NotificationSettingsPage";
 import { PolicySettingsPage } from "./pages/PolicySettingsPage";
+import { PortfolioHealthPage } from "./pages/PortfolioHealthPage";
 import { PortfolioChangeComparePage } from "./pages/PortfolioChangeComparePage";
 import { RebalancePlanPage } from "./pages/RebalancePlanPage";
 import { RiskAlertsPage } from "./pages/RiskAlertsPage";
+import { StressTestPage } from "./pages/StressTestPage";
 import { TradeHistoryPage } from "./pages/TradeHistoryPage";
+import { WeeklyReportPage } from "./pages/WeeklyReportPage";
 import type { PageKey } from "./types/dashboard";
 
 export function App() {
@@ -63,6 +66,18 @@ export function App() {
 
   if (page === "rebalance") {
     return <RebalancePlanPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "weekly") {
+    return <WeeklyReportPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "stress") {
+    return <StressTestPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "health") {
+    return <PortfolioHealthPage activePage={page} onNavigate={setPage} />;
   }
 
   return <DashboardPage activePage={page} onNavigate={setPage} />;
