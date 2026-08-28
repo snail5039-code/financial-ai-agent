@@ -27,8 +27,8 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "투자 운영", label: "포트폴리오", icon: LayoutDashboard, page: "dashboard" },
   { group: "투자 운영", label: "기업 상세", icon: Building2, page: "company" },
   { group: "투자 운영", label: "계좌", icon: CircleDollarSign },
-  { group: "투자 운영", label: "거래 내역", icon: History },
-  { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert },
+  { group: "투자 운영", label: "거래 내역", icon: History, page: "trades" },
+  { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert, page: "risks" },
   { group: "투자 운영", label: "백테스트", icon: Gauge },
   { group: "투자 운영", label: "전략 조정", icon: SlidersHorizontal },
   { group: "투자 운영", label: "변경 비교", icon: SplitSquareHorizontal, page: "compare" },
@@ -40,7 +40,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "문서", label: "감사 로그", icon: FileClock, page: "audit" },
   { group: "설정", label: "투자 정책", icon: Scale, page: "policy" },
   { group: "설정", label: "알림 설정", icon: Bell },
-  { group: "설정", label: "데이터 연결", icon: Settings }
+  { group: "설정", label: "데이터 연결", icon: Settings, page: "data" }
 ];
 
 const NAV_GROUPS: ReadonlyArray<NavItem["group"]> = ["투자 운영", "에이전트", "문서", "설정"];
