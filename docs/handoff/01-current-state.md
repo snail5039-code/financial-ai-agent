@@ -7,7 +7,7 @@
 - 원본 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`
 - 기본 브랜치: `main`
 - 원격 저장소: `https://github.com/snail5039-code/financial-ai-agent`
-- 최신 완료 커밋: `93d9375 역할 작업 가시성 운영 규칙 강화`
+- 최신 완료 커밋: `1baf5f9 원본 작업공간 인수 문서 동기화`
 - `MOCKUP-015` 세금·수수료 영향 점검 화면은 완료·검증·커밋·푸시했다.
 - `MOCKUP-016` 사용자 승인 이력·결정 회고 화면도 완료·검증·커밋·푸시했다.
 - `MOCKUP-017` 에이전트별 역할 상태판은 완료·검증·커밋·푸시했다.
@@ -15,7 +15,8 @@
 - `MOCKUP-019` 승인 전 근거 패킷 화면은 완료·검증·커밋·푸시했다.
 - `FRONTEND-005` 승인 대기 행 접근성 구조 정리는 `b654282`로 완료·검증·커밋·푸시했다.
 - `GOVERNANCE-001` 역할 작업 가시성 운영 규칙 강화는 `93d9375`로 완료·검증·커밋·푸시했다.
-- `main`과 `origin/main`은 `93d9375`에서 일치한다.
+- `SYNC-001` 원본 작업공간 인수 문서 동기화는 `1baf5f9`로 완료·검증·커밋·푸시했다.
+- `main`과 `origin/main`은 `1baf5f9`에서 일치한다.
 
 ## 현재 제품 상태
 
@@ -28,7 +29,7 @@
 
 ## 다음 작업
 
-- 다음 작업은 `FINANCIAL_AI_FULLSTACK_PLAN.md`와 `docs/fullstack/00-readme.md` 기준으로 현재 React 프론트 상태와 향후 FastAPI fixture API 범위를 맞춰 확정하는 것이다.
+- 다음 작업은 `BACKEND-001` 문서 단계로, 실제 FastAPI 구현 전에 `docs/backend/` 분할 문서로 백엔드 1단계 범위와 안전 경계를 정리하는 것이다.
 - 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다.
 - 현재 기본 추천은 새 화면 추가보다 기존 `apps/web` 프론트를 유지하면서 FastAPI fixture API를 별도 단계로 연결하는 것이다.
 - 풀스택 전환 계획은 루트 요약 문서와 `docs/fullstack/` 분할 문서로 나눴다.

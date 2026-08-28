@@ -27,6 +27,8 @@
 5. `05-safety-validation.md`: 금지 연결과 검증 기준을 확인한다.
 6. `06-implementation-roadmap.md`: 실제 구현 순서와 첫 티켓을 확인한다.
 
+백엔드 1단계 구현 준비는 `docs/backend/00-readme.md`부터 별도로 참조한다.
+
 ## 역할별 최소 참조
 
 - 관리자: `00-readme.md`, `01-overview.md`, `06-implementation-roadmap.md`
