@@ -1,13 +1,15 @@
 # 금융 AI 에이전트 프로젝트 인수인계
 
-> 작성일: 2026-08-26 KST  
+> 작성일: 2026-08-28 KST  
 > 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`  
 > 저장소: https://github.com/snail5039-code/financial-ai-agent  
 > 기본 브랜치: `main`
 
 ## 1. 프로젝트 목적
 
-금융 AI의 제안, 독립 검증, 사용자 승인 과정을 투명하게 보여주는 macOS 스타일 데스크톱 목업을 제작한다. 현재 단계는 **MOCKUP-020 후보 정리 및 기획 준비**이며 실제 금융 데이터, 계좌, 주문, AI 실행, API 및 DB는 연결하지 않는다.
+금융 AI의 제안, 독립 검증, 사용자 승인 과정을 투명하게 보여주는 macOS 스타일 데스크톱 목업을 제작했다. 현재 단계는 **정적 화면 추가를 멈추고 실제 금융 API 없이 프론트엔드·백엔드 연결 앱으로 전환하는 것**이며 실제 금융 데이터, 계좌, 주문, AI 실행, API 및 DB는 연결하지 않는다. 풀스택 전환 계획은 루트 `FINANCIAL_AI_FULLSTACK_PLAN.md` 요약과 `docs/fullstack/` 분할 문서로 관리한다.
+
+React/Vite 프론트엔드 `apps/web`는 생성되어 대시보드, 승인 대기, 승인 전 근거 패킷 화면이 연결됐다. `FRONTEND-005`는 `b654282 승인 대기 행 접근성 구조 정리`로 완료·검증·커밋·푸시됐고, `GOVERNANCE-001`은 `93d9375 역할 작업 가시성 운영 규칙 강화`로 완료·검증·커밋·푸시됐다. FastAPI 백엔드는 아직 만들지 않았다. 다음 실질 개발 후보는 백엔드 fixture API 골격과 대시보드 연결 수직 슬라이스이며, 구현 전 계획 승인 관문을 유지한다.
 
 모든 담당자는 루트의 `AGENTS.md`를 최우선으로 따른다. 표준 순서는 `기획자 → 관리자 승인 → 구현자 → 독립 검증자 → 재작업 → 관리자 인수`이다.
 
@@ -255,7 +257,7 @@
 - `MOCKUP-018-I` 구현으로 승인 전 현재·변경 후 비중, 현금 변화, 예상 위험 변화, 정책 확인 항목, DEC-1056 승인 대기 연결을 표시했다.
 - 실제 금융 데이터·계좌·주문·체결·API·DB와 실제 환율·시세 조회는 연결하지 않았다.
 
-현재 로컬 `main`과 `origin/main`은 `13e0e6f 세금 수수료와 결정 회고 목업 추가`에서 일치해야 하며, `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019` 변경은 아직 커밋·푸시하지 않았다.
+현재 로컬 `main`과 `origin/main`은 `93d9375 역할 작업 가시성 운영 규칙 강화`에서 일치한다. `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019`, `FRONTEND-005`, `GOVERNANCE-001` 변경은 커밋·푸시 완료 상태다.
 
 ## 4. 현재 구현된 화면
 
@@ -313,9 +315,9 @@
 - 선택과 경고는 색상뿐 아니라 텍스트·아이콘·ARIA 상태로 표현
 - 모든 금융 수치와 출처는 화면용 가상 예시이며 실제 데이터로 오인되지 않게 표시
 
-## 6. 현재 미커밋 작업
+## 6. 최근 커밋 및 현재 문서 작업
 
-컨텍스트 절약용 인수 문서 분할과 `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019` 구현·문서 반영이 미커밋 상태다.
+컨텍스트 절약용 인수 문서 분할과 `MOCKUP-017`, `MOCKUP-018`, `MOCKUP-019` 구현·문서 반영은 `81b2a1d`로 커밋·푸시했다. 이후 React/Vite 프론트엔드 `apps/web`를 만들고 대시보드, 승인 대기, 승인 전 근거 패킷을 연결했다. 승인 대기 행 접근성 구조는 `FRONTEND-005`에서 `b654282`로 정리했고, 공식 역할 작업 가시성 규칙은 `GOVERNANCE-001`에서 `93d9375`로 강화했다. FastAPI 백엔드는 아직 만들지 않았다.
 
 - 신규: `docs/handoff/00-readme.md`
 - 신규: `docs/handoff/01-current-state.md`
@@ -344,8 +346,9 @@
 - 신규: `mockup/financial-dashboard/evidence-packet.js`
 - 신규: `mockup/financial-dashboard/evidence-packet-1440x900.png`
 - 수정: `HANDOFF.md`, `README.md`, `mockup/financial-dashboard/README.md`, 기존 목업 HTML 내비게이션 파일들
+- 현재 문서 작업: `FINANCIAL_AI_FULLSTACK_PLAN.md`, `docs/fullstack/`, 관리자 6세대 인수 기록
 
-로컬 `main`과 `origin/main`은 마지막 완료 커밋 `13e0e6f 세금 수수료와 결정 회고 목업 추가`에서 일치해야 하며, 위 변경은 아직 커밋·푸시하지 않았다.
+로컬 `main`과 `origin/main`은 마지막 완료 커밋 `93d9375 역할 작업 가시성 운영 규칙 강화`에서 일치한다. 풀스택 전환 계획 문서와 `docs/fullstack/` 분할 문서는 원본 작업공간에서 최신 프론트 상태에 맞춰 정리 중이며 아직 커밋하지 않았다.
 
 ## 7. 투자 정책 화면 현재 상태
 
@@ -585,7 +588,7 @@ MOCKUP-013 완료 및 커밋 뒤에는 사용자 지시에 따라 관리자·기
   - 금지 연결·저장 패턴과 외부 URL/API 패턴 없음, 실제 금융 연결 금지 준수 확인
 - 커밋·푸시는 아직 실행하지 않았다.
 
-다음 제품 단계는 사용자 또는 관리자가 새 화면 범위를 정해 `MOCKUP-020`으로 시작한다. 후보는 `docs/handoff/04-next-candidates.md`에서 새로 정리한다.
+다음 제품 단계는 새 화면 추가보다 이미 생성된 React/Vite `apps/web`를 기준으로 FastAPI fixture API를 연결하는 것이다. 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다. 풀스택 전환 세부 참조는 `docs/fullstack/00-readme.md`부터 읽는다.
 
 ## 11. 로컬 실행
 
