@@ -99,15 +99,24 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
         </div>
         {visibleOrders.length ? (
           visibleOrders.map((order) => (
-            <button
+            <div
               className={order.id === selected.id ? "order-row selected" : "order-row"}
               key={order.id}
-              type="button"
               role="row"
               aria-selected={order.id === selected.id}
               onClick={() => setSelectedId(order.id)}
             >
-              <span role="gridcell"><StatusPill tone={states[order.id] === "pending" ? order.tone : "info"}>{stateLabel(order)}</StatusPill></span>
+              <span className="order-select-cell" role="gridcell">
+                <button
+                  className="order-select-button"
+                  type="button"
+                  aria-label={`${order.id} ${order.company} 주문 선택`}
+                  aria-pressed={order.id === selected.id}
+                  onClick={() => setSelectedId(order.id)}
+                >
+                  <StatusPill tone={states[order.id] === "pending" ? order.tone : "info"}>{stateLabel(order)}</StatusPill>
+                </button>
+              </span>
               <span role="gridcell"><strong>{order.company}</strong><small>{order.code}</small></span>
               <span className={order.side === "매수" ? "buy" : "sell"} role="gridcell">{order.side}</span>
               <span role="gridcell">{order.quantity}주</span>
@@ -115,7 +124,7 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
               <span role="gridcell">{won(order.amount)}</span>
               <span role="gridcell">{order.verification}</span>
               <span role="gridcell">{order.expiry}</span>
-            </button>
+            </div>
           ))
         ) : (
           <div className="empty-state">선택한 상태의 요청이 없습니다.</div>

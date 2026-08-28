@@ -83,6 +83,7 @@
   border-bottom: 1px solid #ededee;
   background: #fff;
   color: #242428;
+  cursor: pointer;
   text-align: left;
 }
 
@@ -104,6 +105,28 @@
   margin-top: 3px;
   color: #88888d;
   font-size: 9px;
+}
+
+.order-select-cell {
+  min-width: 0;
+}
+
+.order-select-button {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.order-select-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
 }
 
 .buy {
