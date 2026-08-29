@@ -1,31 +1,32 @@
 # 구현 로드맵
 
-기준일: 2026-08-28 KST
+기준일: 2026-08-29 KST
 
 ## Phase 0: 기준 정리
 
 - 기존 정적 목업 19개를 완료 기준으로 고정한다.
-- 핵심 흐름 6개 화면을 React 이전 1차 대상으로 정한다.
-- 화면별 필요한 데이터 필드를 표로 뽑는다.
+- React/Vite `apps/web`의 19개 화면 이전 완료 상태를 기준으로 고정한다.
+- 화면별 필요한 데이터 필드는 기존 fixture와 `docs/fullstack/03-data-api-contract.md`를 기준으로 확인한다.
 - API 미연결 원칙을 README와 앱 화면에 유지한다.
 
 완료 기준:
 
 - 풀스택 전환 계획 문서가 존재한다.
-- 첫 구현 대상 화면과 API 목록이 확정되어 있다.
-- React/Vite `apps/web` 1차 프론트가 생성되어 대시보드, 승인 대기, 승인 전 근거 패킷을 포함한다.
+- 첫 구현 대상 API 후보가 `/api/health` 또는 대시보드 fixture API로 좁혀져 있다.
+- React/Vite `apps/web` 프론트가 생성되어 정적 목업 19개에 대응하는 19개 화면을 포함한다.
 - `FRONTEND-005` 승인 대기 행 접근성 정리가 완료됐다.
+- `FRONTEND-FINAL-AUDIT-R1-V`에서 검증자 19세대가 최종 회귀 `통과`를 판정했다.
 
 ## Phase 1: 프로젝트 골격
 
 - `apps/web` React + Vite 생성 완료
-- `apps/api` FastAPI 생성
-- 로컬 실행 스크립트 정리
-- 프론트와 백엔드가 `/api/health`로 통신하는지 확인, 백엔드 생성 전까지는 프론트 로컬 fixture만 사용
+- `apps/api` FastAPI 생성은 아직 하지 않음
+- 먼저 `/api/health`와 로컬 fixture 응답 원칙을 구현 범위로 확정
+- 백엔드 생성 전까지는 프론트 로컬 fixture만 사용
 
 완료 기준:
 
-- 프론트 로컬 주소에서 백엔드 상태를 읽는다.
+- 프론트 로컬 주소에서 백엔드 상태를 읽을 준비가 됐거나, 백엔드 생성 전 문서 단계에서는 `/api/health` 계약과 검증 기준이 확정되어 있다.
 - 실제 외부 API 호출이 없다.
 
 ## Phase 2: 대시보드 수직 슬라이스
@@ -84,10 +85,10 @@
 바로 다음 개발은 아래 순서가 좋다.
 
 1. 현재 `apps/web` 대시보드 fixture와 표시 필드 확인
-2. `apps/api` FastAPI 폴더 생성
-3. 백엔드 `/api/health`와 `/api/dashboard` 생성
-4. 대시보드 목업 데이터를 서버 fixture로 이전
-5. 프론트 대시보드가 백엔드 fixture를 읽도록 연결
+2. `docs/backend/`의 `BACKEND-001` 범위와 안전 경계 재확인
+3. 관리자가 첫 백엔드 범위를 `/api/health` 단독 또는 `/api/health`+`/api/dashboard`로 확정
+4. 승인된 경우에만 `apps/api` FastAPI 폴더 생성
+5. 승인된 엔드포인트의 로컬 fixture 응답 작성
 6. 외부 API 호출 금지 테스트 추가
 7. README에 풀스택 로컬 실행법 추가
 
@@ -100,4 +101,4 @@
 3. 첫 백엔드 연결 화면을 대시보드 하나로 할지, 대시보드+승인 대기까지 묶을지
 4. 기존 정적 목업을 계속 유지할지, 새 앱 구현 뒤 일부를 보관 문서로 옮길지
 
-현재 추천은 **기존 React + Vite 프론트 유지 + FastAPI 추가, 메모리 fixture, 대시보드 API 1개 수직 슬라이스부터 시작**이다.
+현재 추천은 **기존 React + Vite 19개 화면 유지 + FastAPI 추가, 메모리 fixture, `/api/health` 또는 대시보드 API 1개 수직 슬라이스부터 시작**이다.

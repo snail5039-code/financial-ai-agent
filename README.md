@@ -61,7 +61,7 @@ python -m http.server 4173
 http://127.0.0.1:4173/mockup/financial-dashboard/
 ```
 
-React/Vite 프론트엔드 1차 앱은 `apps/web`에 있습니다. 현재 대시보드, 승인 대기, 승인 전 근거 패킷 화면이 연결되어 있으며 백엔드는 아직 만들지 않았습니다.
+React/Vite 19개 화면 프론트엔드 앱은 `apps/web`에 있습니다. 현재 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐으며, `FRONTEND-FINAL-AUDIT-R1-V`에서 최종 회귀 `통과` 판정을 받았습니다. 백엔드는 아직 만들지 않았습니다.
 
 ```powershell
 cd apps/web
@@ -87,7 +87,7 @@ npm run dev
 - `FINANCIAL_AI_AGENT_IMPLEMENTATION.md`: 구현 방향과 기술 검토
 - `FINANCIAL_AI_FULLSTACK_PLAN.md`: 실제 금융 API 없이 프론트엔드와 백엔드를 연결하는 풀스택 전환 계획 요약
 - `docs/fullstack/`: 풀스택 전환 세부 계획 분할 문서
-- `apps/web/`: React/Vite 1차 프론트엔드 앱
+- `apps/web/`: React/Vite 19개 화면 프론트엔드 앱
 - `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
 - `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서
 - `mockup/financial-dashboard/`: 실행 가능한 정적 HTML/CSS/JavaScript와 화면 캡처

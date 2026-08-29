@@ -1,6 +1,6 @@
 # BACKEND-001 구현 체크리스트
 
-기준일: 2026-08-28 KST
+기준일: 2026-08-29 KST
 
 ## 다음 구현자 체크리스트
 
@@ -21,7 +21,7 @@
 - `docs/fullstack/*`의 장기 API 전체 목록을 복사하지 않고 참조만 둔다.
 - FastAPI 코드, `apps/api`, 패키지, React 파일을 만들지 않는다.
 - `docs/fullstack/00-readme.md`가 백엔드 1단계 문서 위치를 안내한다.
-- `docs/handoff/01-current-state.md`와 `docs/handoff/02-active-roles.md`가 현재 문서 단계와 구현자 7세대 상태를 반영한다.
+- `docs/handoff/01-current-state.md`와 `docs/handoff/02-active-roles.md`가 현재 문서 단계와 공식 역할 최신 세대를 반영한다.
 
 ## 다음 검증자 체크리스트
 

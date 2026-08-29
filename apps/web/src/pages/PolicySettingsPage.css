@@ -1,5 +1,5 @@
 .policy-main {
-  height: 800px;
+  height: 100%;
   overflow: hidden;
   background: #fff;
 }
@@ -34,7 +34,7 @@
 }
 
 .policy-form {
-  height: 708px;
+  height: calc(100% - 92px);
   padding: 0 22px;
 }
 

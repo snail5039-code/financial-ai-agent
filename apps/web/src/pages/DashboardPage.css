@@ -111,17 +111,31 @@
 
 .workspace {
   display: grid;
-  height: 800px;
+  height: calc(100% - 52px);
   grid-template-columns: 223px 815px 352px;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+}
+
+.workspace > * {
+  min-height: 0;
 }
 
 .sidebar {
   display: flex;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--sidebar);
   padding: 13px 10px;
+}
+
+.sidebar nav {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .nav-label {
@@ -205,6 +219,7 @@
 
 .data-boundary.compact {
   display: block;
+  flex: 0 0 auto;
   margin-top: auto;
   border: 0;
   border-top: 1px solid var(--line);
