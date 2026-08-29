@@ -5,6 +5,9 @@ export type PageKey =
   | "dashboard"
   | "company"
   | "approvals"
+  | "taxFee"
+  | "decisionReview"
+  | "roleStatus"
   | "evidence"
   | "compare"
   | "audit"
@@ -129,4 +132,105 @@ export interface PortfolioChangeCompareData {
     approvalState: string;
   };
   assets: PortfolioChangeAsset[];
+}
+
+export type TaxFeeImpactFilter = "all" | "영향 작음" | "재검토" | "보류 권장" | "none";
+
+export interface TaxFeeOrder {
+  id: string;
+  name: string;
+  ticker: string;
+  side: "매수" | "매도";
+  market: string;
+  currency: string;
+  gross: number;
+  fee: number;
+  tax: number;
+  slippage: number;
+  fx: number;
+  status: Exclude<TaxFeeImpactFilter, "all" | "none">;
+  basis: string;
+  period: string;
+  assumption: string;
+  summary: string;
+  next: string;
+  linkPage: PageKey;
+}
+
+export interface TaxFeeImpactData {
+  title: string;
+  generatedAt: string;
+  dataAsOf: string;
+  isMock: true;
+  paperOnly: true;
+  executed: false;
+  externalConnections: 0;
+  safetyCopy: string;
+  orders: TaxFeeOrder[];
+}
+
+export type DecisionReviewFilter = "all" | "승인" | "반려" | "보류" | "none";
+
+export interface DecisionReviewItem {
+  id: string;
+  name: string;
+  ticker: string;
+  decision: Exclude<DecisionReviewFilter, "all" | "none">;
+  memo: boolean;
+  time: string;
+  statusText: string;
+  reason: string;
+  memoText: string;
+  policy: string;
+  verification: string;
+  source: string;
+  pathDiff: string;
+  chosen: string;
+  alternate: string;
+  pathCopy: string;
+  focus: string;
+  linkPage: PageKey;
+  summary: string;
+}
+
+export interface DecisionReviewData {
+  title: string;
+  generatedAt: string;
+  dataAsOf: string;
+  isMock: true;
+  paperOnly: true;
+  executed: false;
+  externalConnections: 0;
+  safetyCopy: string;
+  decisions: DecisionReviewItem[];
+}
+
+export type AgentRoleStatusFilter = "all" | "대기" | "승인 필요" | "실패 이력" | "none";
+
+export interface AgentRoleStatusItem {
+  id: string;
+  role: string;
+  status: Exclude<AgentRoleStatusFilter, "all" | "none">;
+  badge: string;
+  task: string;
+  wait: string;
+  approval: boolean;
+  history: string;
+  decision: string;
+  summary: string;
+  conflict: string;
+  linkPage: PageKey;
+  linkLabel: string;
+}
+
+export interface AgentRoleStatusData {
+  title: string;
+  generatedAt: string;
+  dataAsOf: string;
+  isMock: true;
+  paperOnly: true;
+  executed: false;
+  externalConnections: 0;
+  safetyCopy: string;
+  roles: AgentRoleStatusItem[];
 }

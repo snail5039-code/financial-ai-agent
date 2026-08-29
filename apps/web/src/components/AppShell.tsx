@@ -5,6 +5,7 @@ import {
   Building2,
   CircleDollarSign,
   ClipboardCheck,
+  ClipboardList,
   FileClock,
   Gauge,
   HeartPulse,
@@ -12,6 +13,7 @@ import {
   LayoutDashboard,
   ListChecks,
   RefreshCw,
+  ReceiptText,
   Scale,
   Search,
   Settings,
@@ -20,6 +22,7 @@ import {
   SplitSquareHorizontal,
   TestTubeDiagonal,
   TableProperties,
+  UsersRound,
   Waypoints
 } from "lucide-react";
 import type { NavItem, PageKey } from "../types/dashboard";
@@ -30,6 +33,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "투자 운영", label: "기업 상세", icon: Building2, page: "company" },
   { group: "투자 운영", label: "계좌", icon: CircleDollarSign },
   { group: "투자 운영", label: "거래 내역", icon: History, page: "trades" },
+  { group: "투자 운영", label: "세금·수수료", icon: ReceiptText, page: "taxFee" },
   { group: "투자 운영", label: "리스크 알림", icon: ShieldAlert, page: "risks" },
   { group: "투자 운영", label: "백테스트", icon: Gauge, page: "backtest" },
   { group: "투자 운영", label: "전략 조정", icon: SlidersHorizontal, page: "rebalance" },
@@ -40,8 +44,10 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "에이전트", label: "분석 에이전트", icon: Activity },
   { group: "에이전트", label: "검증 에이전트", icon: BookOpenCheck },
   { group: "에이전트", label: "승인 대기", icon: ListChecks, page: "approvals", badge: "4" },
+  { group: "에이전트", label: "역할 상태", icon: UsersRound, page: "roleStatus" },
   { group: "문서", label: "투자 리포트", icon: TableProperties, page: "weekly" },
   { group: "문서", label: "감사 로그", icon: FileClock, page: "audit" },
+  { group: "문서", label: "결정 회고", icon: ClipboardList, page: "decisionReview" },
   { group: "설정", label: "투자 정책", icon: Scale, page: "policy" },
   { group: "설정", label: "알림 설정", icon: Bell, page: "notifications" },
   { group: "설정", label: "데이터 연결", icon: Settings, page: "data" }
@@ -105,6 +111,7 @@ export function AppShell({ title, accountLabel, lastSync, activePage, onNavigate
                         className={isActive ? "nav-item active" : "nav-item"}
                         key={item.label}
                         type="button"
+                        aria-label={item.label}
                         data-nav-label={item.label}
                         data-nav-group={item.group}
                         aria-current={isActive ? "page" : undefined}

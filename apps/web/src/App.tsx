@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApprovalQueuePage } from "./pages/ApprovalQueuePage";
+import { AgentRoleStatusPage } from "./pages/AgentRoleStatusPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { BacktestSummaryPage } from "./pages/BacktestSummaryPage";
 import { CompanyDetailPage } from "./pages/CompanyDetailPage";
 import { DataConnectionsPage } from "./pages/DataConnectionsPage";
+import { DecisionReviewPage } from "./pages/DecisionReviewPage";
 import { EvidencePacketPage } from "./pages/EvidencePacketPage";
 import { NotificationSettingsPage } from "./pages/NotificationSettingsPage";
 import { PolicySettingsPage } from "./pages/PolicySettingsPage";
@@ -14,6 +16,7 @@ import { RebalancePlanPage } from "./pages/RebalancePlanPage";
 import { RiskAlertsPage } from "./pages/RiskAlertsPage";
 import { StressTestPage } from "./pages/StressTestPage";
 import { TradeHistoryPage } from "./pages/TradeHistoryPage";
+import { TaxFeeImpactPage } from "./pages/TaxFeeImpactPage";
 import { WeeklyReportPage } from "./pages/WeeklyReportPage";
 import type { PageKey } from "./types/dashboard";
 
@@ -22,6 +25,18 @@ export function App() {
 
   if (page === "approvals") {
     return <ApprovalQueuePage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "taxFee") {
+    return <TaxFeeImpactPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "decisionReview") {
+    return <DecisionReviewPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "roleStatus") {
+    return <AgentRoleStatusPage activePage={page} onNavigate={setPage} />;
   }
 
   if (page === "company") {
