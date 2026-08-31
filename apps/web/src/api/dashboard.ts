@@ -1,6 +1,6 @@
-import { dashboardFixture } from "../fixtures/dashboard";
-import type { DashboardData } from "../types/dashboard";
+import { getFixture } from "./client";
+import type { DashboardData, DashboardEnvelope } from "../types/dashboard";
 
-export async function getDashboard(): Promise<DashboardData> {
-  return dashboardFixture;
+export async function getDashboard(): Promise<DashboardEnvelope> {
+  return getFixture<DashboardData>("/api/dashboard");
 }

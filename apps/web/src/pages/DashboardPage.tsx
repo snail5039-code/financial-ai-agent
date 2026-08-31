@@ -1,11 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, CircleDot, XCircle } from "lucide-react";
 import { getDashboard } from "../api/dashboard";
+import { ApiError } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
 import { MockChart } from "../components/MockChart";
 import { StatusPill } from "../components/StatusPill";
-import type { DashboardData, EvidenceItem, PageKey, Tone } from "../types/dashboard";
+import {
+  formatDateAndMinutes,
+  formatPercent,
+  formatShares,
+  formatSignedPercent,
+  formatSignedWon,
+  formatTimeOfDay,
+  formatWon
+} from "../lib/format";
+import type { DashboardEnvelope, EvidenceItem, Holding, PageKey, Tone } from "../types/dashboard";
 import "./DashboardPage.css";
 
 function toneIcon(tone: Tone) {
@@ -13,6 +23,16 @@ function toneIcon(tone: Tone) {
   if (tone === "warning") return <AlertTriangle size={14} />;
   if (tone === "danger") return <XCircle size={14} />;
   return <CircleDot size={14} />;
+}
+
+/** Fields that do not apply to a holding (cash has no average price) arrive as null. */
+function optionalWon(amount: number | null) {
+  return amount === null ? "-" : formatWon(amount);
+}
+
+function profitToneClass(profit: number | null) {
+  if (profit === null) return "";
+  return profit < 0 ? "loss" : "gain";
 }
 
 function EvidenceRow({ item, open }: { item: EvidenceItem; open?: boolean }) {
@@ -39,27 +59,86 @@ function EvidenceRow({ item, open }: { item: EvidenceItem; open?: boolean }) {
   );
 }
 
+function HoldingRow({ holding }: { holding: Holding }) {
+  return (
+    <tr className={holding.selected ? "selected-row" : ""}>
+      <td>
+        <strong>{holding.name}</strong>
+        <small>{holding.code}</small>
+      </td>
+      <td>{holding.quantity === null ? "-" : formatShares(holding.quantity)}</td>
+      <td>{optionalWon(holding.averagePrice)}</td>
+      <td>{optionalWon(holding.currentPrice)}</td>
+      <td>{formatWon(holding.value)}</td>
+      <td className={profitToneClass(holding.profit)}>
+        {holding.profit === null ? "-" : formatSignedWon(holding.profit)}
+        {holding.profitRate === null ? null : <small>{formatSignedPercent(holding.profitRate)}</small>}
+      </td>
+      <td>{formatPercent(holding.weight)}</td>
+      <td><StatusPill tone={holding.tone}>{holding.status}</StatusPill></td>
+    </tr>
+  );
+}
+
 interface DashboardPageProps {
   activePage: PageKey;
   onNavigate: (page: PageKey) => void;
 }
 
 export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [envelope, setEnvelope] = useState<DashboardEnvelope | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [decisionMessage, setDecisionMessage] = useState("");
 
   useEffect(() => {
-    void getDashboard().then(setDashboard);
-  }, []);
+    let active = true;
+    setEnvelope(null);
+    setLoadError(null);
+
+    getDashboard()
+      .then((payload) => {
+        if (active) setEnvelope(payload);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setLoadError(error instanceof ApiError ? error.message : "대시보드 데이터를 불러오지 못했습니다.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
+
+  const retry = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const lastSync = useMemo(() => {
-    if (!dashboard) return "대기";
-    return dashboard.dataAsOf.slice(11, 16);
-  }, [dashboard]);
+    if (!envelope) return "대기";
+    return formatTimeOfDay(envelope.dataAsOf);
+  }, [envelope]);
 
-  if (!dashboard) {
+  if (loadError) {
+    return (
+      <div className="error-screen" role="alert">
+        <div>
+          <h1>대시보드 데이터를 불러오지 못했습니다</h1>
+          <p>{loadError}</p>
+          <p>
+            로컬 FastAPI 백엔드를 <code>apps/api</code>에서 실행한 뒤 다시 시도하세요. 이 화면은 로컬
+            fixture만 사용하며 실제 계좌·주문·외부 API와 연결되지 않습니다.
+          </p>
+          <button type="button" onClick={retry}>다시 시도</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!envelope) {
     return <div className="loading-screen">로컬 fixture를 불러오는 중</div>;
   }
+
+  const dashboard = envelope.data;
+  const { summary, decision } = dashboard;
 
   const main = (
     <section className="dashboard" aria-labelledby="dashboard-title">
@@ -67,20 +146,21 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
         <div>
           <div className="eyebrow">총자산</div>
           <div className="balance-row">
-            <h1 id="dashboard-title">{dashboard.summary.totalAsset}</h1>
+            <h1 id="dashboard-title">{formatWon(summary.totalAsset)}</h1>
             <span className="gain">
-              {dashboard.summary.todayProfit} <b>({dashboard.summary.todayProfitRate})</b> 오늘
+              {formatSignedWon(summary.todayProfit)} <b>({formatSignedPercent(summary.todayProfitRate)})</b> 오늘
             </span>
           </div>
           <p className="metrics">
-            <span>투자원금 <b>{dashboard.summary.principal}</b></span>
+            <span>투자원금 <b>{formatWon(summary.principal)}</b></span>
             <i />
-            <span>누적손익 <b className="gain">{dashboard.summary.accumulatedProfit}</b></span>
+            <span>누적손익 <b className="gain">{formatSignedWon(summary.accumulatedProfit)}</b></span>
             <i />
-            <span>현금 <b>{dashboard.summary.cashWeight}</b></span>
+            <span>현금 <b>{formatPercent(summary.cashWeight, 1)}</b></span>
           </p>
           <p className="timestamps">
-            기준 시각 {dashboard.dataAsOf.replace("T", " ").slice(0, 16)} <span>·</span> 마지막 검증 {dashboard.summary.lastVerified}
+            기준 시각 {formatDateAndMinutes(envelope.dataAsOf)} <span>·</span> 마지막 검증{" "}
+            {formatTimeOfDay(summary.lastVerifiedAt)}
           </p>
         </div>
         <DataBoundaryNotice />
@@ -117,7 +197,7 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
       <section className="holdings" aria-labelledby="holdings-title">
         <div className="holdings-head">
           <h2 id="holdings-title">보유 종목 <span>{dashboard.holdings.length}</span></h2>
-          <span>평가금액 합계 <b>{dashboard.summary.totalAsset}</b></span>
+          <span>평가금액 합계 <b>{formatWon(summary.totalAsset)}</b></span>
         </div>
         <table>
           <thead>
@@ -134,22 +214,7 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
           </thead>
           <tbody>
             {dashboard.holdings.map((holding) => (
-              <tr className={holding.selected ? "selected-row" : ""} key={holding.code}>
-                <td>
-                  <strong>{holding.name}</strong>
-                  <small>{holding.code}</small>
-                </td>
-                <td>{holding.quantity}</td>
-                <td>{holding.averagePrice}</td>
-                <td>{holding.currentPrice}</td>
-                <td>{holding.value}</td>
-                <td className={holding.profit.startsWith("-") ? "loss" : holding.profit === "-" ? "" : "gain"}>
-                  {holding.profit}
-                  {holding.profitRate ? <small>{holding.profitRate}</small> : null}
-                </td>
-                <td>{holding.weight}</td>
-                <td><StatusPill tone={holding.tone}>{holding.status}</StatusPill></td>
-              </tr>
+              <HoldingRow holding={holding} key={holding.code} />
             ))}
           </tbody>
         </table>
@@ -164,10 +229,10 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
           <span className="eyebrow">현재 판단</span>
           <div className="decision-title">
             <div>
-              <h2>{dashboard.decision.company}</h2>
-              <span>{dashboard.decision.decisionId}</span>
+              <h2>{decision.company}</h2>
+              <span>{decision.decisionId}</span>
             </div>
-            <StatusPill tone={dashboard.decision.statusTone}>{dashboard.decision.status}</StatusPill>
+            <StatusPill tone={decision.statusTone}>{decision.status}</StatusPill>
           </div>
         </div>
 
@@ -177,7 +242,7 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
               <div className={index < 2 ? "step done" : "step current"}>
                 <i>{index < 2 ? <CheckCircle2 size={11} /> : null}</i>
                 <b>{step}</b>
-                <span>{index === 0 ? "14:28" : index === 1 ? "14:31" : "대기"}</span>
+                <span>{index === 0 ? "14:28" : index === 1 ? formatTimeOfDay(summary.lastVerifiedAt) : "대기"}</span>
               </div>
               {index < 2 ? <div className={index === 0 ? "line done" : "line"} /> : null}
             </div>
@@ -186,17 +251,20 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
 
         <section className="inspector-section proposal">
           <h3>제안</h3>
-          <strong>{dashboard.decision.proposal}</strong>
+          <strong>{decision.proposal}</strong>
           <dl>
-            <div><dt>지정가</dt><dd>71,200원</dd></div>
-            <div><dt>목표 비중</dt><dd>{dashboard.decision.targetWeight}</dd></div>
-            <div><dt>최대 주문금액</dt><dd>{dashboard.decision.limitAmount}</dd></div>
+            <div><dt>지정가</dt><dd>{formatWon(decision.limitPrice)}</dd></div>
+            <div>
+              <dt>목표 비중</dt>
+              <dd>{formatPercent(decision.targetWeightFrom)} → {formatPercent(decision.targetWeightTo)}</dd>
+            </div>
+            <div><dt>최대 주문금액</dt><dd>{formatWon(decision.limitAmount)}</dd></div>
           </dl>
         </section>
 
         <section className="inspector-section evidence">
           <h3>핵심 근거</h3>
-          {dashboard.decision.evidence.map((item, index) => (
+          {decision.evidence.map((item, index) => (
             <EvidenceRow item={item} key={item.title} open={index === 0} />
           ))}
         </section>
@@ -204,7 +272,7 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
         <section className="inspector-section verification">
           <h3>시뮬레이션 검증 결과</h3>
           <dl>
-            {dashboard.decision.checks.map((check) => (
+            {decision.checks.map((check) => (
               <div key={check.label}>
                 <dt>{check.label}</dt>
                 <dd className={check.tone}>{toneIcon(check.tone)}{check.value}</dd>
@@ -218,9 +286,9 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
         </section>
 
         <details className="invalid-conditions">
-          <summary>판단 무효 조건 <span>{dashboard.decision.invalidConditions.length}개</span></summary>
+          <summary>판단 무효 조건 <span>{decision.invalidConditions.length}개</span></summary>
           <ul>
-            {dashboard.decision.invalidConditions.map((condition) => (
+            {decision.invalidConditions.map((condition) => (
               <li key={condition}>{condition}</li>
             ))}
           </ul>
@@ -229,14 +297,14 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
 
       <div className="approval-panel">
         <div className="expiry">
-          <span>이 모의승인은 <b>{dashboard.decision.expiresAt}</b>에 만료됩니다.</span>
+          <span>이 모의승인은 <b>{formatTimeOfDay(decision.expiresAt)}</b>에 만료됩니다.</span>
           <small>승인해도 실제 주문은 생성되지 않습니다.</small>
         </div>
         {decisionMessage ? <div className="decision-message" aria-live="polite">{decisionMessage}</div> : null}
         <div className="actions">
           <button type="button" onClick={() => setDecisionMessage("반려 처리됨 · 로컬 화면 상태만 변경되었습니다.")}>반려</button>
           <button type="button" onClick={() => setDecisionMessage("모의승인됨 · 실제 주문은 생성되지 않았습니다.")}>
-            {dashboard.decision.limitAmount} 한도 내 모의승인
+            {formatWon(decision.limitAmount)} 한도 내 모의승인
           </button>
         </div>
         <p>모의투자 · 화면 검토용 예시 데이터</p>

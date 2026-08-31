@@ -1,6 +1,14 @@
 # 검증 체크리스트
 
-새 화면을 구현하거나 수정한 뒤에는 아래 항목을 확인한다. 정적 목업과 React/Vite 앱은 검증 대상에 맞는 절을 선택하되, 금융 안전 검증은 항상 포함한다.
+새 화면, React/Vite 앱, FastAPI 백엔드, 문서 중 무엇을 검증하는지 먼저 분리한다. 검증 대상에 맞는 절을 선택하되, 금융 안전 검증은 항상 포함한다.
+
+## 문서 검증
+
+- 문서가 현재 Git 기준과 맞는지 확인한다.
+- `HEAD`와 `origin/main`이 요구된 해시와 일치하는지 확인한다.
+- 역할 표의 현재 활성 세대와 이전 세대 이력이 섞이지 않는지 확인한다.
+- 현재 상태 설명이 실제 구현 상태와 맞는지 확인한다.
+- 문서 작업 검증에서는 코드, 패키지, 테스트 산출물이 새로 생기지 않았는지 확인한다.
 
 ## 정적 목업 검사
 
@@ -71,8 +79,31 @@ python -m http.server 4173 --bind 127.0.0.1
   - 콘솔 오류가 없는지 확인한다.
 - 안전 문구와 금지 연결:
   - `모의투자`, `화면 검토용 가상 예시`, `실제 주문 아님`, `실제 계좌·API·DB 미연결` 등 화면별 필수 안전 문구가 유지되는지 확인한다.
-  - `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `localStorage`, `sessionStorage`, `indexedDB`, `document.cookie`, 외부 URL, 실제 금융 연결을 암시하는 문자열을 확인한다.
-  - 백엔드가 아직 없는 상태에서는 외부 네트워크 또는 운영 DB 연결이 없어야 한다.
+  - `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `localStorage`, `sessionStorage`, `indexedDB`, `document.cookie`, 외부 URL, 실제 금융 연결을 암시하는 문자열을 확인한다.
+  - `fetch`는 `BACKEND-003` 이후 로컬 백엔드 연결 목적에 한해 허용한다. 허용 조건은 다음 셋을 모두 만족할 때다.
+    - 호출 인자가 `/api/`로 시작하는 **상대 경로**여야 한다. 절대 URL, 외부 호스트, 프로토콜 문자열을 쓰지 않는다.
+    - 호출은 `src/api/` 아래 클라이언트 모듈에만 존재해야 한다. 페이지·컴포넌트에서 직접 호출하지 않는다.
+    - 응답은 `isMock`, `paperOnly`, `executed`, `externalConnections` 안전 표시를 확인한 뒤에만 화면에 사용한다.
+  - 위 조건을 벗어난 `fetch` 사용은 여전히 금지 대상이며 검증자가 `중대`로 분류한다.
+  - React 검증에서는 백엔드 구현 상태와 무관하게 **외부** 네트워크 또는 운영 DB 연결이 없어야 한다. 로컬 백엔드 호출은 Vite `server.proxy`를 통해 같은 출처 `/api/*`로만 나간다.
+  - 브라우저 네트워크 탭에서 모든 요청 호스트가 `127.0.0.1:5173`인지 확인한다.
+
+## FastAPI 백엔드 검증
+
+- `BACKEND-002` 이후에는 `apps/api` 최소 FastAPI 골격이 존재한다.
+- 현재 구현된 백엔드 엔드포인트는 `GET /api/health` 단독이다.
+- `/api/health`는 HTTP 200 JSON으로 응답해야 한다.
+- 응답은 평면 JSON이며 `status`, `service`, `generatedAt`, `dataAsOf`, `sourceLabel`, `isMock`, `paperOnly`, `externalConnections`, `executed`, `disclaimer`를 포함해야 한다.
+- `isMock`은 `true`, `paperOnly`는 `true`, `externalConnections`는 `0`, `executed`는 `false`여야 한다.
+- `BACKEND-003` 이후 `GET /api/dashboard`가 추가됐다. `/api/approvals` 등 미구현 경로는 404가 기대 상태다.
+- `/api/dashboard`는 HTTP 200 JSON으로 응답해야 한다.
+- `/api/dashboard` 응답은 `data` 래퍼가 있는 봉투 구조이며 `generatedAt`, `dataAsOf`, `sourceLabel`, `isMock`, `paperOnly`, `executed`, `externalConnections`, `disclaimer`, `data`를 포함해야 한다.
+- `/api/dashboard` 금액 필드는 정수, 비율 필드는 퍼센트 단위 숫자여야 한다. 포맷된 문자열(`"128,450,000원"`)이 응답에 있으면 실패로 본다.
+- 보유 종목 `value` 합계가 `summary.totalAsset`과 일치해야 한다.
+- 현금 행처럼 해당 없는 필드는 `"-"`가 아니라 `null`이어야 한다.
+- `uv run pytest` 기준 백엔드 테스트 9개가 통과해야 한다.
+- CORS origin은 `http://127.0.0.1:5173`, `http://localhost:5173`만 허용되어야 하고, `allow_methods`는 `GET`, `allow_headers`는 명시 목록이어야 한다.
+- 프론트는 Vite `server.proxy`로 `/api`를 `http://127.0.0.1:8000`에 전달한다. 브라우저는 절대 URL을 직접 호출하지 않는다.
 
 ## 상호작용 검증
 

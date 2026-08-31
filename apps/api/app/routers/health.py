@@ -1,17 +1,14 @@
-from datetime import datetime, timezone, timedelta
-
 from fastapi import APIRouter
 
+from app.clock import now_kst_iso
 from app.schemas.health import HealthResponse
 
 router = APIRouter(prefix="/api", tags=["health"])
 
-KST = timezone(timedelta(hours=9), name="KST")
-
 
 @router.get("/health", response_model=HealthResponse)
 def get_health() -> HealthResponse:
-    now = datetime.now(KST).isoformat()
+    now = now_kst_iso()
     return HealthResponse(
         status="ok",
         service="financial-ai-agent-api",

@@ -22,9 +22,9 @@ def test_health_returns_local_fixture_safety_fields() -> None:
     assert "No real financial data" in payload["disclaimer"]
 
 
-def test_unknown_api_path_is_not_implemented() -> None:
+def test_unimplemented_api_path_is_not_found() -> None:
     client = TestClient(create_app())
 
-    response = client.get("/api/dashboard")
+    response = client.get("/api/approvals")
 
     assert response.status_code == 404

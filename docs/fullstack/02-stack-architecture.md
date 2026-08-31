@@ -14,7 +14,9 @@
 
 Spring Boot도 좋은 백엔드 선택지지만, 이 프로젝트에서는 “금융 AI 에이전트”라는 방향성과 맞춰 Python/FastAPI를 우선한다.
 
-현재 `apps/web` React/Vite 프론트엔드는 이미 생성되어 정적 목업 19개에 대응하는 19개 화면을 포함한다. `apps/api` FastAPI 백엔드는 아직 생성하지 않았다.
+현재 `apps/web` React/Vite 프론트엔드는 정적 목업 19개에 대응하는 19개 화면을 포함한다. `apps/api` FastAPI 백엔드는 `BACKEND-002`에서 최소 골격과 `GET /api/health`가, `BACKEND-003`에서 `GET /api/dashboard`가 생성됐다.
+
+프론트와 백엔드는 Vite `server.proxy`로 연결한다. 브라우저는 같은 출처 상대 경로 `/api/*`만 호출하고, dev 서버가 이를 `http://127.0.0.1:8000`으로 전달한다. 따라서 브라우저 요청 호스트는 항상 `127.0.0.1:5173` 하나다.
 
 ## 권장 저장소 구조
 
@@ -28,9 +30,10 @@ financial-ai-agent/
 │  │  │  ├─ pages/
 │  │  │  ├─ api/
 │  │  │  ├─ fixtures/
+│  │  │  ├─ lib/
 │  │  │  └─ styles/
 │  │  └─ package.json
-│  └─ api/                    # FastAPI 백엔드, 아직 미생성
+│  └─ api/                    # FastAPI 최소 백엔드, 현재 GET /api/health 단독
 │     ├─ app/
 │     │  ├─ main.py
 │     │  ├─ routers/

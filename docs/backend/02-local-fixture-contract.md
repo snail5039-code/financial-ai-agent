@@ -4,7 +4,7 @@
 
 ## 공통 응답 래퍼
 
-백엔드 fixture API는 모든 응답에 같은 안전 메타데이터를 포함한다.
+향후 백엔드 fixture API는 모든 응답에 같은 안전 메타데이터를 포함한다. `BACKEND-002`의 `GET /api/health`는 실제 구현에 맞춰 `data` 래퍼 없는 평면 JSON으로 제공한다.
 
 ```json
 {
@@ -28,15 +28,18 @@
 - `paperOnly`: 항상 `true`다.
 - `executed`: 주문, 승인, 반려 응답에서도 항상 `false`다.
 - `disclaimer`: 실제 금융 연결이 없음을 사람이 읽을 수 있게 설명한다.
-- `data`: 화면별 fixture 본문이다.
+- `externalConnections`: 항상 `0`이다.
+- `data`: 화면별 fixture 본문이다. 금액은 정수, 비율은 퍼센트 단위 실수로 담고 화면 문자열은 넣지 않는다.
+
+`app/schemas/common.py`의 `FixtureEnvelope`가 이 필드들을 정의하고, 안전 플래그는 `Literal`로 강제한다. 따라서 실제 연결 상태를 나타내는 값은 이 계약으로 표현할 수 없다.
 
 ## `/api/health` 적용
 
-`GET /api/health`도 공통 안전 필드를 포함한다. 상태 확인 응답이더라도 실제 금융 시스템 연결 상태처럼 보이지 않게 `mode: "local-fixture"`와 `externalConnections: 0`을 함께 둔다. 자세한 응답 예시는 `04-health-api.md`를 따른다.
+`GET /api/health`도 공통 안전 필드를 포함한다. 상태 확인 응답이더라도 실제 금융 시스템 연결 상태처럼 보이지 않게 `externalConnections: 0`을 함께 둔다. 현재 실제 구현은 `status`, `service`, `generatedAt`, `dataAsOf`, `sourceLabel`, `isMock`, `paperOnly`, `externalConnections`, `executed`, `disclaimer`를 최상위에 둔다. 자세한 응답 예시는 `04-health-api.md`를 따른다.
 
 ## 로컬 fixture API 골격 적용
 
-다음 구현에서 `/api/dashboard` 같은 화면별 fixture API를 준비하더라도 본문 필드는 각 화면 문서와 `docs/fullstack/03-data-api-contract.md`를 참조한다. 이 문서는 모든 fixture 응답이 반드시 가져야 할 공통 안전 래퍼만 정의한다.
+`BACKEND-003`의 `GET /api/dashboard`가 이 봉투 구조를 처음 적용한 화면 API다. 실제 필드와 숫자 표현 규칙은 `07-dashboard-api.md`를 본다. 이후 화면별 fixture API도 같은 봉투와 같은 숫자 규칙을 따른다. 이 문서는 모든 fixture 응답이 반드시 가져야 할 공통 안전 원칙을 정의한다.
 
 ## 승인·반려 응답 원칙
 
@@ -49,4 +52,4 @@
 
 ## 장기 API 참조
 
-전체 API 후보 목록은 이 문서에 복사하지 않는다. 장기 범위는 `docs/fullstack/03-data-api-contract.md`를 참조한다. `BACKEND-001`의 직접 구현 준비는 `/api/health`와 fixture 응답 골격에 한정한다.
+전체 API 후보 목록은 이 문서에 복사하지 않는다. 장기 범위는 `docs/fullstack/03-data-api-contract.md`를 참조한다. 현재 직접 구현된 것은 `/api/health`와 `/api/dashboard`다.

@@ -4,41 +4,47 @@
 
 ## 현재 상태
 
-`apps/web` React/Vite 프론트엔드는 이미 존재한다. `apps/api` FastAPI 백엔드는 아직 생성하지 않았다. 이 문서는 다음 구현 작업에서 만들 예상 구조를 정리하며, 지금 단계에서는 코드나 폴더를 생성하지 않는다.
+`apps/web` React/Vite 프론트엔드는 이미 존재한다. `BACKEND-002`에서 `apps/api` FastAPI 최소 골격과 `GET /api/health`가, `BACKEND-003`에서 `GET /api/dashboard`가 생성됐다. 현재 백엔드가 제공하는 엔드포인트는 이 둘이다.
 
-## 예상 폴더 구조
+## 현재 폴더 구조
 
 ```text
 apps/api/
 ├─ app/
 │  ├─ __init__.py
 │  ├─ main.py
+│  ├─ clock.py
+│  ├─ fixtures/
+│  │  ├─ __init__.py
+│  │  └─ dashboard.py
 │  ├─ routers/
 │  │  ├─ __init__.py
-│  │  └─ health.py
+│  │  ├─ health.py
+│  │  └─ dashboard.py
 │  ├─ schemas/
 │  │  ├─ __init__.py
-│  │  └─ common.py
-│  ├─ services/
-│  │  ├─ __init__.py
-│  │  └─ fixture_store.py
-│  └─ fixtures/
-│     ├─ __init__.py
-│     └─ dashboard.py
+│  │  ├─ common.py
+│  │  ├─ health.py
+│  │  └─ dashboard.py
 ├─ tests/
 │  ├─ __init__.py
-│  └─ test_health.py
-└─ pyproject.toml
+│  ├─ test_health.py
+│  └─ test_dashboard.py
+├─ pyproject.toml
+└─ uv.lock
 ```
 
 ## 책임 분리
 
 - `main.py`: FastAPI 앱 생성, 라우터 등록, 로컬 CORS 설정
-- `routers/`: HTTP 엔드포인트
-- `schemas/`: 공통 응답 래퍼와 화면별 응답 타입
-- `services/`: fixture 읽기, 메모리 상태 관리
-- `fixtures/`: 화면 검토용 고정 데이터
-- `tests/`: 안전 플래그와 응답 구조 검증
+- `clock.py`: KST ISO 8601 응답 시각 생성
+- `routers/health.py`: `GET /api/health` 엔드포인트
+- `routers/dashboard.py`: `GET /api/dashboard` 엔드포인트
+- `schemas/common.py`: 모든 fixture 응답이 공유하는 안전 봉투 `FixtureEnvelope`와 `Tone`
+- `schemas/health.py`: health 평면 JSON 응답 타입
+- `schemas/dashboard.py`: 대시보드 봉투와 본문 타입
+- `fixtures/dashboard.py`: 대시보드 fixture 리터럴
+- `tests/`: 안전 플래그, 응답 구조, 숫자 계약, 금액 정합성 검증
 
 ## 명명 원칙
 
@@ -48,6 +54,9 @@ apps/api/
 
 ## 다음 구현 전 확인
 
-- 패키지 관리 도구를 `uv`로 할지 `pip`/`venv`로 할지 관리자 승인이 필요하다.
-- 첫 백엔드 연결 화면을 대시보드 하나로 할지 승인 대기까지 묶을지 관리자 판단이 필요하다.
-- `BACKEND-001` 구현 지시가 `/api/health`만 요구하는지, 화면별 fixture API 파일 위치까지 요구하는지 다시 확인한다.
+- CORS `allow_headers` 명시화는 `BACKEND-003`에서 완료했다.
+- 대시보드 연결 범위는 대시보드 한 화면으로 확정했고 `BACKEND-003`에서 완료했다.
+- 다음은 승인 흐름이다. 쓰기 경로이므로 착수 전 두 가지를 먼저 정해야 한다.
+  - 승인·반려 상태를 메모리 저장소로 둘지 SQLite로 둘지
+  - `allow_methods`에 `POST`를 추가할 시점 (현재는 `GET` 전용)
+- 승인 흐름 계획이 승인되기 전에는 approvals 라우터, fixture, 서비스 파일을 만들지 않는다.

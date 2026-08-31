@@ -30,23 +30,45 @@ export interface NavItem {
   badge?: string;
 }
 
+/**
+ * Numeric API contract.
+ *
+ * Money fields are integers in `DashboardData.currency`. Percent fields are in
+ * percent units, so 6.65 means 6.65%. Fields that do not apply to a row (cash
+ * has no average price) are `null` rather than a placeholder string. All display
+ * formatting lives in `src/lib/format.ts`.
+ */
+
+/** Safety metadata every local fixture response carries. */
+export interface FixtureEnvelope<TData> {
+  generatedAt: string;
+  dataAsOf: string;
+  sourceLabel: string;
+  isMock: true;
+  paperOnly: true;
+  executed: false;
+  externalConnections: 0;
+  disclaimer: string;
+  data: TData;
+}
+
 export interface ChartPoint {
   label: string;
   portfolio: number;
   benchmark: number;
-  event?: string;
+  event?: string | null;
 }
 
 export interface Holding {
   name: string;
   code: string;
-  quantity: string;
-  averagePrice: string;
-  currentPrice: string;
-  value: string;
-  profit: string;
-  profitRate: string;
-  weight: string;
+  quantity: number | null;
+  averagePrice: number | null;
+  currentPrice: number | null;
+  value: number;
+  profit: number | null;
+  profitRate: number | null;
+  weight: number;
   status: string;
   tone: Tone;
   selected?: boolean;
@@ -59,39 +81,44 @@ export interface EvidenceItem {
   tone: Tone;
 }
 
+export interface DashboardSummary {
+  totalAsset: number;
+  todayProfit: number;
+  todayProfitRate: number;
+  principal: number;
+  accumulatedProfit: number;
+  cashWeight: number;
+  lastVerifiedAt: string;
+}
+
+export interface DashboardDecision {
+  company: string;
+  code: string;
+  decisionId: string;
+  status: string;
+  statusTone: Tone;
+  proposal: string;
+  limitPrice: number;
+  limitAmount: number;
+  targetWeightFrom: number;
+  targetWeightTo: number;
+  expiresAt: string;
+  evidence: EvidenceItem[];
+  checks: Array<{ label: string; value: string; tone: Tone }>;
+  invalidConditions: string[];
+}
+
 export interface DashboardData {
-  generatedAt: string;
-  dataAsOf: string;
-  isMock: true;
-  disclaimer: string;
   title: string;
   accountLabel: string;
-  summary: {
-    totalAsset: string;
-    todayProfit: string;
-    todayProfitRate: string;
-    principal: string;
-    accumulatedProfit: string;
-    cashWeight: string;
-    lastVerified: string;
-  };
+  currency: "KRW";
+  summary: DashboardSummary;
   holdings: Holding[];
   chart: ChartPoint[];
-  decision: {
-    company: string;
-    code: string;
-    decisionId: string;
-    status: string;
-    statusTone: Tone;
-    proposal: string;
-    limitAmount: string;
-    targetWeight: string;
-    expiresAt: string;
-    evidence: EvidenceItem[];
-    checks: Array<{ label: string; value: string; tone: Tone }>;
-    invalidConditions: string[];
-  };
+  decision: DashboardDecision;
 }
+
+export type DashboardEnvelope = FixtureEnvelope<DashboardData>;
 
 export type PortfolioChangeFilter = "all" | "up" | "down" | "check" | "none";
 

@@ -15,8 +15,11 @@
 - React/Vite `apps/web`는 이미 생성되어 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐다.
 - `FRONTEND-005`로 승인 대기 주문 행 접근성 구조 정리가 완료됐다.
 - `FRONTEND-FINAL-AUDIT` 최초 검증은 16개 화면 1440×900 하단 잘림으로 실패했지만, `FRONTEND-FINAL-AUDIT-R1` CSS 수정 뒤 검증자 19세대가 `FRONTEND-FINAL-AUDIT-R1-V`에서 최종 회귀 `통과`를 판정했다.
-- 백엔드는 아직 만들지 않았고, 만들 때도 실제 금융 API 대신 로컬 fixture 데이터를 제공한다.
-- 다음 1차 구현 후보는 `/api/health` 또는 대시보드 fixture API처럼 좁은 FastAPI 로컬 수직 슬라이스다.
+- `BACKEND-002`에서 `apps/api` FastAPI 최소 골격과 `GET /api/health`가 구현됐다.
+- `BACKEND-003`에서 `GET /api/dashboard`가 구현되고 프론트 대시보드 화면이 연결됐다. 프론트 대시보드 fixture는 제거됐다.
+- 프론트-백엔드 통신은 Vite `server.proxy`를 통한 같은 출처 상대 경로 `/api/*`다.
+- `/api/approvals` 등 나머지 경로는 미구현이며 404가 기대 상태다.
+- 다음 후보는 승인 흐름 수직 슬라이스다.
 - 실제 금융 데이터, 계좌, 주문, 체결, 공시, 시세, 환율, AI 실행, 외부 API, 운영 DB는 연결하지 않는다.
 
 ## 읽는 순서

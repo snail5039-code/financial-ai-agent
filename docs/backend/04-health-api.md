@@ -8,23 +8,20 @@
 
 이 엔드포인트는 사용자 계좌, 실제 주문, 시세, 공시, 환율, AI 실행 상태를 확인하지 않는다. 서버 프로세스가 살아 있고 안전 플래그가 유지되는지만 확인한다.
 
-## 응답 예시
+## 실제 응답 예시
 
 ```json
 {
-  "generatedAt": "2026-08-28T10:00:00+09:00",
-  "dataAsOf": "2026-08-28T10:00:00+09:00",
-  "sourceLabel": "로컬 FastAPI health",
+  "status": "ok",
+  "service": "financial-ai-agent-api",
+  "generatedAt": "2026-08-29T20:45:48.872901+09:00",
+  "dataAsOf": "2026-08-29T20:45:48.872901+09:00",
+  "sourceLabel": "local FastAPI health",
   "isMock": true,
   "paperOnly": true,
+  "externalConnections": 0,
   "executed": false,
-  "disclaimer": "로컬 개발용 상태 확인이며 실제 금융 데이터·계좌·주문·API와 연결되지 않습니다.",
-  "data": {
-    "status": "ok",
-    "service": "financial-ai-agent-api",
-    "mode": "local-fixture",
-    "externalConnections": 0
-  }
+  "disclaimer": "Local development status only. No real financial data, execution, market data, external API, or persistent storage is connected."
 }
 ```
 
@@ -32,15 +29,22 @@
 
 - `status`: 정상일 때 `ok`
 - `service`: 로컬 백엔드 식별자
-- `mode`: `local-fixture`
+- `generatedAt`: 응답 생성 시각, KST 오프셋 포함 ISO 8601 문자열
+- `dataAsOf`: health 상태 기준 시각, KST 오프셋 포함 ISO 8601 문자열
+- `sourceLabel`: `local FastAPI health`
+- `isMock`: 항상 `true`
+- `paperOnly`: 항상 `true`
 - `externalConnections`: 항상 `0`
-- 공통 안전 필드: `isMock: true`, `paperOnly: true`, `executed: false`
+- `executed`: 항상 `false`
+- `disclaimer`: 실제 금융 데이터, 실행, 시세, 외부 API, 영구 저장소 연결이 없음을 설명
 
 ## 검증 포인트
 
 - HTTP 200으로 응답한다.
 - 응답이 JSON이다.
 - `isMock`, `paperOnly`, `executed`, `disclaimer`가 누락되지 않는다.
-- `mode`는 `local-fixture`이고 `externalConnections`는 `0`이다.
+- 응답은 `data` 래퍼 없는 평면 JSON이다.
+- `externalConnections`는 `0`이다.
+- `/api/approvals` 등 미구현 경로는 404가 기대 상태다. `/api/dashboard`는 `BACKEND-003`에서 구현됐고 검증 포인트는 `07-dashboard-api.md`를 본다.
 - 외부 API, 실제 계좌, 실제 주문, 운영 DB 연결을 시도하지 않는다.
 - 로그나 환경변수에 비밀키 또는 실제 금융 연결 정보가 필요하지 않다.

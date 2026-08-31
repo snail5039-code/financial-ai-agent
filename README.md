@@ -61,7 +61,16 @@ python -m http.server 4173
 http://127.0.0.1:4173/mockup/financial-dashboard/
 ```
 
-React/Vite 19개 화면 프론트엔드 앱은 `apps/web`에 있습니다. 현재 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐으며, `FRONTEND-FINAL-AUDIT-R1-V`에서 최종 회귀 `통과` 판정을 받았습니다. 백엔드는 아직 만들지 않았습니다.
+React/Vite 19개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 대시보드 화면은 백엔드 `GET /api/dashboard`에서만 데이터를 받고, 나머지 18개 화면은 아직 프론트 로컬 fixture를 씁니다.
+
+**백엔드를 먼저 실행합니다.** 대시보드 화면은 백엔드가 없으면 오류 안내와 재시도 버튼을 표시합니다.
+
+```powershell
+cd apps/api
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+이어서 별도 터미널에서 프론트엔드를 실행합니다.
 
 ```powershell
 cd apps/web
@@ -69,7 +78,25 @@ npm ci
 npm run dev
 ```
 
-이 앱도 실제 금융 데이터, 계좌, 주문, 체결, 외부 API 또는 운영 DB와 연결하지 않습니다.
+브라우저에서 `http://127.0.0.1:5173/`을 엽니다. 프론트는 절대 URL을 호출하지 않고 같은 출처 상대 경로 `/api/*`만 호출하며, Vite dev 서버가 이를 로컬 백엔드로 전달합니다.
+
+현재 구현된 백엔드 엔드포인트는 둘입니다.
+
+```text
+http://127.0.0.1:8000/api/health
+http://127.0.0.1:8000/api/dashboard
+```
+
+`/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태입니다.
+
+백엔드 테스트는 아래로 실행합니다.
+
+```powershell
+cd apps/api
+uv run pytest
+```
+
+이 앱들도 실제 금융 데이터, 계좌, 주문, 체결, 외부 API 또는 운영 DB와 연결하지 않습니다.
 
 ## 안전 고지
 
@@ -88,6 +115,8 @@ npm run dev
 - `FINANCIAL_AI_FULLSTACK_PLAN.md`: 실제 금융 API 없이 프론트엔드와 백엔드를 연결하는 풀스택 전환 계획 요약
 - `docs/fullstack/`: 풀스택 전환 세부 계획 분할 문서
 - `apps/web/`: React/Vite 19개 화면 프론트엔드 앱
+- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 현재 `GET /api/health`와 `GET /api/dashboard`
+- `docs/backend/`: 백엔드 범위, 안전 경계, API 계약 분할 문서
 - `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
 - `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서
 - `mockup/financial-dashboard/`: 실행 가능한 정적 HTML/CSS/JavaScript와 화면 캡처

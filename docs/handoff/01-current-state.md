@@ -7,12 +7,8 @@
 - 원본 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`
 - 기본 브랜치: `main`
 - 원격 저장소: `https://github.com/snail5039-code/financial-ai-agent`
-- 출발 HEAD: `4295e3b2cc1fc56a9364076ed0a221755d8a51cf` (`4295e3b 세금 회고 역할 상태 React 화면 추가`)
-- 현재 작업트리에는 `FRONTEND-FINAL-AUDIT-R1` CSS 수정 4개 파일이 커밋 전 상태로 남아 있다.
-  - `apps/web/src/pages/DashboardPage.css`
-  - `apps/web/src/pages/CompanyDetailPage.css`
-  - `apps/web/src/pages/AuditLogPage.css`
-  - `apps/web/src/pages/PolicySettingsPage.css`
+- 최신 커밋: `8d0c3a9946549d1f9e570e8086843d7f5068c88f` (`8d0c3a9 백엔드 헬스 API 골격 추가`)
+- `main`과 `origin/main`은 `8d0c3a9` 기준으로 일치한다.
 - `MOCKUP-015` 세금·수수료 영향 점검 화면은 완료·검증·커밋·푸시했다.
 - `MOCKUP-016` 사용자 승인 이력·결정 회고 화면도 완료·검증·커밋·푸시했다.
 - `MOCKUP-017` 에이전트별 역할 상태판은 완료·검증·커밋·푸시했다.
@@ -21,7 +17,6 @@
 - `FRONTEND-005` 승인 대기 행 접근성 구조 정리는 `b654282`로 완료·검증·커밋·푸시했다.
 - `GOVERNANCE-001` 역할 작업 가시성 운영 규칙 강화는 `93d9375`로 완료·검증·커밋·푸시했다.
 - `SYNC-001` 원본 작업공간 인수 문서 동기화는 완료·검증·커밋·푸시했다.
-- `main`과 `origin/main`의 커밋 기준은 `4295e3b`이며, 위 R1 CSS 수정은 아직 커밋/푸시하지 않았다.
 
 ## 현재 제품 상태
 
@@ -30,19 +25,31 @@
 - React/Vite 프론트엔드 `apps/web`에는 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐다.
 - 승인 대기 화면의 주문 행 접근성 구조는 `FRONTEND-005`에서 정리됐다.
 - `FRONTEND-FINAL-AUDIT` 최초 검증은 1440×900 하단 잘림 문제로 `실패`였고, `FRONTEND-FINAL-AUDIT-R1` 재작업 후 검증자 19세대가 `FRONTEND-FINAL-AUDIT-R1-V`에서 `통과` 판정했다.
-- 백엔드/FastAPI는 아직 생성하지 않았다.
-- 실제 금융 데이터, 계좌, 주문, AI 실행, API, DB는 연결하지 않는다.
+- FastAPI 백엔드는 `apps/api`에 있고, 구현된 엔드포인트는 `GET /api/health`와 `GET /api/dashboard`다.
+- `BACKEND-003`에서 대시보드 수직 슬라이스를 완료했다. 대시보드 화면은 서버 응답만 사용하고 프론트 `src/fixtures/dashboard.ts`는 제거됐다.
+- 프론트-백엔드 통신은 Vite `server.proxy`를 통한 같은 출처 상대 경로 `/api/*`다. 브라우저가 절대 URL을 호출하지 않는다.
+- 응답 계약은 금액 정수·비율 퍼센트 단위 원본 숫자이고, 화면 문자열은 프론트 `src/lib/format.ts`가 만든다.
+- 나머지 18개 화면은 아직 프론트 로컬 fixture를 사용한다.
+- `/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태다.
+- 실제 금융 데이터, 계좌, 주문, AI 실행, 외부 API, 운영 DB는 연결하지 않는다.
 
 ## 다음 작업
 
-- 다음 작업은 백엔드로 넘어가기 전 현재 상태 문서 정합성을 맞춘 뒤, `docs/backend/`와 `docs/fullstack/` 기준으로 FastAPI fixture 진입 범위를 다시 확인하는 것이다.
+- 다음 작업은 승인 흐름 수직 슬라이스(`GET /api/approvals`, 모의승인·반려)다.
 - 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다.
-- 현재 기본 추천은 새 화면 추가보다 React/Vite 19개 화면을 유지하면서 FastAPI fixture API를 별도 단계로 연결하는 것이다.
+- 현재 기본 추천은 새 화면 추가보다 React/Vite 19개 화면과 `GET /api/health`를 유지하면서 다음 백엔드 범위를 작게 분리하는 것이다.
 - 풀스택 전환 계획은 루트 요약 문서와 `docs/fullstack/` 분할 문서로 나눴다.
-- 다음 실질 개발 후보는 백엔드 진입 전 문서 정합성 확인 뒤 `/api/health` 또는 대시보드 fixture API로 좁힌 FastAPI 골격이다. 단, `AGENTS.md` 흐름에 따라 계획 승인 후 구현한다.
+- `BACKEND-CORS-001` CORS 헤더 명시화는 `BACKEND-003`에 흡수되어 완료됐다.
+- 승인 흐름 착수 전 확정이 필요한 항목은 상태 저장소(메모리 vs SQLite)와 `allow_methods`에 `POST` 추가 시점이다.
 
 ## 최근 검증 메모
 
+- `BACKEND-003`: `GET /api/dashboard` 구현과 프론트 대시보드 연결. 백엔드 `uv run pytest` 9개 통과, 프론트 `npm run typecheck`·`npm run build` 통과. 1440×900 렌더링에서 `.app-shell` 1392×852 유지, main·인스펙터 하단 잘림 없음, 문서 가로·세로 오버플로 0, 콘솔 오류 없음. 화면에 표시되는 모든 숫자 문자열이 이전 fixture 문자열과 동일함을 DOM에서 확인. 네트워크 요청 호스트가 전부 `127.0.0.1:5173`. 백엔드 중단 시 오류 안내와 재시도 버튼 표시, 백엔드 복구 후 재시도로 정상 복구 확인.
+- `BACKEND-003` 부수 수정: 기존 대시보드 보유 종목 손익 셀의 색상 분기에서 현금 행이 `"-"`도 `startsWith("-")`에 걸려 `loss` 클래스를 받던 동작이 있었다. 숫자 계약으로 바뀌면서 `null` 분기로 정리됐다.
+- `BACKEND-003` 남은 항목: `decision.expiresAt`(14:42)이 `dataAsOf`(15:20)보다 이르다. 기존 목업 fixture에서 이어진 값이라 숫자를 바꾸지 않았고, 승인 흐름에서 만료 기준을 다시 정해야 한다. 인스펙터 워크플로의 `14:28`과 "대기"는 아직 화면에 하드코딩돼 있다.
+
+- `BACKEND-002-V`: 검증자 20세대가 `GET /api/health` 단독 구현을 `통과` 판정했다. 백엔드 테스트 2개 통과, HTTP 200 JSON 응답, 필수 안전값, `/api/dashboard` 404 기대 상태가 확인됐다.
+- 위 `allow_headers` 후속 후보는 `BACKEND-003`에서 처리됐다. 현재 `allow_headers`는 `Accept`, `Accept-Language`, `Content-Type` 명시 목록이고 `allow_methods`는 `GET`이다.
 - `FRONTEND-FINAL-AUDIT-R1-V`: 검증자 19세대가 React/Vite 19개 화면 최종 회귀를 `통과` 판정했다. `npm run typecheck`, `npm run build`, 19개 화면 1440×900 하단 잘림 해소, 사이드바 하단 안전 고지, 새 중대/높음 회귀 없음이 확인됐다.
 - 남은 낮음 이슈: 기업 상세 숨김 보조 텍스트 `.chart-alt`, 세금·수수료/결정 회고/역할 상태의 테스트 훅 마커 내부 가로 overflow. 통과를 막지 않는 후속 정리 후보로 둔다.
 - `FRONTEND-FINAL-AUDIT` 최초 판정은 `.app-shell`/`.workspace` 공통 높이 구조 때문에 16개 화면 하단 48px이 잘리는 `실패`였다. R1에서는 공통 레이아웃과 일부 화면 높이 정의를 조정했다.

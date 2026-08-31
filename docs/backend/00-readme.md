@@ -1,19 +1,20 @@
-# BACKEND-001 문서 읽기 안내
+# 백엔드 문서 읽기 안내
 
 기준일: 2026-08-29 KST
 
 ## 목적
 
-이 폴더는 실제 FastAPI 백엔드 구현 전에 `BACKEND-001` 1단계 범위와 안전 경계를 작은 문서로 나눠 확인하기 위한 준비 문서다. React/Vite `apps/web` 19개 화면 이전과 `FRONTEND-FINAL-AUDIT-R1-V` 통과 이후에도 상위 방향과 장기 로드맵은 `FINANCIAL_AI_FULLSTACK_PLAN.md`와 `docs/fullstack/`를 따른다.
+이 폴더는 FastAPI 백엔드 범위와 안전 경계를 작은 문서로 나눠 확인하기 위한 문서다. `BACKEND-001`은 문서 준비 단계였고, `BACKEND-002`에서 `apps/api` 최소 골격과 `GET /api/health` 단독 엔드포인트 구현이 완료됐다. React/Vite `apps/web` 19개 화면 이전과 `BACKEND-002` 이후에도 상위 방향과 장기 로드맵은 `FINANCIAL_AI_FULLSTACK_PLAN.md`와 `docs/fullstack/`를 따른다.
 
 ## 읽는 순서
 
-1. `01-backend-001-scope.md`: 이번 백엔드 1단계의 구현 범위와 비범위를 확인한다.
+1. `01-backend-001-scope.md`: `BACKEND-001` 문서 준비와 `BACKEND-002` 구현 완료 범위를 구분해 확인한다.
 2. `02-local-fixture-contract.md`: 로컬 fixture 응답의 공통 원칙을 확인한다.
-3. `03-fastapi-skeleton.md`: 다음 구현에서 만들 예상 폴더 구조를 확인한다.
+3. `03-fastapi-skeleton.md`: 현재 `apps/api` 실제 최소 구조를 확인한다.
 4. `04-health-api.md`: `/api/health` 응답 필드와 검증 포인트를 확인한다.
 5. `05-safety-boundary.md`: 실제 금융 연결 금지 기준과 금지 문자열을 확인한다.
 6. `06-implementation-checklist.md`: 다음 구현자와 검증자의 체크리스트를 확인한다.
+7. `07-dashboard-api.md`: `GET /api/dashboard` 계약, 숫자 표현 규칙, 전송 경로를 확인한다.
 
 ## 상위 참조
 
@@ -26,5 +27,9 @@
 ## 원칙
 
 - 실제 금융 데이터, 계좌, 주문, 체결, 공시, 시세, 환율, AI 실행, 외부 API, 운영 DB는 연결하지 않는다.
-- `BACKEND-001`은 문서와 다음 구현 준비 단계다. 이 문서 작업에서는 FastAPI 코드, `apps/api`, 패키지 설치를 만들지 않는다. 다음 구현은 관리자 승인 후 `/api/health` 또는 대시보드 fixture API처럼 좁은 로컬 수직 슬라이스로 시작한다.
+- `BACKEND-001`은 문서 준비, `BACKEND-002`는 `GET /api/health`, `BACKEND-003`은 `GET /api/dashboard` 구현 단계다.
+- 현재 백엔드는 실제 금융 API 대신 로컬 상태 확인 응답과 로컬 fixture 응답만 제공한다.
+- `BACKEND-003`에서 CORS 헤더 명시화도 함께 처리했다. `allow_headers`는 `Accept`, `Accept-Language`, `Content-Type` 명시 목록이다.
+- 프론트는 Vite `server.proxy`로 같은 출처 `/api/*`만 호출한다. 브라우저에서 절대 URL을 부르지 않는다.
+- 다음 구현 후보는 승인 흐름(`GET /api/approvals`, 모의승인·반려)이다. 쓰기 경로라서 메모리 저장소와 CORS 메서드 정책 결정이 먼저 필요하다.
 - 장기 API 전체 목록은 이 폴더에 복사하지 않고 `docs/fullstack/03-data-api-contract.md`를 참조한다.

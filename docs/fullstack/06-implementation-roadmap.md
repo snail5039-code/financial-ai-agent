@@ -12,34 +12,35 @@
 완료 기준:
 
 - 풀스택 전환 계획 문서가 존재한다.
-- 첫 구현 대상 API 후보가 `/api/health` 또는 대시보드 fixture API로 좁혀져 있다.
+- `BACKEND-002`에서 첫 구현 대상 API가 `GET /api/health` 단독으로 완료됐다.
 - React/Vite `apps/web` 프론트가 생성되어 정적 목업 19개에 대응하는 19개 화면을 포함한다.
 - `FRONTEND-005` 승인 대기 행 접근성 정리가 완료됐다.
 - `FRONTEND-FINAL-AUDIT-R1-V`에서 검증자 19세대가 최종 회귀 `통과`를 판정했다.
 
-## Phase 1: 프로젝트 골격
+## Phase 1: 프로젝트 골격 (완료)
 
 - `apps/web` React + Vite 생성 완료
-- `apps/api` FastAPI 생성은 아직 하지 않음
-- 먼저 `/api/health`와 로컬 fixture 응답 원칙을 구현 범위로 확정
-- 백엔드 생성 전까지는 프론트 로컬 fixture만 사용
+- `apps/api` FastAPI 최소 골격 생성 완료
+- `GET /api/health` 구현 완료
 
 완료 기준:
 
-- 프론트 로컬 주소에서 백엔드 상태를 읽을 준비가 됐거나, 백엔드 생성 전 문서 단계에서는 `/api/health` 계약과 검증 기준이 확정되어 있다.
+- 백엔드가 `/api/health`로 로컬 상태와 안전 필드를 반환한다.
 - 실제 외부 API 호출이 없다.
 
-## Phase 2: 대시보드 수직 슬라이스
+## Phase 2: 대시보드 수직 슬라이스 (완료)
 
-- 백엔드 `GET /api/dashboard`
-- 기존 프론트 `DashboardPage`
-- 기존 공통 `AppShell`
-- 대시보드 차트, 보유 종목, 우측 인스펙터를 백엔드 fixture 응답과 연결
+- 백엔드 `GET /api/dashboard` 구현
+- 프론트 `DashboardPage`를 서버 응답에 연결하고 로딩·오류·재시도 추가
+- Vite `server.proxy`로 같은 출처 `/api/*` 호출
+- 프론트 `src/fixtures/dashboard.ts` 제거
 
-완료 기준:
+완료 기준 충족 근거:
 
-- 정적 목업의 첫 화면과 같은 정보 구조가 컴포넌트로 동작한다.
-- 데이터는 서버 fixture에서만 온다.
+- 정적 목업의 첫 화면과 같은 정보 구조가 컴포넌트로 동작한다. 1440×900 렌더링 회귀 확인.
+- 데이터는 서버 fixture에서만 온다. 프론트 대시보드 fixture는 삭제됐다.
+- 화면에 표시되는 모든 숫자 문자열이 이전 fixture 문자열과 동일하다.
+- `uv run pytest` 9개 통과, `npm run typecheck`·`npm run build` 통과, 콘솔 오류 없음.
 
 ## Phase 3: 승인 흐름 수직 슬라이스
 
@@ -80,25 +81,23 @@
 - 대시보드 → 근거 패킷 → 변경 비교 → 승인 대기 → 결정 회고 흐름이 로컬에서 재현된다.
 - 외부 API 호출 없음이 검색과 테스트로 확인된다.
 
-## 첫 개발 티켓
+## 다음 개발 티켓
 
-바로 다음 개발은 아래 순서가 좋다.
+`BACKEND-CORS-001`과 `BACKEND-003`은 완료됐다. 다음은 Phase 3 승인 흐름이다.
 
-1. 현재 `apps/web` 대시보드 fixture와 표시 필드 확인
-2. `docs/backend/`의 `BACKEND-001` 범위와 안전 경계 재확인
-3. 관리자가 첫 백엔드 범위를 `/api/health` 단독 또는 `/api/health`+`/api/dashboard`로 확정
-4. 승인된 경우에만 `apps/api` FastAPI 폴더 생성
-5. 승인된 엔드포인트의 로컬 fixture 응답 작성
-6. 외부 API 호출 금지 테스트 추가
-7. README에 풀스택 로컬 실행법 추가
+1. 승인·반려 상태 저장을 메모리로 할지 SQLite로 할지 확정한다.
+2. `allow_methods`에 `POST` 추가를 승인한다. 현재는 `GET` 전용이라 쓰기 경로가 막혀 있다.
+3. `GET /api/approvals`를 `docs/backend/07-dashboard-api.md` 계약 규칙대로 작성한다.
+4. `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`를 `MockApprovalService`로 작성한다. 응답에 `executed: false`, `paperOnly: true`를 유지한다.
+5. 프론트 승인 대기 화면을 연결하고 `src/fixtures/approvals.ts`를 제거한다.
+6. 외부 API 호출 금지 검사를 유지한다. 프론트 `fetch`는 `src/api/` 아래 상대 경로 호출만 허용한다.
 
 ## 결정이 필요한 것
 
-개발 시작 전에 관리자가 확정하면 좋은 항목이다.
-
-1. FastAPI 패키지 관리를 `uv`로 할지 `pip`/`venv`로 할지
-2. DB 없이 메모리 fixture로만 갈지, SQLite를 쓸지
-3. 첫 백엔드 연결 화면을 대시보드 하나로 할지, 대시보드+승인 대기까지 묶을지
+1. 승인·반려 상태를 메모리 fixture로 갈지, SQLite를 쓸지
+   - 메모리는 `uvicorn --reload`에서 코드를 고칠 때마다 승인 상태가 초기화된다.
+2. 감사 로그를 승인 흐름과 함께 서버로 옮길지, 뒤로 미룰지
+3. OpenAPI에서 TypeScript 타입을 생성할지, Pydantic과 TS 타입을 계속 수기로 맞출지
+   - 화면이 19개라 수기 관리는 드리프트가 난다. 슬라이스가 적은 지금이 도입 비용이 가장 낮다.
 4. 기존 정적 목업을 계속 유지할지, 새 앱 구현 뒤 일부를 보관 문서로 옮길지
-
-현재 추천은 **기존 React + Vite 19개 화면 유지 + FastAPI 추가, 메모리 fixture, `/api/health` 또는 대시보드 API 1개 수직 슬라이스부터 시작**이다.
+5. Playwright 핵심 흐름 테스트를 지금 넣을지, Phase 5까지 미룰지
