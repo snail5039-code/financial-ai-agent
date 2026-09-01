@@ -15,9 +15,12 @@ has.
 import io
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
+
+from app.clock import KST
 
 OPENDART_BASE_URL = "https://opendart.fss.or.kr/api"
 CORP_CODE_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "opendart_corp_codes.xml"
@@ -83,10 +86,23 @@ async def fetch_recent_disclosures(stock_code: str, api_key: str, count: int = 5
     flr_nm, as OpenDART's `list.json` returns them."""
     corp_code = await get_corp_code(stock_code, api_key)
 
+    # list.json defaults to an empty window when bgn_de/end_de are omitted
+    # (it returns status "013" — no data — rather than "all time"), so a
+    # one-year lookback is required to actually get results.
+    end_de = datetime.now(KST).date()
+    bgn_de = end_de - timedelta(days=365)
+
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
         response = await client.get(
             f"{OPENDART_BASE_URL}/list.json",
-            params={"crtfc_key": api_key, "corp_code": corp_code, "page_no": 1, "page_count": count},
+            params={
+                "crtfc_key": api_key,
+                "corp_code": corp_code,
+                "bgn_de": bgn_de.strftime("%Y%m%d"),
+                "end_de": end_de.strftime("%Y%m%d"),
+                "page_no": 1,
+                "page_count": count,
+            },
         )
         response.raise_for_status()
         payload = response.json()

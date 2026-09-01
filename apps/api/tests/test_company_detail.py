@@ -12,10 +12,11 @@ def get_payload() -> dict:
     return response.json()
 
 
-def test_envelope_carries_safety_flags() -> None:
-    # No OPENDART_API_KEY is configured in the test environment, so filings
-    # stay on the fixture placeholder and this must read like every other
+def test_envelope_carries_safety_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Force no OPENDART_API_KEY regardless of a real key in apps/api/.env, so
+    # filings stay on the fixture placeholder and this reads like every other
     # screen's envelope.
+    monkeypatch.setattr("app.routers.company_detail.OPENDART_API_KEY", None)
     payload = get_payload()
     assert payload["isMock"] is True
     assert payload["paperOnly"] is True
