@@ -24,3 +24,21 @@ def test_returns_four_decisions_with_valid_outcomes() -> None:
     for row in decisions:
         assert row["decision"] in ("승인", "반려", "보류")
         assert not row["linkPage"].startswith("http")
+
+
+def test_no_row_contradicts_a_currently_pending_approval() -> None:
+    # Regression test for the DEC-1043 collision: this screen once claimed
+    # NAVER's DEC-1043 was "반려" while approvals.py still had that exact id
+    # sitting pending. A row here may only reuse an id from the live queue if
+    # that order is no longer pending (so there is nothing left to contradict).
+    client = TestClient(create_app())
+    decisions = client.get("/api/decision-review").json()["data"]["decisions"]
+    orders = {o["id"]: o for o in client.get("/api/approvals").json()["data"]["orders"]}
+
+    for row in decisions:
+        order = orders.get(row["id"])
+        if order is not None:
+            assert order["decisionStatus"] != "pending", (
+                f"{row['id']} is claimed '{row['decision']}' here but is still "
+                "pending in the live approvals queue"
+            )

@@ -1,13 +1,22 @@
 """Local decision review fixture. Ported from `src/fixtures/decisionReview.ts`.
 
-Known content note (not fixed here): this screen's DEC-1042 row narrates a
-decision as already "승인"(approved) on 2026-08-25, two days before the
-dashboard/approvals screens present the same id as a fresh pending proposal
-dated 2026-08-27. This is a retrospective log entry, not the live approval
-state, so it is not wired to the approval store the way the dashboard and
-evidence packet are — but the reused id across two different points in time is
-a loose end, flagged in docs/backend/10-decision-consolidation.md rather than
-silently resolved by renaming.
+Neither row here reuses a live, currently-pending id from `approvals.py`:
+
+- The Samsung row uses DEC-1058, not DEC-1042. The original fixture narrated
+  it as already "승인"(approved) on 2026-08-25, two days before dashboard/
+  approvals present DEC-1042 as a fresh pending proposal dated 2026-08-27 —
+  same id, contradictory timeline. This is a retrospective log entry about a
+  *different* past Samsung decision, not the live one, so it gets its own id.
+- The NAVER row uses DEC-1057, not DEC-1043 — same reasoning as `agents.py`:
+  the real DEC-1043 in `approvals.py` is a pending, verified NAVER sell order,
+  so this screen's "반려"(rejected) NAVER row cannot also claim that id.
+- The KODEX 200 row uses DEC-1059, not DEC-1044, for the same reason: the real
+  DEC-1044 in `approvals.py` is a pending buy order, not a past "보류"(held)
+  decision from 2026-08-25.
+
+`test_no_row_contradicts_a_currently_pending_approval` in
+`tests/test_decision_review.py` guards this: any row here that reuses a
+still-pending id from the live approvals queue fails the build.
 """
 
 from app.schemas.decision_review import DecisionReviewData, DecisionReviewItem
@@ -28,7 +37,7 @@ def build_decision_review_data() -> DecisionReviewData:
         safetyCopy=DECISION_REVIEW_DISCLAIMER,
         decisions=[
             DecisionReviewItem(
-                id="DEC-1042", name="삼성전자", ticker="005930", decision="승인", memo=True,
+                id="DEC-1058", name="삼성전자", ticker="005930", decision="승인", memo=True,
                 reviewedAt="2026-08-25T14:42:00+09:00", statusText="조건부 승인",
                 reason="검증 후 지정가와 최대 금액 조건을 붙여 사용자가 모의승인",
                 memoText="지정가 조건과 출처 미확인 표시가 함께 남아 있어 소액으로만 검토한다는 메모 예시",
@@ -39,7 +48,7 @@ def build_decision_review_data() -> DecisionReviewData:
                 summary="승인 당시 근거와 남긴 메모를 함께 보되 실제 투자 판단 평가는 하지 않습니다.",
             ),
             DecisionReviewItem(
-                id="DEC-1043", name="NAVER", ticker="035420", decision="반려", memo=True,
+                id="DEC-1057", name="NAVER", ticker="035420", decision="반려", memo=True,
                 reviewedAt="2026-08-25T14:51:00+09:00", statusText="사용자 반려",
                 reason="검증 결과는 형식상 정리됐지만 출처 신뢰도와 변동성 설명이 부족해 반려",
                 memoText="근거 출처가 더 명확해질 때 다시 비교한다는 사용자 메모 예시",
@@ -50,7 +59,7 @@ def build_decision_review_data() -> DecisionReviewData:
                 summary="반려 이유를 판단 실패나 성공으로 해석하지 않고 당시 확인 부족 항목으로 정리합니다.",
             ),
             DecisionReviewItem(
-                id="DEC-1044", name="KODEX 200", ticker="069500", decision="보류", memo=False,
+                id="DEC-1059", name="KODEX 200", ticker="069500", decision="보류", memo=False,
                 reviewedAt="2026-08-25T15:05:00+09:00", statusText="보류",
                 reason="정책에는 큰 충돌이 없지만 리밸런싱 목표와 현금 비중을 더 비교해야 해 보류",
                 memoText="사용자 메모 없음. 화면은 메모가 없는 결정도 회고 대상에 남깁니다.",

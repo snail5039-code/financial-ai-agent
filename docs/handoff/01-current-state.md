@@ -45,7 +45,7 @@
 - `BACKEND-007`에서 나머지 17개 화면(리스크 알림, 거래 내역, 포트폴리오 건강, 근거 패킷, 감사 로그, 결정 회고, 역할 상태, 주간 리포트, 세금·수수료, 변경 비교, 전략 조정, 백테스트, 기업 상세, 데이터 연결, 알림 설정, 투자 정책, 스트레스 테스트)를 전부 백엔드로 옮겼다. 모두 읽기 전용 `GET`이며 정책/알림 설정의 "가상 적용"은 여전히 저장되지 않는 화면 상태다.
 - 이 과정에서 DEC-1043·DEC-1044도 `decisions.py` 공유 상수로 통합했고, `evidence_packets.py`가 DEC-1042 실시간 승인 상태를 반영하도록 새로 연결했다.
 - 마이그레이션 중 실제 런타임 크래시를 하나 발견해 고쳤다: `TaxFeeImpactPage`, `DecisionReviewPage`, `AgentRoleStatusPage`, `PortfolioChangeComparePage` 4개 화면에서 조기 반환(로딩 중 return) 아래에 `useEffect`가 있어 React Hooks 순서 규칙을 위반하고 있었다. `useRef` 간접 참조로 고쳤다.
-- 16개 결정 ID 전체의 서사 대조는 아직 하지 않았다. 범위는 `docs/backend/10-decision-consolidation.md`, `docs/backend/11-remaining-screens-migration.md` 참조.
+- 16개 결정 ID 전체의 서사 대조를 완료했다(`docs/backend/12-full-decision-id-audit.md`). BACKEND-006에서 절반만 고쳐졌던 DEC-1043 충돌(`agent_role_status.py` 2곳, `decision_review.py`)을 추가로 발견해 DEC-1057로 통일했고, `decision_review.py`가 갖고 있던 DEC-1042·DEC-1044 시점 충돌도 각각 DEC-1058·DEC-1059로 분리했다. 앞으로 같은 종류의 충돌을 잡는 회귀 테스트 2개를 추가했다(`test_no_row_contradicts_a_currently_pending_approval`, `test_no_role_claims_a_pending_decision_was_rejected`). `trade_history`/`weekly_report`/`risk_alerts`의 DEC-1042 재사용은 동시 모순이 아니라고 확인해 그대로 남겼다.
 - 검증 방법 보완: 프록시 확인은 상태 코드만 보면 안 된다. Vite는 프록시가 꺼져 있어도 SPA fallback으로 200을 돌려주므로 `content-type`까지 확인한다.
 - 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다.
 - 현재 기본 추천은 새 화면 추가보다 React/Vite 19개 화면과 `GET /api/health`를 유지하면서 다음 백엔드 범위를 작게 분리하는 것이다.

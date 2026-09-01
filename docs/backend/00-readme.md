@@ -19,6 +19,7 @@
 9. `09-approvals-api.md`: 이 프로젝트 최초의 쓰기 경로인 승인 대기 승인·반려 API와 메모리 저장소 설계를 확인한다.
 10. `10-decision-consolidation.md`: 결정(DEC) 데이터를 화면 간에 통합한 1차 범위와 남은 범위를 확인한다.
 11. `11-remaining-screens-migration.md`: 나머지 17개 화면을 전부 백엔드로 옮긴 범위, 사전 계산 방식, 발견한 React Hooks 버그를 확인한다.
+12. `12-full-decision-id-audit.md`: 16개 결정 ID 전수 대조 결과와 추가로 고친 DEC-1042·1043·1044 충돌을 확인한다.
 
 ## 상위 참조
 

@@ -71,10 +71,5 @@
 1. OpenAPI에서 TypeScript 타입 생성 도입. 엔드포인트 23개, 프론트 타입 파일 하나(`types/dashboard.ts`)가 이제 1000줄이 넘는다.
 2. Playwright 핵심 흐름 테스트. 프론트에 테스트가 0개다.
 3. 사이드바 「승인 대기 4」 배지가 하드코딩이다. `GET /api/approvals`의 `pending` 개수로 바꾼다.
-4. 16개 결정 ID 전체의 서사 대조는 아직 하지 않았다. 알려진 낮은 우선순위 불일치 2건(`docs/backend/11-remaining-screens-migration.md` 참조)이 남아 있다.
+4. 16개 결정 ID 전체의 서사 대조를 완료했다(`docs/backend/12-full-decision-id-audit.md`). BACKEND-006에서 절반만 고쳐졌던 DEC-1043 충돌과 `decision_review.py`의 DEC-1042·1044 충돌을 추가로 발견해 고쳤다. `trade_history`/`weekly_report`/`risk_alerts`의 DEC-1042 재사용은 동시 모순이 아니라고 확인해 남겨뒀다.
 5. `types/dashboard.ts` 파일 하나에 23개 화면 타입이 전부 들어있다. 화면별 타입 파일로 분리하는 리팩터링을 고려한다.
-
-1. 승인 흐름 수직 슬라이스: `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`, 프론트 승인 대기 화면 연결, `src/fixtures/approvals.ts` 제거.
-   - 착수 전 결정: 상태 저장소(메모리 vs SQLite), `allow_methods`에 `POST` 추가 시점.
-2. OpenAPI에서 TypeScript 타입 생성 도입. 화면이 19개라 Pydantic과 TS 타입을 수기로 맞추면 드리프트가 난다.
-3. 남은 낮음 UI 이슈는 별도 후속 정리 후보로 분리하고, 백엔드 진행의 차단 조건으로 보지 않는다.

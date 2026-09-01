@@ -1,8 +1,13 @@
 """Local agent role status fixture. Ported from `src/fixtures/agentRoleStatus.ts`.
 
-Decision ids here (DEC-1042/1043/1052/1056) are cross-reference labels only —
+Decision ids here (DEC-1042/1052/1056/1057) are cross-reference labels only —
 this screen does not restate any of those decisions' quantity/price, so there
 is nothing to pull from `app/fixtures/decisions.py`.
+
+DEC-1057 (not DEC-1043) is used for the NAVER "관찰 유지, 반려" narrative,
+matching the BACKEND-006 fix in `agents.py`: the real DEC-1043 in
+`approvals.py` is a pending, verified NAVER sell order, so this screen cannot
+also call DEC-1043 rejected without contradicting the approvals queue.
 """
 
 from app.schemas.agent_role_status import AgentRoleStatusData, AgentRoleStatusItem
@@ -26,7 +31,7 @@ def build_agent_role_status_data() -> AgentRoleStatusData:
                 id="proposer", role="제안자", status="대기", badge="대기",
                 task="DEC-1056 삼성전자 비중 +2% 후보 작성",
                 wait="검증자 출처 신뢰도 점검 대기", approval=False,
-                history="DEC-1043 반려 후 근거 보강", decision="DEC-1056",
+                history="DEC-1057 반려 후 근거 보강", decision="DEC-1056",
                 summary="제안자는 화면용 후보를 작성한 뒤 검증 역할의 확인을 기다리는 상태로 표시됩니다.",
                 conflict="출처 보강 전 승인 관리자에게 넘기지 않음",
                 linkPage="decisionReview", linkLabel="결정 회고 보기",
@@ -35,7 +40,7 @@ def build_agent_role_status_data() -> AgentRoleStatusData:
                 id="verifier", role="검증자", status="실패 이력", badge="실패 이력",
                 task="DEC-1056 출처 신뢰도 점검",
                 wait="공시 원문 미연결 표시 유지", approval=False,
-                history="DEC-1043 출처 신뢰도 보강 요청", decision="DEC-1043",
+                history="DEC-1057 출처 신뢰도 보강 요청", decision="DEC-1057",
                 summary="검증자는 실제 공시나 시세를 조회하지 않고, 출처 신뢰도 점검 항목을 화면용으로 정리합니다.",
                 conflict="출처 부족 이력을 제안자에게 되돌리는 예시",
                 linkPage="audit", linkLabel="감사 로그 보기",
