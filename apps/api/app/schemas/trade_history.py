@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import FixtureEnvelope
 
 TradeStatus = Literal["모의승인", "반려", "정책 차단", "만료", "대기"]
+TradeRelatedLinkPage = Literal["audit", "policy", "weekly"]
 
 
 class TradeHistoryItem(BaseModel):
@@ -37,7 +38,7 @@ class TradeRelatedLink(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     label: str
-    page: str | None
+    page: TradeRelatedLinkPage | None
     disabled: bool = False
 
 

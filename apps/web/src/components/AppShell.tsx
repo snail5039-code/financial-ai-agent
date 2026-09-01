@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type { NavItem, PageKey } from "../types/dashboard";
 import { DataBoundaryNotice } from "./DataBoundaryNotice";
+import { useApprovalsPendingCount } from "../lib/useApprovalsPendingCount";
 
 const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "투자 운영", label: "포트폴리오", icon: LayoutDashboard, page: "dashboard" },
@@ -45,7 +46,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { group: "에이전트", label: "분석 에이전트", icon: Activity, page: "analysisAgent" },
   { group: "에이전트", label: "검증 에이전트", icon: BookOpenCheck, page: "verificationAgent" },
   { group: "에이전트", label: "실행 에이전트", icon: PlayCircle, page: "executionAgent" },
-  { group: "에이전트", label: "승인 대기", icon: ListChecks, page: "approvals", badge: "4" },
+  { group: "에이전트", label: "승인 대기", icon: ListChecks, page: "approvals" },
   { group: "에이전트", label: "역할 상태", icon: UsersRound, page: "roleStatus" },
   { group: "문서", label: "투자 리포트", icon: TableProperties, page: "weekly" },
   { group: "문서", label: "감사 로그", icon: FileClock, page: "audit" },
@@ -68,6 +69,8 @@ interface AppShellProps {
 }
 
 export function AppShell({ title, accountLabel, lastSync, activePage, onNavigate, main, inspector }: AppShellProps) {
+  const pendingApprovals = useApprovalsPendingCount();
+
   return (
     <main className="app-shell" aria-label="금융 AI 모의투자 프론트엔드">
       <header className="titlebar">
@@ -108,6 +111,7 @@ export function AppShell({ title, accountLabel, lastSync, activePage, onNavigate
                   .map((item) => {
                     const Icon = item.icon;
                     const isActive = item.page === activePage;
+                    const badge = item.page === "approvals" && pendingApprovals !== null ? String(pendingApprovals) : item.badge;
                     return (
                       <button
                         className={isActive ? "nav-item active" : "nav-item"}
@@ -124,7 +128,7 @@ export function AppShell({ title, accountLabel, lastSync, activePage, onNavigate
                       >
                         <Icon size={15} aria-hidden="true" />
                         <span>{item.label}</span>
-                        {item.badge ? <b>{item.badge}</b> : null}
+                        {badge ? <b>{badge}</b> : null}
                       </button>
                     );
                   })}

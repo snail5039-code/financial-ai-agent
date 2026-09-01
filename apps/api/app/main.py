@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,8 +36,18 @@ from app.store.approvals import ApprovalStore
 LOCAL_WEB_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
 ALLOWED_REQUEST_HEADERS = ["Accept", "Accept-Language", "Content-Type"]
 
+# Where the real running app persists approval decisions across restarts.
+# Tests never see this path — every test's bare `create_app()` gets the
+# ApprovalStore default (`:memory:`) instead, so test runs stay isolated from
+# both each other and from a developer's real approvals.db. The Playwright
+# e2e config (apps/web/playwright.config.ts) starts its own instance of this
+# app with APPROVALS_DB_PATH=":memory:" for the same reason.
+DEFAULT_APPROVALS_DB_PATH = os.environ.get(
+    "APPROVALS_DB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "approvals.db")
+)
 
-def create_app() -> FastAPI:
+
+def create_app(approval_db_path: str = ":memory:") -> FastAPI:
     app = FastAPI(
         title="Financial AI Agent Local Fixture API",
         version="0.1.0",
@@ -47,9 +60,11 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=ALLOWED_REQUEST_HEADERS,
     )
+    if approval_db_path != ":memory:":
+        Path(approval_db_path).parent.mkdir(parents=True, exist_ok=True)
     # One store per app instance (not a module-level singleton) so tests that
     # each call create_app() get independent, isolated demo state.
-    app.state.approval_store = ApprovalStore()
+    app.state.approval_store = ApprovalStore(approval_db_path)
 
     app.include_router(health_router)
     app.include_router(dashboard_router)
@@ -76,4 +91,4 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+app = create_app(approval_db_path=DEFAULT_APPROVALS_DB_PATH)

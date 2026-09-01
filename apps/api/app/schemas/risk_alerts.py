@@ -6,6 +6,7 @@ from app.schemas.common import FixtureEnvelope
 
 RiskCategory = Literal["정책", "출처", "시장", "승인", "데이터"]
 RiskSeverity = Literal["중대", "높음", "보통", "낮음"]
+RiskEventLinkPage = Literal["data", "policy", "trades"]
 
 
 class RiskEvent(BaseModel):
@@ -22,7 +23,7 @@ class RiskEvent(BaseModel):
     cause: str
     action: str
     policy: str
-    linkPage: str | None
+    linkPage: RiskEventLinkPage | None
     linkText: str
 
 

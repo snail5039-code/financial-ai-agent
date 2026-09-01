@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import FixtureEnvelope
 
 DecisionReviewOutcome = Literal["승인", "반려", "보류"]
+DecisionReviewLinkPage = Literal["approvals", "audit", "rebalance", "taxFee"]
 
 
 class DecisionReviewItem(BaseModel):
@@ -27,7 +28,7 @@ class DecisionReviewItem(BaseModel):
     alternate: str
     pathCopy: str
     focus: str
-    linkPage: str
+    linkPage: DecisionReviewLinkPage
     summary: str
 
 

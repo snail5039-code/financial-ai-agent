@@ -1,5 +1,7 @@
 # 다음 화면 후보
 
+> ⚠️ 아래 4·5·6번(FRONTEND-006/007 관련 서술)은 **완료된 작업으로 쓰여 있지만 아직 커밋되지 않았다.** 자세한 미커밋 파일 목록과 다음 세션이 먼저 할 일은 `docs/handoff/01-current-state.md`의 "다음 세션 시작 지점" 절을 본다.
+
 다음 화면 작업 번호는 `MOCKUP-020`이다. 다만 현재 판단은 새 화면 추가를 멈추고 `FINANCIAL_AI_FULLSTACK_PLAN.md`와 `docs/fullstack/00-readme.md` 기준으로 프론트엔드·백엔드 연결 앱 전환을 이어가는 것이다. `MOCKUP-015` 세금·수수료 영향 점검, `MOCKUP-016` 사용자 승인 이력·결정 회고, `MOCKUP-017` 에이전트별 역할 상태판, `MOCKUP-018` 포트폴리오 변경 전/후 비교, `MOCKUP-019` 승인 전 근거 패킷은 완료됐다. React/Vite `apps/web`에는 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐고, `FRONTEND-FINAL-AUDIT-R1-V`에서 최종 회귀 `통과` 판정을 받았다.
 
 ## 완료: 세금·수수료 영향 점검
@@ -68,8 +70,11 @@
 
 ## 다음 우선순위
 
-1. OpenAPI에서 TypeScript 타입 생성 도입. 엔드포인트 23개, 프론트 타입 파일 하나(`types/dashboard.ts`)가 이제 1000줄이 넘는다.
-2. Playwright 핵심 흐름 테스트. 프론트에 테스트가 0개다.
-3. 사이드바 「승인 대기 4」 배지가 하드코딩이다. `GET /api/approvals`의 `pending` 개수로 바꾼다.
+1. ~~OpenAPI에서 TypeScript 타입 생성 도입.~~ `FRONTEND-006`에서 완료. `npm run generate:types`가 `apps/api`의 OpenAPI 스키마에서 `src/types/api.generated.ts`를 만들고, `types/dashboard.ts`는 이제 그 별칭 중심이다. 백엔드 응답 모양이 바뀌면 이 스크립트를 다시 돌려야 한다.
+2. ~~Playwright 핵심 흐름 테스트.~~ `FRONTEND-007`에서 완료, `FRONTEND-010`에서 커버리지를 넓혔다. `apps/web/e2e/`에 대시보드 로드·사이드바 내비게이션·승인 대기 승인/반려 3개(깊은 검증)에 더해, 23개 화면 전부를 순회하며 에러 화면·JS 예외가 없는지만 얕게 확인하는 회귀 스윕 1개(`all-screens-load.spec.ts`)를 추가했다. `npm run test:e2e`로 실행, 연속 3회 실행해 안정성 확인.
+3. ~~사이드바 「승인 대기 4」 배지가 하드코딩이다.~~ `FRONTEND-006`에서 완료. `GET /api/approvals`의 실제 `pending` 개수를 쓴다.
 4. 16개 결정 ID 전체의 서사 대조를 완료했다(`docs/backend/12-full-decision-id-audit.md`). BACKEND-006에서 절반만 고쳐졌던 DEC-1043 충돌과 `decision_review.py`의 DEC-1042·1044 충돌을 추가로 발견해 고쳤다. `trade_history`/`weekly_report`/`risk_alerts`의 DEC-1042 재사용은 동시 모순이 아니라고 확인해 남겨뒀다.
-5. `types/dashboard.ts` 파일 하나에 23개 화면 타입이 전부 들어있다. 화면별 타입 파일로 분리하는 리팩터링을 고려한다.
+5. ~~`decision.expiresAt`이 `dataAsOf`보다 이른 문제.~~ `FRONTEND-008`에서 완료. 승인 대기 4건 전부가 이 문제였다(DEC-1042~1045 전부 `dataAsOf`보다 이른 만료 시각). 상대 순서·간격은 유지한 채 4개 전부 +1시간씩 밀었다. 대시보드·승인 대기 두 화면의 워크플로 3단계가 하드코딩된 `14:28`/"대기"만 보여주고 실제 `decidedAt`을 반영하지 않던 것도 같이 고쳤다. 상세는 `01-current-state.md` 참고.
+6. ~~`linkPage`/`page` 필드 타입 불일치.~~ `FRONTEND-009`에서 완료. `HealthCheck.linkPage`만 `Literal`이고 `AgentWorkItem`/`TaxFeeOrder`/`DecisionReviewItem`/`AgentRoleStatusItem`/`RiskEvent`/`TradeRelatedLink`는 `str`이던 것을, 실제 fixture에서 쓰는 값만 모아 각 스키마 파일에 전용 `Literal`(`AgentWorkItemLinkPage` 등)을 새로 만들어 좁혔다. 덕분에 `types/dashboard.ts`에 있던 `Api<T, {linkPage: PageKey}>` 오버라이드 6곳이 전부 필요 없어져서 지웠다(352줄로 더 줄었다). 앞으로 이 필드들에 오타를 넣으면 프론트가 아니라 백엔드 스키마 검증에서 바로 걸린다.
+7. `types/dashboard.ts`는 이제 352줄이다(원래 1112줄). 여전히 화면 23개 타입이 한 파일에 있지만, 대부분 한 줄짜리 별칭이라 이전만큼 급하지 않다. 더 쪼갤지는 다음에 파일이 다시 커질 때 판단한다.
+8. ~~`ApprovalStore`가 메모리 딕셔너리라 서버 재시작 시 승인 이력이 소실된다.~~ `FRONTEND-011`에서 SQLite로 전환했다. 결정 4건의 사실(fixture)은 그대로 두고, 실제로 바뀌는 값(`decisionStatus`/`decidedAt`)만 `apps/api/data/approvals.db`에 저장한다. 재시작해도 승인 이력이 유지되는 것을 직접 확인했다. 테스트는 여전히 `:memory:`(기본값)라 서로도, 실제 DB와도 격리된다.

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import FixtureEnvelope
 
 AgentRoleState = Literal["대기", "승인 필요", "실패 이력"]
+AgentRoleStatusLinkPage = Literal["decisionReview", "audit", "taxFee", "approvals"]
 
 
 class AgentRoleStatusItem(BaseModel):
@@ -21,7 +22,7 @@ class AgentRoleStatusItem(BaseModel):
     decision: str
     summary: str
     conflict: str
-    linkPage: str
+    linkPage: AgentRoleStatusLinkPage
     linkLabel: str
 
 

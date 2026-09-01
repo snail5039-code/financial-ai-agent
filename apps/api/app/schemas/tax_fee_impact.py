@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import FixtureEnvelope
 
 TaxFeeStatus = Literal["영향 작음", "재검토", "보류 권장"]
+TaxFeeOrderLinkPage = Literal["approvals", "policy", "rebalance", "data"]
 
 
 class TaxFeeOrder(BaseModel):
@@ -27,7 +28,7 @@ class TaxFeeOrder(BaseModel):
     assumption: str
     summary: str
     next: str
-    linkPage: str
+    linkPage: TaxFeeOrderLinkPage
 
 
 class TaxFeeImpactData(BaseModel):

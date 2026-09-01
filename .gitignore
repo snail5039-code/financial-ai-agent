@@ -19,6 +19,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# OpenAPI 타입 생성 파이프라인의 중간 산출물 (apps/web에서 openapi-typescript 입력으로 소비)
+apps/api/openapi.json
+
+# 로컬 승인 이력 SQLite DB (기기별 로컬 데모 상태, 커밋 대상 아님)
+apps/api/data/
+
 # 임시 및 캐시 파일
 *.tmp
 *.temp
@@ -32,3 +38,4 @@ tmp/
 temp/
 %TEMP%/
 test-results/
+playwright-report/

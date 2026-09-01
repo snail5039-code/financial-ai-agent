@@ -65,11 +65,11 @@ python -m http.server 4173
 http://127.0.0.1:4173/mockup/financial-dashboard/
 ```
 
-React/Vite 23개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트·승인 대기 6개 화면은 백엔드에서만 데이터를 받고, 나머지 17개 화면은 아직 프론트 로컬 fixture를 씁니다.
+React/Vite 23개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 23개 화면 전부가 백엔드 엔드포인트에서 데이터를 받고, 프론트 로컬 fixture는 쓰지 않습니다.
 
-승인 대기 화면의 「모의승인」·「반려」 버튼은 이 프로젝트 최초의 쓰기 경로입니다. 클릭하면 로컬 백엔드의 메모리 상태가 실제로 바뀌고(서버를 재시작하면 초기화됩니다), 페이지를 새로고침해도 결정 상태가 유지됩니다. 물론 실제 주문·체결은 여전히 생성되지 않습니다.
+승인 대기 화면의 「모의승인」·「반려」 버튼은 이 프로젝트 최초의 쓰기 경로입니다. 클릭하면 로컬 백엔드의 상태가 실제로 바뀌고, `apps/api/data/approvals.db`(SQLite)에 저장되어 페이지를 새로고침하거나 서버를 재시작해도 결정 상태가 유지됩니다. 물론 실제 주문·체결은 여전히 생성되지 않습니다.
 
-대시보드의 「현재 판단」 패널과 승인 대기 화면은 삼성전자 매수 건(DEC-1042)에 대해 **같은 결정 상태를 공유**합니다. 대시보드에서 승인하면 승인 대기 화면도 즉시 같은 상태를 보여주고, 반대 방향도 마찬가지입니다. 나머지 12개 화면(감사 로그, 결정 회고 등)은 아직 이 통합에 포함되지 않았습니다.
+대시보드의 「현재 판단」 패널, 승인 대기, 근거 패킷 3개 화면은 삼성전자 매수 건(DEC-1042)에 대해 **같은 결정 상태를 실시간으로 공유**합니다. 셋 중 어디서 승인해도 나머지가 즉시 같은 상태를 보여줍니다. 나머지 20개 화면은 자기 안에서는 결정 ID가 서로 모순되지 않도록 대조는 끝났지만(`docs/backend/12-full-decision-id-audit.md`), 이 실시간 공유에는 아직 포함되지 않았습니다.
 
 계좌와 세 에이전트 화면은 정적 목업에 대응 파일이 없습니다. 목업 사이드바에는 메뉴만 `href="#"`로 있었고 화면이 없었기 때문에, `FINANCIAL_AI_AGENT_IDEA.md`의 역할 정의를 근거로 React에만 새로 만들었습니다. 정적 목업은 19개 기준서로 동결합니다.
 
@@ -94,13 +94,25 @@ React 23개 화면 전부가 백엔드 `GET` 엔드포인트에 연결돼 있습
 
 `/api/approvals/{id}/approve`와 `/api/approvals/{id}/reject`만 `POST`이고 나머지는 전부 `GET`입니다.
 
-`/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태입니다.
-
 백엔드 테스트는 아래로 실행합니다.
 
 ```powershell
 cd apps/api
 uv run pytest
+```
+
+프론트 타입(`apps/web/src/types/dashboard.ts`)은 백엔드 OpenAPI 스키마에서 생성됩니다. 백엔드 응답 모양을 바꿨다면 다시 생성하세요(백엔드 실행 불필요).
+
+```powershell
+cd apps/web
+npm run generate:types
+```
+
+프론트 e2e 테스트(Playwright)는 아래로 실행합니다. 개발용 8000/5173과 겹치지 않는 전용 포트(8010/5174)에서 매번 새 백엔드 프로세스를 띄우므로, 메모리 승인 저장소 상태가 개발 서버나 이전 테스트 실행과 섞이지 않습니다.
+
+```powershell
+cd apps/web
+npm run test:e2e
 ```
 
 이 앱들도 실제 금융 데이터, 계좌, 주문, 체결, 외부 API 또는 운영 DB와 연결하지 않습니다.
@@ -121,8 +133,8 @@ uv run pytest
 - `FINANCIAL_AI_AGENT_IMPLEMENTATION.md`: 구현 방향과 기술 검토
 - `FINANCIAL_AI_FULLSTACK_PLAN.md`: 실제 금융 API 없이 프론트엔드와 백엔드를 연결하는 풀스택 전환 계획 요약
 - `docs/fullstack/`: 풀스택 전환 세부 계획 분할 문서
-- `apps/web/`: React/Vite 19개 화면 프론트엔드 앱
-- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 현재 6개 `GET` 엔드포인트와 승인·반려 `POST` 2개
+- `apps/web/`: React/Vite 23개 화면 프론트엔드 앱
+- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 화면당 `GET` 엔드포인트 23개(+`/api/health`)와 승인·반려 `POST` 2개
 - `docs/backend/`: 백엔드 범위, 안전 경계, API 계약 분할 문서
 - `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
 - `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서

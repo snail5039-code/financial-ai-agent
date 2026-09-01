@@ -176,16 +176,27 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
         </header>
 
         <div className="workflow" aria-label="처리 단계">
-          {["분석", "검증", "승인 대기"].map((step, index) => (
-            <div className="workflow-item" key={step}>
-              <div className={index < 2 ? "step done" : "step current"}>
-                <i>{index < 2 ? <CheckCircle2 size={11} /> : null}</i>
-                <b>{step}</b>
-                <span>{index < 2 ? "완료" : formatTimeOfDay(selected.expiresAt)}</span>
+          {["분석", "검증", "승인 대기"].map((step, index) => {
+            const stepDone = index < 2 || !selectedIsPending;
+            const stepLabel =
+              index < 2
+                ? "완료"
+                : selectedIsPending
+                  ? formatTimeOfDay(selected.expiresAt)
+                  : selected.decidedAt
+                    ? formatTimeOfDay(selected.decidedAt)
+                    : "완료";
+            return (
+              <div className="workflow-item" key={step}>
+                <div className={stepDone ? "step done" : "step current"}>
+                  <i>{stepDone ? <CheckCircle2 size={11} /> : null}</i>
+                  <b>{step}</b>
+                  <span>{stepLabel}</span>
+                </div>
+                {index < 2 ? <div className={index === 0 ? "line done" : "line"} /> : null}
               </div>
-              {index < 2 ? <div className={index === 0 ? "line done" : "line"} /> : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <section className="inspector-section proposal">

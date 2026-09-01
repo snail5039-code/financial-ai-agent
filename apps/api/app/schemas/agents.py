@@ -15,6 +15,8 @@ AgentStage = Literal["analysis", "verification", "execution"]
 
 ExecutionGrade = Literal["자동 실행", "간편 승인", "강화 승인", "실행 금지"]
 
+AgentWorkItemLinkPage = Literal["evidence", "company", "taxFee", "approvals", "decisionReview", "compare", "audit"]
+
 
 class AgentMetric(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -59,7 +61,7 @@ class AgentWorkItem(BaseModel):
     fields: list[AgentWorkField]
     notes: list[str]
     summary: str
-    linkPage: str
+    linkPage: AgentWorkItemLinkPage
     linkLabel: str
 
 
