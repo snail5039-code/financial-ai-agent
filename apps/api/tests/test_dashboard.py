@@ -94,3 +94,67 @@ def test_fixture_builder_matches_declared_schema() -> None:
 
     assert data.model_dump() == build_dashboard_data().model_dump()
     assert data.summary.totalAsset == sum(holding.value for holding in data.holdings)
+
+
+def test_decision_starts_pending_with_no_decided_at() -> None:
+    decision = get_payload()["data"]["decision"]
+
+    assert decision["decisionStatus"] == "pending"
+    assert decision["decidedAt"] is None
+
+
+def test_approving_the_decision_via_approvals_is_reflected_on_dashboard() -> None:
+    # This is the cross-screen consistency the decision consolidation exists
+    # for: the dashboard's featured decision and the approvals queue read the
+    # same store, so a decision made on one screen shows up on the other
+    # without a page reload.
+    client = TestClient(create_app())
+
+    approve_response = client.post("/api/approvals/DEC-1042/approve")
+    assert approve_response.status_code == 200
+
+    dashboard = client.get("/api/dashboard").json()["data"]["decision"]
+    assert dashboard["decisionId"] == "DEC-1042"
+    assert dashboard["decisionStatus"] == "approved"
+    assert dashboard["decidedAt"]
+    assert dashboard["decidedAt"] == approve_response.json()["data"]["decidedAt"]
+
+
+def test_rejecting_the_decision_via_approvals_is_reflected_on_dashboard() -> None:
+    client = TestClient(create_app())
+
+    client.post("/api/approvals/DEC-1042/reject")
+
+    dashboard = client.get("/api/dashboard").json()["data"]["decision"]
+    assert dashboard["decisionStatus"] == "rejected"
+
+
+def test_dashboard_decision_state_is_isolated_per_app_instance() -> None:
+    # Same isolation guarantee as the approvals store itself: one app's
+    # decision does not leak into another app's dashboard.
+    first_app_client = TestClient(create_app())
+    second_app_client = TestClient(create_app())
+
+    first_app_client.post("/api/approvals/DEC-1042/approve")
+
+    second_dashboard = second_app_client.get("/api/dashboard").json()["data"]["decision"]
+    assert second_dashboard["decisionStatus"] == "pending"
+
+
+def test_dashboard_and_approvals_agree_on_dec_1042s_static_facts() -> None:
+    # Both screens describe the same proposal; they must not silently drift
+    # apart on what is actually being proposed (quantity, price, amount).
+    client = TestClient(create_app())
+
+    dashboard_decision = client.get("/api/dashboard").json()["data"]["decision"]
+    approvals_order = next(
+        order
+        for order in client.get("/api/approvals").json()["data"]["orders"]
+        if order["id"] == "DEC-1042"
+    )
+
+    assert dashboard_decision["limitPrice"] == approvals_order["price"]
+    assert dashboard_decision["limitAmount"] == approvals_order["amount"]
+    assert dashboard_decision["company"] == approvals_order["company"]
+    assert dashboard_decision["code"] == approvals_order["code"]
+    assert dashboard_decision["expiresAt"] == approvals_order["expiresAt"]

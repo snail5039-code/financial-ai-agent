@@ -4,6 +4,13 @@ from pydantic import BaseModel, ConfigDict
 
 Tone = Literal["neutral", "info", "success", "warning", "danger"]
 
+# The only three states any decision can be in across every screen that
+# references one. There is no "executed"/"filled" value — approving a demo
+# decision never means a real order was placed. Defined once here so screens
+# that both read and write a decision's status (dashboard, approvals) cannot
+# each invent their own slightly different literal.
+DecisionStatus = Literal["pending", "approved", "rejected"]
+
 
 class FixtureEnvelope(BaseModel):
     """Common safety metadata carried by every local fixture response.

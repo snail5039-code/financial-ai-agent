@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, CircleDot, XCircle } from "lucide-react";
+import { approveOrder, rejectOrder } from "../api/approvals";
+import { ApiError } from "../api/client";
 import { getDashboard } from "../api/dashboard";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
@@ -16,7 +18,7 @@ import {
   formatTimeOfDay,
   formatWon
 } from "../lib/format";
-import type { DashboardData, EvidenceItem, Holding, PageKey, Tone } from "../types/dashboard";
+import type { DashboardData, DecisionStatus, EvidenceItem, Holding, PageKey, Tone } from "../types/dashboard";
 import "./DashboardPage.css";
 
 function toneIcon(tone: Tone) {
@@ -88,7 +90,20 @@ interface DashboardPageProps {
 
 export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
   const state = useFixture<DashboardData>(() => getDashboard(), "dashboard");
-  const [decisionMessage, setDecisionMessage] = useState("");
+  const [pendingAction, setPendingAction] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Live decision state layered over the fetched envelope, same pattern as
+  // ApprovalQueuePage: the approve/reject response is reflected immediately
+  // without a full refetch (which would flash the loading screen). Reset when
+  // a fresh envelope arrives.
+  const [decisionOverride, setDecisionOverride] = useState<{
+    decisionStatus: DecisionStatus;
+    decidedAt: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    setDecisionOverride(null);
+  }, [state.envelope]);
 
   const fallback = renderFixtureFallback(state, "대시보드");
   if (fallback) return fallback;
@@ -98,7 +113,22 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
 
   const lastSync = formatTimeOfDay(envelope.dataAsOf);
   const dashboard = envelope.data;
-  const { summary, decision } = dashboard;
+  const { summary } = dashboard;
+  const decision = { ...dashboard.decision, ...decisionOverride };
+  const decisionIsPending = decision.decisionStatus === "pending";
+
+  async function decide(action: "approve" | "reject") {
+    setActionError(null);
+    setPendingAction(true);
+    try {
+      const result = action === "approve" ? await approveOrder(decision.decisionId) : await rejectOrder(decision.decisionId);
+      setDecisionOverride({ decisionStatus: result.data.decisionStatus, decidedAt: result.data.decidedAt });
+    } catch (cause) {
+      setActionError(cause instanceof ApiError ? cause.message : "요청을 처리하지 못했습니다.");
+    } finally {
+      setPendingAction(false);
+    }
+  }
 
   const main = (
     <section className="dashboard" aria-labelledby="dashboard-title">
@@ -192,7 +222,13 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
               <h2>{decision.company}</h2>
               <span>{decision.decisionId}</span>
             </div>
-            <StatusPill tone={decision.statusTone}>{decision.status}</StatusPill>
+            <StatusPill tone={decisionIsPending ? decision.statusTone : "info"}>
+              {decision.decisionStatus === "approved"
+                ? "모의승인됨"
+                : decision.decisionStatus === "rejected"
+                  ? "반려됨"
+                  : decision.status}
+            </StatusPill>
           </div>
         </div>
 
@@ -260,13 +296,25 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
           <span>이 모의승인은 <b>{formatTimeOfDay(decision.expiresAt)}</b>에 만료됩니다.</span>
           <small>승인해도 실제 주문은 생성되지 않습니다.</small>
         </div>
-        {decisionMessage ? <div className="decision-message" aria-live="polite">{decisionMessage}</div> : null}
+        {!decisionIsPending ? (
+          <div className="decision-message" aria-live="polite">
+            {decision.decisionStatus === "approved"
+              ? `모의승인됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
+              : `반려됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · 로컬 화면 상태만 변경되었습니다.`}
+          </div>
+        ) : null}
+        {actionError ? <div className="decision-message" role="alert">{actionError}</div> : null}
         <div className="actions">
-          <button type="button" onClick={() => setDecisionMessage("반려 처리됨 · 로컬 화면 상태만 변경되었습니다.")}>반려</button>
-          <button type="button" onClick={() => setDecisionMessage("모의승인됨 · 실제 주문은 생성되지 않았습니다.")}>
+          <button type="button" disabled={!decisionIsPending || pendingAction} onClick={() => decide("reject")}>
+            반려
+          </button>
+          <button type="button" disabled={!decisionIsPending || pendingAction} onClick={() => decide("approve")}>
             {formatWon(decision.limitAmount)} 한도 내 모의승인
           </button>
         </div>
+        <button className="evidence-link" type="button" onClick={() => onNavigate("approvals")}>
+          승인 대기 목록에서 함께 보기
+        </button>
         <p>모의투자 · 화면 검토용 예시 데이터</p>
       </div>
     </aside>

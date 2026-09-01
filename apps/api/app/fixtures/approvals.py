@@ -6,6 +6,7 @@ the process starts; `app/store/approvals.py` is what remembers a decision for
 the rest of that process's lifetime.
 """
 
+from app.fixtures.decisions import DEC_1042, DEC_1042_EXPIRES_AT
 from app.schemas.approvals import ApprovalOrder
 
 APPROVALS_DATA_AS_OF = "2026-08-27T15:20:00+09:00"
@@ -21,18 +22,18 @@ APPROVALS_DISCLAIMER = (
 def build_approval_orders() -> list[ApprovalOrder]:
     return [
         ApprovalOrder(
-            id="DEC-1042",
-            company="삼성전자",
-            code="005930",
-            side="매수",
-            quantity=10,
-            price=71_200,
-            amount=712_000,
+            id=DEC_1042.id,
+            company=DEC_1042.company,
+            code=DEC_1042.code,
+            side=DEC_1042.side,
+            quantity=DEC_1042.quantity,
+            price=DEC_1042.price,
+            amount=DEC_1042.amount,
             reviewLabel="조건부 승인",
             category="conditional",
             decisionStatus="pending",
             verification="조건부",
-            expiresAt="2026-08-27T14:42:00+09:00",
+            expiresAt=DEC_1042_EXPIRES_AT,
             policyLabel="통과 예시",
             policyPassed=True,
             sourceLabel="실제 공시 미연결 · 출처 미확인",

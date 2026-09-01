@@ -5,6 +5,13 @@ account balance, and not an order. Nothing in this module reads an external
 source; the values are literals checked into the repository.
 """
 
+from app.fixtures.decisions import (
+    DEC_1042,
+    DEC_1042_EXPIRES_AT,
+    DEC_1042_TARGET_WEIGHT_FROM,
+    DEC_1042_TARGET_WEIGHT_TO,
+)
+from app.schemas.common import DecisionStatus
 from app.schemas.dashboard import (
     DashboardChartPoint,
     DashboardCheck,
@@ -26,7 +33,17 @@ DASHBOARD_DISCLAIMER = (
 )
 
 
-def build_dashboard_data() -> DashboardData:
+def build_dashboard_data(
+    decision_status: DecisionStatus = "pending",
+    decided_at: str | None = None,
+) -> DashboardData:
+    """Build the dashboard fixture.
+
+    `decision_status`/`decided_at` are live values for DEC-1042, read by the
+    router from the same approval store the approvals queue writes to. They
+    default to "pending"/None only so tests and other direct callers that
+    don't care about live state can call this with no arguments.
+    """
     return DashboardData(
         title="투자 운영",
         accountLabel="시뮬레이션 계좌",
@@ -136,17 +153,19 @@ def build_dashboard_data() -> DashboardData:
             ),
         ],
         decision=DashboardDecision(
-            company="삼성전자",
-            code="005930",
-            decisionId="DEC-1042",
+            company=DEC_1042.company,
+            code=DEC_1042.code,
+            decisionId=DEC_1042.id,
             status="조건부 승인 후보",
             statusTone="warning",
-            proposal="삼성전자 10주 지정가 매수",
-            limitPrice=71_200,
-            limitAmount=712_000,
-            targetWeightFrom=6.65,
-            targetWeightTo=7.20,
-            expiresAt="2026-08-27T14:42:00+09:00",
+            proposal=f"{DEC_1042.company} {DEC_1042.quantity}주 지정가 {DEC_1042.side}",
+            limitPrice=DEC_1042.price,
+            limitAmount=DEC_1042.amount,
+            targetWeightFrom=DEC_1042_TARGET_WEIGHT_FROM,
+            targetWeightTo=DEC_1042_TARGET_WEIGHT_TO,
+            expiresAt=DEC_1042_EXPIRES_AT,
+            decisionStatus=decision_status,
+            decidedAt=decided_at,
             evidence=[
                 DashboardEvidence(
                     title="영업현금흐름 전년 동기 대비 개선",

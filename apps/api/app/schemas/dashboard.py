@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import FixtureEnvelope, Tone
+from app.schemas.common import DecisionStatus, FixtureEnvelope, Tone
 
 # Numeric conventions for this contract:
 # - Money fields are integers in the currency named by `DashboardData.currency`.
@@ -82,6 +82,12 @@ class DashboardDecision(BaseModel):
     evidence: list[DashboardEvidence]
     checks: list[DashboardCheck]
     invalidConditions: list[str]
+    # Live state for this decision, read from the same approval store the
+    # approvals queue writes to. Approving/rejecting DEC-1042 from either
+    # screen is immediately reflected on the other — there is one truth, not
+    # two independent copies that can disagree.
+    decisionStatus: DecisionStatus
+    decidedAt: str | None = None
 
 
 class DashboardData(BaseModel):

@@ -56,6 +56,19 @@
 - `uv run pytest` 49개 통과, `npm run typecheck`·`npm run build` 통과
 - 실제 클릭으로 승인·반려·새로고침 후 상태 유지·409 충돌을 브라우저에서 확인
 
+## BACKEND-006 완료 항목
+
+- `app/fixtures/decisions.py` 신규: DEC-1042의 정적 사실(회사·코드·구분·수량·가격)을 한 곳에 정의. `dashboard.py`와 `approvals.py`가 참조
+- `app/schemas/common.py`에 `DecisionStatus` Literal을 한 번만 정의, `dashboard.py`·`approvals.py` 스키마가 공유
+- `GET /api/dashboard`가 `Request`를 받아 승인 스토어에서 DEC-1042의 실시간 `decisionStatus`/`decidedAt`을 읽어옴
+- 프론트 `DashboardPage`의 승인/반려 버튼을 실제 `approveOrder`/`rejectOrder` API로 교체. 기존에는 로컬 문자열만 바꾸는 가짜 두 번째 승인 UI였음
+- `agents.py`의 NAVER "관찰 유지" 예시가 승인 대기의 실제 DEC-1043(NAVER 매도)과 정반대 내용으로 ID가 충돌하던 버그 발견, DEC-1057로 분리
+- 대시보드↔승인 대기 교차 일관성 테스트 5개 추가 (같은 결정을 한쪽에서 승인하면 다른 쪽에도 즉시 반영되는지 검증)
+- 테스트 49개에서 54개로 확장
+- `uv run pytest` 54개 통과, `npm run typecheck`·`npm run build` 통과
+- 브라우저에서 대시보드→승인, 승인 대기 화면 확인, 무관한 결정(NAVER 반려) 영향 없음, 검증 에이전트의 NAVER 항목이 더 이상 충돌하지 않음을 실제 클릭으로 확인
+- 나머지 12개 프론트 전용 fixture의 결정 데이터는 통합하지 않음. 범위와 이유는 `10-decision-consolidation.md` 참조
+
 ## 다음 구현자 체크리스트
 
 - 작업 시작 전 `AGENTS.md`와 `docs/backend/00-readme.md`를 읽는다.

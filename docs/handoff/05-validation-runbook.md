@@ -123,7 +123,8 @@ curl -s -H "Accept: application/json" -o /dev/null -w "%{http_code} %{content_ty
 - 모든 `capabilities[].connected`가 `false`여야 한다.
 - 실행 경로의 모든 항목 `실행 결과`가 `실행 안 됨`이고 `executionGrade`가 `자동 실행`이 아니어야 한다.
 - 검증 경로의 모든 항목 `출처 뒷받침`이 `미확인`이어야 한다.
-- `uv run pytest` 기준 백엔드 테스트 49개가 통과해야 한다.
+- `uv run pytest` 기준 백엔드 테스트 54개가 통과해야 한다.
+- 같은 결정(DEC-1042)을 승인 대기와 대시보드가 같은 상태로 보여주는지 확인한다. 한쪽에서 승인하면 다른 쪽에도(새로고침 없이) 반영되어야 한다.
 - CORS origin은 `http://127.0.0.1:5173`, `http://localhost:5173`만 허용되어야 하고, `allow_methods`는 `GET`, `allow_headers`는 명시 목록이어야 한다.
 - 프론트는 Vite `server.proxy`로 `/api`를 `http://127.0.0.1:8000`에 전달한다. 브라우저는 절대 URL을 직접 호출하지 않는다.
 

@@ -2,16 +2,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import FixtureEnvelope, Tone
+from app.schemas.common import DecisionStatus, FixtureEnvelope, Tone
 
 # Numeric conventions match docs/backend/07-dashboard-api.md: money is an
 # integer, no formatted strings in the payload.
 
 ApprovalCategory = Literal["conditional", "verified", "attention"]
-
-# The only state this app can ever put an order in. There is no "executed" or
-# "filled" value here — approving a demo order never creates a real one.
-DecisionStatus = Literal["pending", "approved", "rejected"]
 
 
 class ApprovalOrder(BaseModel):

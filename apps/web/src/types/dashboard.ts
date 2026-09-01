@@ -110,6 +110,9 @@ export interface DashboardDecision {
   evidence: EvidenceItem[];
   checks: Array<{ label: string; value: string; tone: Tone }>;
   invalidConditions: string[];
+  /** Live state, read from the same store the approvals queue writes to. */
+  decisionStatus: DecisionStatus;
+  decidedAt: string | null;
 }
 
 export interface DashboardData {
