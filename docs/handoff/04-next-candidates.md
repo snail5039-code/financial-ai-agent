@@ -1,6 +1,6 @@
 # 다음 화면 후보
 
-> ⚠️ 아래 4·5·6번(FRONTEND-006/007 관련 서술)은 **완료된 작업으로 쓰여 있지만 아직 커밋되지 않았다.** 자세한 미커밋 파일 목록과 다음 세션이 먼저 할 일은 `docs/handoff/01-current-state.md`의 "다음 세션 시작 지점" 절을 본다.
+> 아래 4·5·6번(FRONTEND-006/007 관련 서술)은 이제 실제로 커밋·푸시됐다(`71918cc`, `804606a`) — 한동안 "완료했지만 미커밋" 경고가 여기 남아 있었는데 stale했던 것이니 무시한다. 현재 커밋 상태는 `docs/handoff/01-current-state.md`의 "커밋 상태" 절을 본다.
 
 다음 화면 작업 번호는 `MOCKUP-020`이다. 다만 현재 판단은 새 화면 추가를 멈추고 `FINANCIAL_AI_FULLSTACK_PLAN.md`와 `docs/fullstack/00-readme.md` 기준으로 프론트엔드·백엔드 연결 앱 전환을 이어가는 것이다. `MOCKUP-015` 세금·수수료 영향 점검, `MOCKUP-016` 사용자 승인 이력·결정 회고, `MOCKUP-017` 에이전트별 역할 상태판, `MOCKUP-018` 포트폴리오 변경 전/후 비교, `MOCKUP-019` 승인 전 근거 패킷은 완료됐다. React/Vite `apps/web`에는 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐고, `FRONTEND-FINAL-AUDIT-R1-V`에서 최종 회귀 `통과` 판정을 받았다.
 
@@ -78,4 +78,4 @@
 6. ~~`linkPage`/`page` 필드 타입 불일치.~~ `FRONTEND-009`에서 완료. `HealthCheck.linkPage`만 `Literal`이고 `AgentWorkItem`/`TaxFeeOrder`/`DecisionReviewItem`/`AgentRoleStatusItem`/`RiskEvent`/`TradeRelatedLink`는 `str`이던 것을, 실제 fixture에서 쓰는 값만 모아 각 스키마 파일에 전용 `Literal`(`AgentWorkItemLinkPage` 등)을 새로 만들어 좁혔다. 덕분에 `types/dashboard.ts`에 있던 `Api<T, {linkPage: PageKey}>` 오버라이드 6곳이 전부 필요 없어져서 지웠다(352줄로 더 줄었다). 앞으로 이 필드들에 오타를 넣으면 프론트가 아니라 백엔드 스키마 검증에서 바로 걸린다.
 7. `types/dashboard.ts`는 이제 352줄이다(원래 1112줄). 여전히 화면 23개 타입이 한 파일에 있지만, 대부분 한 줄짜리 별칭이라 이전만큼 급하지 않다. 더 쪼갤지는 다음에 파일이 다시 커질 때 판단한다.
 8. ~~`ApprovalStore`가 메모리 딕셔너리라 서버 재시작 시 승인 이력이 소실된다.~~ `FRONTEND-011`에서 SQLite로 전환했다. 결정 4건의 사실(fixture)은 그대로 두고, 실제로 바뀌는 값(`decisionStatus`/`decidedAt`)만 `apps/api/data/approvals.db`에 저장한다. 재시작해도 승인 이력이 유지되는 것을 직접 확인했다. 테스트는 여전히 `:memory:`(기본값)라 서로도, 실제 DB와도 격리된다.
-9. `FRONTEND-012`에서 기업 상세 화면의 공시를 OpenDART 실제 API에 연결했다(이 프로젝트 최초의 실제 외부 API 연결, 사용자 요청). 배관은 전부 끝났고 mock 테스트로 성공/실패/빈결과 폴백을 검증했지만, **`OPENDART_API_KEY` 발급은 사용자가 차후로 미뤘다** — `apps/api/.env`가 아직 없어서 실제 라이브 호출은 한 번도 안 해봤다. 키를 발급받으면 `apps/api/.env.example`을 `.env`로 복사해 채우고(README.md 참고), 백엔드 재시작 후 화면에서 실제 공시가 뜨는지 확인해야 한다. 상세 설계·타협점(`externalConnections` 스키마 완화 포함)은 `01-current-state.md` 참고.
+9. `FRONTEND-012`에서 기업 상세 화면의 공시를 OpenDART 실제 API에 연결했다(이 프로젝트 최초의 실제 외부 API 연결, 사용자 요청). 2026-09-01에 사용자가 `OPENDART_API_KEY`를 발급받아 `apps/api/.env`에 채우고 처음으로 라이브 호출을 확인했다. 그 과정에서 `list.json` 날짜 범위(`bgn_de`/`end_de`) 누락 버그를 발견해 고쳤다(`d511cee`, 상세는 `01-current-state.md`). 브라우저에서 실제 공시가 뜨는 것까지 확인 완료. 상세 설계·타협점(`externalConnections` 스키마 완화 포함)은 `01-current-state.md` 참고.

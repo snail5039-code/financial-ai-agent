@@ -2,29 +2,24 @@
 
 기준일: 2026-09-01 KST
 
-## ⚠️ 미커밋 작업 있음
+## 커밋 상태 (2026-09-01 갱신)
 
-작업 디렉터리에 `FRONTEND-006`~`FRONTEND-012`가 전부 완료됐지만 아직 커밋하지 않았다 (이 프로젝트는 사용자가 명시적으로 "커밋"이라고 지시할 때만 커밋한다). `git status`로 보면 아래가 미커밋 상태다:
+`FRONTEND-006`~`FRONTEND-012`는 모두 완료·커밋·푸시됐다(`71918cc`, `804606a`). 이 문서와 `04-next-candidates.md`에 한동안 "미커밋 작업 있음" 경고가 남아 있었는데, 그 경고가 가리키던 커밋들이 실제로 들어간 뒤에도 갱신되지 않아 stale했던 것이다 — 지금 이 절로 대체한다.
 
-- `apps/web/package.json`/`package-lock.json`, `apps/web/vite.config.ts`, `apps/web/src/types/dashboard.ts`(1112→352줄), 신규 `apps/web/src/types/api.generated.ts`, 신규 `apps/api/scripts/`(OpenAPI export 스크립트) — **FRONTEND-006** (OpenAPI→TS 타입 생성)
-- `apps/web/src/components/AppShell.tsx`, `apps/web/src/api/approvals.ts`, `apps/web/src/pages/ApprovalQueuePage.tsx`, 신규 `apps/web/src/lib/useApprovalsPendingCount.ts` — **FRONTEND-006** (사이드바 「승인 대기」 배지 하드코딩 제거)
-- 신규 `apps/web/playwright.config.ts`, `apps/web/e2e/`(dashboard/navigation/approvals 3개 스펙) — **FRONTEND-007** (Playwright e2e 도입)
-- `apps/api/app/fixtures/{approvals,decisions}.py`, `apps/web/src/pages/{DashboardPage,ApprovalQueuePage}.tsx` — **FRONTEND-008** (`expiresAt`이 `dataAsOf`보다 이르던 문제 4건 전부 수정, 워크플로 3단계 하드코딩 표시 실제 상태 반영)
-- `apps/api/app/schemas/{agent_role_status,agents,decision_review,risk_alerts,tax_fee_impact,trade_history}.py` — **FRONTEND-009** (`linkPage`/`page` 필드를 `str`에서 전용 `Literal`로 좁힘, `types/dashboard.ts`의 관련 오버라이드 6곳 제거)
-- 신규 `apps/web/e2e/all-screens-load.spec.ts` — **FRONTEND-010** (23개 화면 전부를 순회하며 에러 화면·JS 예외 부재를 확인하는 얕은 회귀 스윕 추가)
-- `apps/api/app/store/approvals.py`(SQLite 재작성), `apps/api/app/main.py`(`APPROVALS_DB_PATH` 환경변수, 기본 파일 경로), `apps/web/playwright.config.ts`(테스트는 `:memory:` 강제) — **FRONTEND-011** (`ApprovalStore`를 메모리 딕셔너리에서 SQLite로 전환, 사용자 요청)
-- 신규 `apps/api/app/config.py`, `apps/api/app/integrations/`, `apps/api/.env.example`, `apps/api/app/schemas/common.py`(`externalConnections` 타입 완화), `apps/api/app/schemas/company_detail.py`(`filingsConnected` 필드), `apps/api/app/routers/company_detail.py`, `apps/api/pyproject.toml`(httpx를 런타임 의존성으로, `python-dotenv` 추가), `apps/api/tests/test_company_detail.py`, `apps/web/src/api/client.ts`·`companyDetail.ts`, `apps/web/src/pages/CompanyDetailPage.tsx`, `apps/web/src/types/dashboard.ts`, 신규 `apps/web/e2e/opendart-company-detail.spec.ts` — **FRONTEND-012** (OpenDART 공시 연동, 사용자 요청)
-- `.gitignore`, `README.md`, `docs/handoff/01-current-state.md`(이 파일), `docs/handoff/04-next-candidates.md`, `docs/fullstack/00-readme.md`·`01-overview.md`·`04-frontend-backend-scope.md`·`05-safety-validation.md`도 위 작업들에 맞춰 같이 수정했다.
+같은 날 사용자가 `apps/api/.env`에 실제 `OPENDART_API_KEY`를 발급받아 채웠고, 라이브 호출을 처음으로 실행해 확인하는 과정에서 실제 버그를 하나 발견해 고쳤다(`d511cee`, 로컬에만 있고 아직 원격에 푸시 안 함):
 
-**전부 검증 완료**: 백엔드 `uv run pytest`(venv 직접 실행 시 `apps/api/.venv/Scripts/python.exe -m pytest -q`) 113개 통과, 프론트 `npm run typecheck`·`npm run build` 통과, `npm run test:e2e`(Playwright) 5개 통과(연속 실행해 상태 오염 없음도 확인). 커밋 여부·범위는 사용자에게 확인 후 진행한다.
+- `app/integrations/opendart.py`의 `fetch_recent_disclosures`가 `list.json` 호출 시 `bgn_de`/`end_de`(검색 날짜 범위)를 넘기지 않고 있었다. OpenDART는 이 값이 없으면 "전체 기간"이 아니라 빈 결과(`status: "013"`)를 돌려준다 — 그래서 실제 키가 유효해도 항상 조용히 fixture로 폴백되고 있었다(mock 테스트만으론 못 잡던 문제). 최근 1년 범위를 명시하도록 고쳤다.
+- `test_envelope_carries_safety_flags`가 "테스트 환경에 키 없음"을 가정하고 있었는데, 로컬 `.env`에 실키가 생기자 `config.py`가 그걸 그대로 로드해 테스트가 실제로 라이브 API를 호출해버려 깨졌다. 다른 테스트들처럼 `OPENDART_API_KEY`를 명시적으로 `None`으로 monkeypatch해 격리했다.
+
+**검증 완료**: 백엔드 `apps/api/.venv/Scripts/python.exe -m pytest -q` 113개 통과. 브라우저로 기업 상세 화면을 직접 열어 "OpenDART 실제 공시 연결" 배지와 삼성전자 실제 공시 3건(대규모기업집단현황공시 등, 2026.08.28~31 접수)이 정상 렌더링되는 것을 확인했다.
 
 ## 저장소 상태
 
 - 원본 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`
 - 기본 브랜치: `main`
 - 원격 저장소: `https://github.com/snail5039-code/financial-ai-agent`
-- 최신 **커밋된** 상태: `f075f38 결정 ID 전수 대조, 놓쳤던 DEC-1043 충돌과 DEC-1042/1044 시점 불일치 수정`
-- `main`과 `origin/main`은 `f075f38` 기준으로 일치한다. 이후 위 "미커밋 작업 있음"에 적은 변경이 작업 디렉터리에 쌓여 있다.
+- `origin/main`은 `804606a 기업 상세 화면 공시를 OpenDART 실제 API에 연결 (최초 실제 외부 API)` 기준이다.
+- 로컬 `main`은 그 위에 `d511cee OpenDART 공시 조회에 날짜 범위 누락 버그 수정, 테스트 격리 보완` 1개를 더 갖고 있다 — 아직 푸시 안 함(사용자 지시 대기).
 - `MOCKUP-015` 세금·수수료 영향 점검 화면은 완료·검증·커밋·푸시했다.
 - `MOCKUP-016` 사용자 승인 이력·결정 회고 화면도 완료·검증·커밋·푸시했다.
 - `MOCKUP-017` 에이전트별 역할 상태판은 완료·검증·커밋·푸시했다.
@@ -84,7 +79,7 @@
   - 프론트 `CompanyDetailPage.tsx`의 하드코딩된 "OpenDART 미연결" 문구 4곳을 `filingsConnected` 기준 조건부로 바꿨다 — 안 그러면 실제로 연결된 뒤에도 화면이 "미연결"이라고 거짓말하게 된다.
   - 검증: 백엔드에 mock 기반 테스트 3개 추가(성공/실패/빈 결과 폴백) — `httpx`로 실제 네트워크를 부르지 않고 `app.routers.company_detail.fetch_recent_disclosures`를 monkeypatch. 프론트는 실제 키가 없어 라이브 경로를 못 돌려봐서, Playwright에서 `page.route`로 응답을 가로채 "연결됨" 상태를 흉내 낸 e2e 테스트 1개 추가(`opendart-company-detail.spec.ts`). 백엔드 `pytest` 113개, 프론트 `build`·`test:e2e`(5개) 전부 통과. 브라우저로 키 없는 기본 상태(기존과 동일한 "미연결" 문구) 직접 확인.
   - 문서: `docs/fullstack/00-readme.md`·`01-overview.md`·`04-frontend-backend-scope.md`·`05-safety-validation.md`의 "실제 외부 API 연결 안 함" 계열 문장에 OpenDART 예외를 명시. `05-safety-validation.md`의 금지 문자열 목록에서 "OpenDART API key"를 뺐다(이제 `app/integrations/opendart.py`·`app/config.py`에 한해 허용).
-  - **OpenDART 키 발급은 사용자가 차후로 미뤘다** — `apps/api/.env`는 아직 없고, 라이브 경로는 이번 세션에서 mock으로만 검증했다(실제 호출은 아직 안 해봄). 사용자가 opendart.fss.or.kr에서 키를 발급받아 `apps/api/.env`에 `OPENDART_API_KEY`를 채우면, README.md의 안내대로 백엔드를 재시작하고 실제 응답으로 한 번 더 확인한다.
+  - **2026-09-01: 사용자가 OpenDART 키를 발급받아 `apps/api/.env`에 채우고, 처음으로 라이브 호출을 확인했다.** 이 과정에서 `list.json` 날짜 범위 누락 버그를 발견해 고쳤다(위 "커밋 상태" 절 참고, `d511cee`). 브라우저로 기업 상세 화면을 열어 실제 공시가 뜨는 것까지 확인 완료.
 
 ## 최근 검증 메모
 
