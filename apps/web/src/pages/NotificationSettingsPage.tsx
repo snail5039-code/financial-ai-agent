@@ -1,16 +1,16 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getNotificationSettings } from "../api/notificationSettings";
 import { AppShell } from "../components/AppShell";
-import {
-  notificationChannels,
-  notificationSafetyCopy,
-  notificationSeverityLabel,
-  notificationTypes,
-  type NotificationChannelId,
-  type NotificationSeverity,
-  type NotificationType
-} from "../fixtures/notificationSettings";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import type { NotificationChannelId, NotificationSettingsData, NotificationSeverity, NotificationType, PageKey } from "../types/dashboard";
 import "./NotificationSettingsPage.css";
+
+function severityLabel(severity: NotificationSeverity) {
+  if (severity === "중대") return "중대만";
+  if (severity === "보통") return "보통 포함";
+  return "높음 이상";
+}
 
 interface NotificationSettingsPageProps {
   activePage: PageKey;
@@ -18,16 +18,27 @@ interface NotificationSettingsPageProps {
 }
 
 export function NotificationSettingsPage({ activePage, onNavigate }: NotificationSettingsPageProps) {
-  const [selectedChannelId, setSelectedChannelId] = useState<NotificationChannelId>("inapp");
-  const [severity, setSeverity] = useState<NotificationSeverity>("높음");
-  const [types, setTypes] = useState(notificationTypes);
+  const state = useFixture<NotificationSettingsData>(() => getNotificationSettings(), "notification-settings");
+  const [selectedChannelId, setSelectedChannelId] = useState<NotificationChannelId | null>(null);
+  const [severity, setSeverity] = useState<NotificationSeverity | null>(null);
+  const [types, setTypes] = useState<NotificationType[] | null>(null);
   const [preview, setPreview] = useState({ title: "대기 중", body: "버튼을 누르면 화면 안에서만 예시 알림을 표시합니다." });
 
+  const fallback = renderFixtureFallback(state, "알림 설정");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const defaultTypes = envelope.data.types;
+  const notificationChannels = envelope.data.channels;
+  const activeSeverity = severity ?? envelope.data.defaultSeverity;
+  const activeTypes = types ?? defaultTypes;
   const selectedChannel = notificationChannels.find((channel) => channel.id === selectedChannelId) ?? notificationChannels[0];
-  const activeTypeCount = useMemo(() => types.filter((type) => type.enabled).length, [types]);
+  const activeTypeCount = activeTypes.filter((type) => type.enabled).length;
 
   function toggleType(target: NotificationType) {
-    setTypes((current) => current.map((type) => (type.id === target.id ? { ...type, enabled: !type.enabled } : type)));
+    setTypes((current) => (current ?? defaultTypes).map((type) => (type.id === target.id ? { ...type, enabled: !type.enabled } : type)));
   }
 
   const main = (
@@ -41,7 +52,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
         <div className="notification-summary-grid" aria-label="알림 설정 요약">
           <div><span>활성 채널</span><strong>{notificationChannels.filter((channel) => channel.enabled).length}개</strong></div>
           <div><span>유형</span><strong>{activeTypeCount}개</strong></div>
-          <div><span>심각도</span><strong>{notificationSeverityLabel(severity)}</strong></div>
+          <div><span>심각도</span><strong>{severityLabel(activeSeverity)}</strong></div>
           <div><span>외부 발송</span><strong>0건</strong></div>
         </div>
       </header>
@@ -52,12 +63,12 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
           <div className="channel-list" role="listbox" aria-label="알림 채널">
             {notificationChannels.map((channel) => (
               <button
-                className={channel.id === selectedChannelId ? "channel-card selected" : "channel-card"}
+                className={channel.id === (selectedChannelId ?? selectedChannel.id) ? "channel-card selected" : "channel-card"}
                 data-state={channel.state}
                 key={channel.id}
                 type="button"
                 role="option"
-                aria-selected={channel.id === selectedChannelId}
+                aria-selected={channel.id === (selectedChannelId ?? selectedChannel.id)}
                 onClick={() => setSelectedChannelId(channel.id)}
               >
                 <strong>{channel.name}</strong>
@@ -71,7 +82,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
         <div className="setting-block type-block">
           <div className="setting-block-head"><h2>알림 유형</h2><span>화면용 토글</span></div>
           <div className="type-list" aria-label="알림 유형">
-            {types.map((type) => (
+            {activeTypes.map((type) => (
               <button className={type.enabled ? "type-toggle enabled" : "type-toggle"} key={type.id} type="button" aria-pressed={type.enabled} onClick={() => toggleType(type)}>
                 <strong>{type.name}</strong>
                 <span className="switch" aria-hidden="true" />
@@ -91,7 +102,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
                 ["높음", "높음 이상"],
                 ["보통", "보통 포함"]
               ].map(([value, label]) => (
-                <button className={severity === value ? "selected" : ""} key={value} type="button" aria-pressed={severity === value} onClick={() => setSeverity(value as NotificationSeverity)}>
+                <button className={activeSeverity === value ? "selected" : ""} key={value} type="button" aria-pressed={activeSeverity === value} onClick={() => setSeverity(value as NotificationSeverity)}>
                   {label}
                 </button>
               ))}
@@ -111,7 +122,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
           </button>
         </div>
       </section>
-      <footer className="notification-disclaimer">{notificationSafetyCopy}</footer>
+      <footer className="notification-disclaimer">{envelope.data.safetyCopy}</footer>
     </section>
   );
 
@@ -131,7 +142,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
           <dl>
             <div><dt>채널 상태</dt><dd>{selectedChannel.state}</dd></div>
             <div><dt>활성 여부</dt><dd>{selectedChannel.enabled ? "화면 표시" : "미사용"}</dd></div>
-            <div><dt>심각도 기준</dt><dd>{notificationSeverityLabel(severity)}</dd></div>
+            <div><dt>심각도 기준</dt><dd>{severityLabel(activeSeverity)}</dd></div>
             <div><dt>활성 유형</dt><dd>{activeTypeCount}개</dd></div>
           </dl>
         </section>
@@ -155,7 +166,7 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
           <button type="button" onClick={() => onNavigate("data")}>데이터 연결 보기<span>›</span></button>
         </nav>
       </div>
-      <footer>{notificationSafetyCopy}</footer>
+      <footer>{envelope.data.safetyCopy}</footer>
     </aside>
   );
 

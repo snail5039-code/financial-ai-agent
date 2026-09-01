@@ -1,17 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getRebalancePlan } from "../api/rebalancePlan";
 import { AppShell } from "../components/AppShell";
-import {
-  currentAllocations,
-  getRebalanceProposals,
-  rebalanceBaseAmount,
-  rebalanceSafetyCopy,
-  rebalanceStrategies,
-  signedPoint,
-  type RebalanceProposal,
-  type RebalanceStrategyKey
-} from "../fixtures/rebalancePlan";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import type { PageKey, RebalancePlanData, RebalanceProposal, RebalanceStrategyKey } from "../types/dashboard";
 import "./RebalancePlanPage.css";
+
+function signedPoint(value: number) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%p`;
+}
 
 interface RebalancePlanPageProps {
   activePage: PageKey;
@@ -19,14 +16,23 @@ interface RebalancePlanPageProps {
 }
 
 export function RebalancePlanPage({ activePage, onNavigate }: RebalancePlanPageProps) {
+  const state = useFixture<RebalancePlanData>(() => getRebalancePlan(), "rebalance-plan");
   const [strategy, setStrategy] = useState<RebalanceStrategyKey>("balanced");
   const [selectedKey, setSelectedKey] = useState("cash");
+
+  const fallback = renderFixtureFallback(state, "전략 조정");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { currentAllocations, strategies: rebalanceStrategies, proposalsByStrategy, baseAmount: rebalanceBaseAmount, safetyCopy: rebalanceSafetyCopy } = envelope.data;
   const plan = rebalanceStrategies[strategy];
-  const proposals = useMemo(() => getRebalanceProposals(strategy), [strategy]);
+  const proposals = proposalsByStrategy[strategy];
   const selected = proposals.find((proposal) => proposal.key === selectedKey) ?? proposals[0];
 
   function updateStrategy(nextStrategy: RebalanceStrategyKey) {
-    const nextProposals = getRebalanceProposals(nextStrategy);
+    const nextProposals = proposalsByStrategy[nextStrategy];
     setStrategy(nextStrategy);
     setSelectedKey(nextProposals[0]?.key ?? "");
   }

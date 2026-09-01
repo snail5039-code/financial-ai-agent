@@ -1,9 +1,11 @@
 import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { useState } from "react";
+import { getCompanyDetail } from "../api/companyDetail";
 import { AppShell } from "../components/AppShell";
-import { StatusPill } from "../components/StatusPill";
-import { companyDetail, type CompanyEvidence } from "../fixtures/companyDetail";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatPercent, formatShares, formatSignedPercent, formatSignedWon, formatTimeOfDay, formatWon } from "../lib/format";
+import type { CompanyDetailData, CompanyEvidenceItem, PageKey } from "../types/dashboard";
 import "./CompanyDetailPage.css";
 
 interface CompanyDetailPageProps {
@@ -11,14 +13,23 @@ interface CompanyDetailPageProps {
   onNavigate: (page: PageKey) => void;
 }
 
-const formatPrice = (value: number) => `${value.toLocaleString("ko-KR")}원`;
-const points = companyDetail.chart.map((point, index) => `${22 + index * 40},${point.y}`).join(" ");
-
 export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageProps) {
-  const [selected, setSelected] = useState<CompanyEvidence>(companyDetail.evidence[0]);
+  const state = useFixture<CompanyDetailData>(() => getCompanyDetail(), "company-detail");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  function selectEvidence(item: CompanyEvidence) {
-    setSelected(item);
+  const fallback = renderFixtureFallback(state, "기업 상세");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const companyDetail = envelope.data;
+  const allItems: CompanyEvidenceItem[] = [...companyDetail.evidence, ...companyDetail.filings];
+  const selected = allItems.find((item) => item.id === selectedId) ?? companyDetail.evidence[0];
+  const points = companyDetail.chart.map((point, index) => `${22 + index * 40},${point.y}`).join(" ");
+
+  function selectEvidence(item: CompanyEvidenceItem) {
+    setSelectedId(item.id);
   }
 
   const main = (
@@ -36,24 +47,24 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
           </div>
           <p>{companyDetail.safetyCopy}</p>
         </div>
-        <time>2026.08.25 14:32 KST 기준</time>
+        <time>{formatDateAndMinutes(envelope.dataAsOf)} KST 기준</time>
       </header>
 
       <section className="price-holding" aria-labelledby="price-title">
         <div className="price-summary">
           <span id="price-title">현재가</span>
-          <strong>{companyDetail.price.current}</strong>
-          <small className="gain">{companyDetail.price.change}</small>
+          <strong>{formatWon(companyDetail.price.currentPrice)}</strong>
+          <small className="gain">{formatSignedWon(companyDetail.price.changeAmount)} · {formatSignedPercent(companyDetail.price.changeRatePercent)} 예시</small>
           <dl>
-            <div><dt>보유</dt><dd>{companyDetail.price.holding}</dd></div>
-            <div><dt>평균단가</dt><dd>{companyDetail.price.averagePrice}</dd></div>
-            <div><dt>평가액</dt><dd>{companyDetail.price.value}</dd></div>
-            <div><dt>손익</dt><dd className="gain">{companyDetail.price.profit}</dd></div>
-            <div><dt>비중</dt><dd>{companyDetail.price.weight}</dd></div>
+            <div><dt>보유</dt><dd>{formatShares(companyDetail.price.quantity)}</dd></div>
+            <div><dt>평균단가</dt><dd>{formatWon(companyDetail.price.averagePrice)}</dd></div>
+            <div><dt>평가액</dt><dd>{formatWon(companyDetail.price.value)}</dd></div>
+            <div><dt>손익</dt><dd className="gain">{formatSignedWon(companyDetail.price.profit)} · {formatSignedPercent(companyDetail.price.profitRate)}</dd></div>
+            <div><dt>비중</dt><dd>{formatPercent(companyDetail.price.weight)}</dd></div>
           </dl>
         </div>
         <div className="mini-chart">
-          <p className="chart-alt">최근 12개 화면 예시 가격: 64,800원에서 71,200원으로 변화</p>
+          <p className="chart-alt">최근 12개 화면 예시 가격: {formatWon(companyDetail.chart[0].price)}에서 {formatWon(companyDetail.chart[companyDetail.chart.length - 1].price)}으로 변화</p>
           <svg viewBox="0 0 480 126" role="img" aria-label="삼성전자 최근 12개 예시 가격 선 차트">
             <g className="detail-grid">
               <line x1="20" y1="20" x2="466" y2="20" />
@@ -64,7 +75,7 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
             <g className="chart-points">
               {companyDetail.chart.map((point, index) => (
                 <circle key={point.index} cx={22 + index * 40} cy={point.y} r="4">
-                  <title>{point.index}번째 예시 · {formatPrice(point.price)}</title>
+                  <title>{point.index}번째 예시 · {formatWon(point.price)}</title>
                 </circle>
               ))}
             </g>
@@ -184,7 +195,7 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
     <AppShell
       title="기업 상세"
       accountLabel="시뮬레이션 계좌"
-      lastSync="14:32"
+      lastSync={formatTimeOfDay(envelope.dataAsOf)}
       activePage={activePage}
       onNavigate={onNavigate}
       main={main}

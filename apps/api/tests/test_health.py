@@ -23,8 +23,11 @@ def test_health_returns_local_fixture_safety_fields() -> None:
 
 
 def test_unimplemented_api_path_is_not_found() -> None:
+    # Every screen's fixture endpoint is implemented at this point (23
+    # screens); this checks that an arbitrary path outside that set still
+    # 404s rather than falling through to some catch-all.
     client = TestClient(create_app())
 
-    response = client.get("/api/rebalance-plan")
+    response = client.get("/api/does-not-exist")
 
     assert response.status_code == 404

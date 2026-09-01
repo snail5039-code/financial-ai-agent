@@ -1,11 +1,16 @@
 import { ArrowRight, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getAgentRoleStatus } from "../api/agentRoleStatus";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { agentRoleStatus } from "../fixtures/agentRoleStatus";
-import type { AgentRoleStatusFilter, AgentRoleStatusItem, PageKey, Tone } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatTimeOfDay } from "../lib/format";
+import type { AgentRoleState, AgentRoleStatusData, AgentRoleStatusItem, PageKey, Tone } from "../types/dashboard";
 import "./AgentRoleStatusPage.css";
+
+type AgentRoleStatusFilter = "all" | AgentRoleState | "none";
 
 declare global {
   interface Window {
@@ -26,11 +31,6 @@ const filterOptions: Array<{ key: AgentRoleStatusFilter; label: string }> = [
   { key: "실패 이력", label: "실패 이력" }
 ];
 
-function visibleRoles(filter: AgentRoleStatusFilter) {
-  if (filter === "none") return [];
-  return agentRoleStatus.roles.filter((item) => filter === "all" || item.status === filter);
-}
-
 function roleTone(status: AgentRoleStatusItem["status"]): Tone {
   if (status === "대기") return "info";
   if (status === "승인 필요") return "warning";
@@ -43,27 +43,47 @@ interface AgentRoleStatusPageProps {
 }
 
 export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusPageProps) {
+  const state = useFixture<AgentRoleStatusData>(() => getAgentRoleStatus(), "agent-role-status");
   const [filter, setFilter] = useState<AgentRoleStatusFilter>("all");
-  const [selectedId, setSelectedId] = useState(agentRoleStatus.roles[0].id);
-  const filteredRoles = useMemo(() => visibleRoles(filter), [filter]);
-  const selected = filteredRoles.find((item) => item.id === selectedId) ?? filteredRoles[0] ?? null;
-  const approvalCount = filteredRoles.filter((item) => item.approval).length;
-  const lastSync = agentRoleStatus.dataAsOf.slice(11, 16);
-  const setAgentRoleStatusFilterForTest = (nextFilter: AgentRoleStatusFilter) => {
-    const nextVisible = visibleRoles(nextFilter);
-    setFilter(nextFilter);
-    setSelectedId(nextVisible[0]?.id ?? "");
-  };
-
-  Object.defineProperty(window, "__setAgentRoleStatusFilterForTest", { configurable: true, writable: true, value: setAgentRoleStatusFilterForTest });
-  Object.defineProperty(self as AgentRoleStatusTestWindow, "__setAgentRoleStatusFilterForTest", { configurable: true, writable: true, value: setAgentRoleStatusFilterForTest });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // See TaxFeeImpactPage for why this indirection exists: hooks must run
+  // unconditionally, but the real handler needs data only available after load.
+  const testHookRef = useRef<(filter: AgentRoleStatusFilter) => void>(() => {});
 
   useEffect(() => {
+    const forward = (nextFilter: AgentRoleStatusFilter) => testHookRef.current(nextFilter);
+    Object.defineProperty(window, "__setAgentRoleStatusFilterForTest", { configurable: true, writable: true, value: forward });
+    Object.defineProperty(self as AgentRoleStatusTestWindow, "__setAgentRoleStatusFilterForTest", { configurable: true, writable: true, value: forward });
+
     return () => {
       delete window.__setAgentRoleStatusFilterForTest;
       delete (self as AgentRoleStatusTestWindow).__setAgentRoleStatusFilterForTest;
     };
   }, []);
+
+  const fallback = renderFixtureFallback(state, "역할 상태");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const agentRoleStatus = envelope.data;
+
+  function visibleRoles(nextFilter: AgentRoleStatusFilter) {
+    if (nextFilter === "none") return [];
+    return agentRoleStatus.roles.filter((item) => nextFilter === "all" || item.status === nextFilter);
+  }
+
+  const filteredRoles = visibleRoles(filter);
+  const selected = filteredRoles.find((item) => item.id === selectedId) ?? filteredRoles[0] ?? null;
+  const approvalCount = filteredRoles.filter((item) => item.approval).length;
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
+
+  testHookRef.current = (nextFilter: AgentRoleStatusFilter) => {
+    const nextVisible = visibleRoles(nextFilter);
+    setFilter(nextFilter);
+    setSelectedId(nextVisible[0]?.id ?? "");
+  };
 
   function updateFilter(nextFilter: AgentRoleStatusFilter) {
     const nextVisible = visibleRoles(nextFilter);
@@ -80,7 +100,7 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
   const main = (
     <section className="role-main" aria-labelledby="role-title">
       <header className="role-summary">
-        <button className="test-hook-marker" data-test-hook="window.__setAgentRoleStatusFilterForTest('none')" type="button" onClick={() => setAgentRoleStatusFilterForTest("none")}>
+        <button className="test-hook-marker" data-test-hook="window.__setAgentRoleStatusFilterForTest('none')" type="button" onClick={() => testHookRef.current("none")}>
           window.__setAgentRoleStatusFilterForTest('none')
         </button>
         <div>
@@ -94,8 +114,8 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
       <section className="role-kpis" aria-label="역할 상태 요약">
         <div><span>표시 역할</span><strong>{filteredRoles.length}개</strong></div>
         <div><span>사용자 승인 필요</span><strong>{approvalCount}개</strong></div>
-        <div><span>실행 상태</span><strong>{agentRoleStatus.executed ? "실행됨" : "실행 안 됨"}</strong></div>
-        <div><span>외부 요청</span><strong>{agentRoleStatus.externalConnections}건</strong></div>
+        <div><span>실행 상태</span><strong>{envelope.executed ? "실행됨" : "실행 안 됨"}</strong></div>
+        <div><span>외부 요청</span><strong>{envelope.externalConnections}건</strong></div>
       </section>
 
       <section className="role-toolbar" aria-label="역할 상태 필터">
@@ -106,7 +126,7 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
             </button>
           ))}
         </div>
-        <span>기준 시각 2026.08.27 11:40 KST · 실제 AI 실행 상태나 외부 에이전트 연결 아님</span>
+        <span>기준 시각 {formatTimeOfDay(envelope.dataAsOf)} KST · 실제 AI 실행 상태나 외부 에이전트 연결 아님</span>
       </section>
 
       <section className="role-list-section" aria-labelledby="role-list-title">
@@ -146,7 +166,7 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
         </div>
         {selected ? (
           <div className="role-timeline-grid">
-            <article><span>DEC-1043</span><strong>출처 신뢰도 보강 요청</strong><p>NAVER 반려 기록을 검증 실패 이력 예시로 연결합니다.</p></article>
+            <article><span>DEC-1057</span><strong>출처 신뢰도 보강 요청</strong><p>NAVER 관찰 유지 예시를 검증 실패 이력으로 연결합니다.</p></article>
             <article><span>DEC-1052</span><strong>비용 영향 재검토</strong><p>세금·수수료 점검 후 SK하이닉스 반려 기록을 연결합니다.</p></article>
             <article><span>DEC-1042</span><strong>조건부 승인 기록</strong><p>삼성전자 승인 대기와 감사 로그 기록을 참조합니다.</p></article>
           </div>
@@ -180,7 +200,7 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
             <div><dt>역할</dt><dd>{selected?.role ?? "미표시"}</dd></div>
             <div><dt>현재 상태</dt><dd>{selected?.status ?? "미표시"}</dd></div>
             <div><dt>결정 ID</dt><dd>{selected?.decision ?? "미표시"}</dd></div>
-            <div><dt>기준 시각</dt><dd>2026.08.27 11:40 KST</dd></div>
+            <div><dt>기준 시각</dt><dd>{formatTimeOfDay(envelope.dataAsOf)} KST</dd></div>
           </dl>
         </section>
 
@@ -222,7 +242,7 @@ export function AgentRoleStatusPage({ activePage, onNavigate }: AgentRoleStatusP
         <button type="button" disabled={!selected} onClick={() => selected && onNavigate(selected.linkPage)}>
           {selected?.linkLabel ?? "관련 화면 보기"} <ArrowRight size={14} />
         </button>
-        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · 외부 요청 {agentRoleStatus.externalConnections}건</p>
+        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · 외부 요청 {envelope.externalConnections}건</p>
       </div>
     </aside>
   );

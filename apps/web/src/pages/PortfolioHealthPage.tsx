@@ -1,52 +1,48 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getPortfolioHealth } from "../api/portfolioHealth";
 import { AppShell } from "../components/AppShell";
-import {
-  getHealthScore,
-  healthChecks,
-  healthGroups,
-  healthSafetyCopy,
-  type HealthCheck,
-  type HealthGroupKey,
-  type HealthStatusFilter
-} from "../fixtures/portfolioHealth";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import { formatTimeOfDay } from "../lib/format";
+import type { HealthCheck, HealthGroupKey, HealthStatus, PageKey, PortfolioHealthData } from "../types/dashboard";
 import "./PortfolioHealthPage.css";
+
+type StatusFilter = "all" | HealthStatus;
+type GroupFilter = "all" | HealthGroupKey;
 
 interface PortfolioHealthPageProps {
   activePage: PageKey;
   onNavigate: (page: PageKey) => void;
 }
 
-const pageMap: Record<HealthCheck["linkPage"], PageKey> = {
-  policy: "policy",
-  data: "data",
-  risks: "risks",
-  approvals: "approvals",
-  rebalance: "rebalance",
-  stress: "stress",
-  weekly: "weekly"
-};
-
 export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthPageProps) {
-  const [statusFilter, setStatusFilter] = useState<HealthStatusFilter>("all");
-  const [groupFilter, setGroupFilter] = useState<HealthGroupKey>("all");
+  const state = useFixture<PortfolioHealthData>(() => getPortfolioHealth(), "portfolio-health");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
   const [selectedId, setSelectedId] = useState("H-101");
 
-  const groups = useMemo(() => healthGroups.filter((group) => groupFilter === "all" || group.key === groupFilter), [groupFilter]);
-  const checks = useMemo(() => healthChecks.filter((item) => (statusFilter === "all" || item.status === statusFilter) && (groupFilter === "all" || item.group === groupFilter)), [statusFilter, groupFilter]);
+  const fallback = renderFixtureFallback(state, "포트폴리오 건강");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { groups: healthGroups, checks: healthChecks, overallScore: score, safetyCopy } = envelope.data;
+
+  const groups = healthGroups.filter((group) => groupFilter === "all" || group.key === groupFilter);
+  const checks = healthChecks.filter((item) => (statusFilter === "all" || item.status === statusFilter) && (groupFilter === "all" || item.group === groupFilter));
   const selected = checks.find((item) => item.id === selectedId) ?? checks[0] ?? null;
   const needs = checks.filter((item) => item.status === "확인 필요").length;
   const blocked = checks.filter((item) => item.status === "차단").length;
   const done = checks.filter((item) => item.status === "완료").length;
-  const score = getHealthScore(checks);
 
-  function updateStatus(nextStatus: HealthStatusFilter) {
+  function updateStatus(nextStatus: StatusFilter) {
     const nextChecks = healthChecks.filter((item) => (nextStatus === "all" || item.status === nextStatus) && (groupFilter === "all" || item.group === groupFilter));
     setStatusFilter(nextStatus);
     setSelectedId(nextChecks[0]?.id ?? "");
   }
 
-  function updateGroup(nextGroup: HealthGroupKey) {
+  function updateGroup(nextGroup: GroupFilter) {
     const nextChecks = healthChecks.filter((item) => (statusFilter === "all" || item.status === statusFilter) && (nextGroup === "all" || item.group === nextGroup));
     setGroupFilter(nextGroup);
     setSelectedId(nextChecks[0]?.id ?? "");
@@ -69,7 +65,7 @@ export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthP
         <div>
           <span>상태</span>
           <div className="segments" role="group" aria-label="상태">
-            {(["all", "확인 필요", "차단", "완료"] as HealthStatusFilter[]).map((value) => (
+            {(["all", "확인 필요", "차단", "완료"] as StatusFilter[]).map((value) => (
               <button className={statusFilter === value ? "selected" : ""} key={value} type="button" aria-pressed={statusFilter === value} onClick={() => updateStatus(value)}>{value === "all" ? "전체" : value}</button>
             ))}
           </div>
@@ -77,7 +73,7 @@ export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthP
         <div>
           <span>그룹</span>
           <div className="segments" role="group" aria-label="그룹">
-            {(["all", "policy", "source", "risk", "approval", "strategy", "stress"] as HealthGroupKey[]).map((value) => (
+            {(["all", "policy", "source", "risk", "approval", "strategy", "stress"] as GroupFilter[]).map((value) => (
               <button className={groupFilter === value ? "selected" : ""} key={value} type="button" aria-pressed={groupFilter === value} onClick={() => updateGroup(value)}>{value === "all" ? "전체" : healthGroups.find((group) => group.key === value)?.label.replace(" 위반", "").replace(" 미확인", "")}</button>
             ))}
           </div>
@@ -111,7 +107,7 @@ export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthP
           <div className="empty-state"><strong>선택한 조건의 항목이 없습니다.</strong><span>상태 또는 그룹 필터를 바꿔 주세요.</span></div>
         )}
       </section>
-      <footer className="health-disclaimer">{healthSafetyCopy}</footer>
+      <footer className="health-disclaimer">{safetyCopy}</footer>
     </section>
   );
 
@@ -140,7 +136,7 @@ export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthP
         <section className="approval-boundary">
           <h3>승인 전 확인</h3>
           <p>{selected ? `${selected.next} 후에도 이 체크 결과는 실제 매수·매도 가능 판정이 아닙니다.` : "상태 또는 그룹 필터를 바꾸면 첫 번째 보이는 항목이 자동 선택됩니다."}</p>
-          {selected ? <button type="button" onClick={() => onNavigate(pageMap[selected.linkPage])}>관련 화면 보기<span>›</span></button> : null}
+          {selected ? <button type="button" onClick={() => onNavigate(selected.linkPage)}>관련 화면 보기<span>›</span></button> : null}
         </section>
         <nav className="health-related-links" aria-label="관련 화면">
           <h3>관련 화면</h3>
@@ -150,11 +146,11 @@ export function PortfolioHealthPage({ activePage, onNavigate }: PortfolioHealthP
           <button type="button" onClick={() => onNavigate("data")}>데이터 연결 보기<span>›</span></button>
         </nav>
       </div>
-      <footer>{healthSafetyCopy}</footer>
+      <footer>{safetyCopy}</footer>
     </aside>
   );
 
-  return <AppShell title="포트폴리오 건강" accountLabel="시뮬레이션 계좌" lastSync="화면용" activePage={activePage} onNavigate={onNavigate} main={main} inspector={inspector} />;
+  return <AppShell title="포트폴리오 건강" accountLabel="시뮬레이션 계좌" lastSync={formatTimeOfDay(envelope.dataAsOf)} activePage={activePage} onNavigate={onNavigate} main={main} inspector={inspector} />;
 }
 
 function statusClass(status: HealthCheck["status"]) {

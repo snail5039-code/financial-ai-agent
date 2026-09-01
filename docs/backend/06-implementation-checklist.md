@@ -69,6 +69,24 @@
 - 브라우저에서 대시보드→승인, 승인 대기 화면 확인, 무관한 결정(NAVER 반려) 영향 없음, 검증 에이전트의 NAVER 항목이 더 이상 충돌하지 않음을 실제 클릭으로 확인
 - 나머지 12개 프론트 전용 fixture의 결정 데이터는 통합하지 않음. 범위와 이유는 `10-decision-consolidation.md` 참조
 
+## BACKEND-007 완료 항목
+
+- 나머지 17개 화면(리스크 알림, 거래 내역, 포트폴리오 건강, 근거 패킷, 감사 로그, 결정 회고, 역할 상태,
+  주간 리포트, 세금·수수료, 변경 비교, 전략 조정, 백테스트, 기업 상세, 데이터 연결, 알림 설정, 투자 정책,
+  스트레스 테스트)를 전부 `GET` 엔드포인트로 이관. 쓰기 API는 추가하지 않음
+- 프론트 `apps/web/src/fixtures/` 디렉터리 완전히 비움 (디렉터리 자체 삭제)
+- 프론트 계산 함수(`getRebalanceProposals`, `getBacktestMetrics`/`Rows`, `getStressRows`, 주간 리포트
+  함수형 필드)를 서버 사전 계산으로 이동. 모든 조합을 한 번에 계산해 응답에 포함
+- `decisions.py`에 DEC-1043, DEC-1044 추가. `evidence_packets.py`가 DEC-1042 실시간 승인 상태를 반영
+- `company_detail.py`가 삼성전자 보유 수치를 `build_dashboard_data()`에서 재사용
+- 마이그레이션 중 React Hooks 순서 위반 런타임 크래시 발견 및 수정 (4개 페이지: TaxFeeImpactPage,
+  DecisionReviewPage, AgentRoleStatusPage, PortfolioChangeComparePage). 조기 반환 아래 있던 `useEffect`를
+  `useRef` 간접 참조로 조기 반환 위로 이동
+- 테스트 54개에서 108개로 확장 (배치별 스냅샷: 54→69→81→93→108)
+- `uv run pytest` 108개 통과, `npm run typecheck`·`npm run build` 통과
+- 브라우저로 23개 화면 전부 순회, 1440×900 하단 잘림·오버플로 0, 에러 화면 0, 새 탭 콘솔 오류 0건 확인
+- 알려진 낮은 우선순위 항목 2건은 `docs/backend/11-remaining-screens-migration.md`에 기록하고 남김
+
 ## 다음 구현자 체크리스트
 
 - 작업 시작 전 `AGENTS.md`와 `docs/backend/00-readme.md`를 읽는다.

@@ -6,7 +6,7 @@ the process starts; `app/store/approvals.py` is what remembers a decision for
 the rest of that process's lifetime.
 """
 
-from app.fixtures.decisions import DEC_1042, DEC_1042_EXPIRES_AT
+from app.fixtures.decisions import DEC_1042, DEC_1042_EXPIRES_AT, DEC_1043, DEC_1044
 from app.schemas.approvals import ApprovalOrder
 
 APPROVALS_DATA_AS_OF = "2026-08-27T15:20:00+09:00"
@@ -42,13 +42,13 @@ def build_approval_orders() -> list[ApprovalOrder]:
             tone="warning",
         ),
         ApprovalOrder(
-            id="DEC-1043",
-            company="NAVER",
-            code="035420",
-            side="매도",
-            quantity=8,
-            price=220_000,
-            amount=1_760_000,
+            id=DEC_1043.id,
+            company=DEC_1043.company,
+            code=DEC_1043.code,
+            side=DEC_1043.side,
+            quantity=DEC_1043.quantity,
+            price=DEC_1043.price,
+            amount=DEC_1043.amount,
             reviewLabel="검토 완료",
             category="verified",
             decisionStatus="pending",
@@ -62,13 +62,13 @@ def build_approval_orders() -> list[ApprovalOrder]:
             tone="success",
         ),
         ApprovalOrder(
-            id="DEC-1044",
-            company="KODEX 200",
-            code="069500",
-            side="매수",
-            quantity=20,
-            price=35_000,
-            amount=700_000,
+            id=DEC_1044.id,
+            company=DEC_1044.company,
+            code=DEC_1044.code,
+            side=DEC_1044.side,
+            quantity=DEC_1044.quantity,
+            price=DEC_1044.price,
+            amount=DEC_1044.amount,
             reviewLabel="정책 확인 필요",
             category="attention",
             decisionStatus="pending",

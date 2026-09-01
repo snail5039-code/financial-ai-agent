@@ -1,18 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getBacktestSummary } from "../api/backtestSummary";
 import { AppShell } from "../components/AppShell";
-import {
-  backtestConfigs,
-  backtestPeriods,
-  backtestSafetyCopy,
-  formatPercent,
-  getBacktestMetrics,
-  getBacktestRows,
-  type BacktestPeriodKey,
-  type BacktestRow,
-  type BacktestStrategyKey
-} from "../fixtures/backtestSummary";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import type { BacktestPeriodKey, BacktestRow, BacktestStrategyKey, BacktestSummaryData, PageKey } from "../types/dashboard";
 import "./BacktestSummaryPage.css";
+
+function signedPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
 
 interface BacktestSummaryPageProps {
   activePage: PageKey;
@@ -20,24 +16,32 @@ interface BacktestSummaryPageProps {
 }
 
 export function BacktestSummaryPage({ activePage, onNavigate }: BacktestSummaryPageProps) {
+  const state = useFixture<BacktestSummaryData>(() => getBacktestSummary(), "backtest-summary");
   const [period, setPeriod] = useState<BacktestPeriodKey>("6m");
   const [strategy, setStrategy] = useState<BacktestStrategyKey>("balanced");
   const [selectedMonth, setSelectedMonth] = useState("2026.04");
 
+  const fallback = renderFixtureFallback(state, "백테스트");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { configs: backtestConfigs, periods: backtestPeriods, metrics: metricsBySelection, rows: rowsBySelection, safetyCopy: backtestSafetyCopy } = envelope.data;
   const config = backtestConfigs[strategy];
   const term = backtestPeriods[period];
-  const metrics = getBacktestMetrics(strategy, period);
-  const rows = useMemo(() => getBacktestRows(strategy, period), [strategy, period]);
+  const metrics = metricsBySelection[strategy][period];
+  const rows = rowsBySelection[strategy][period];
   const selected = rows.find((row) => row.month === selectedMonth) ?? rows[0];
 
   function updatePeriod(nextPeriod: BacktestPeriodKey) {
-    const nextRows = getBacktestRows(strategy, nextPeriod);
+    const nextRows = rowsBySelection[strategy][nextPeriod];
     setPeriod(nextPeriod);
     setSelectedMonth(nextRows[0]?.month ?? "");
   }
 
   function updateStrategy(nextStrategy: BacktestStrategyKey) {
-    const nextRows = getBacktestRows(nextStrategy, period);
+    const nextRows = rowsBySelection[nextStrategy][period];
     setStrategy(nextStrategy);
     setSelectedMonth(nextRows[0]?.month ?? "");
   }
@@ -52,9 +56,9 @@ export function BacktestSummaryPage({ activePage, onNavigate }: BacktestSummaryP
         </div>
         <div className="metric-grid" aria-label="백테스트 요약 지표">
           <div><span>검증 기간</span><strong>{term.range}</strong></div>
-          <div><span>포트폴리오</span><strong>{formatPercent(metrics.ret)}</strong></div>
-          <div><span>벤치마크</span><strong>{formatPercent(metrics.bench)}</strong></div>
-          <div><span>최대 낙폭</span><strong>{formatPercent(metrics.dd)}</strong></div>
+          <div><span>포트폴리오</span><strong>{signedPercent(metrics.ret)}</strong></div>
+          <div><span>벤치마크</span><strong>{signedPercent(metrics.bench)}</strong></div>
+          <div><span>최대 낙폭</span><strong>{signedPercent(metrics.dd)}</strong></div>
           <div><span>변동성</span><strong>{metrics.vol.toFixed(1)}%</strong></div>
           <div><span>승률</span><strong>{metrics.win}%</strong></div>
         </div>
@@ -117,7 +121,7 @@ export function BacktestSummaryPage({ activePage, onNavigate }: BacktestSummaryP
           <h3>계산식과 비용 가정</h3>
           <dl>
             <div><dt>월 수익률</dt><dd>(월말-월초)÷월초</dd></div>
-            <div><dt>선택 월</dt><dd>{formatPercent(selected.portfolio)}</dd></div>
+            <div><dt>선택 월</dt><dd>{signedPercent(selected.portfolio)}</dd></div>
             <div><dt>수수료</dt><dd>매매금액 0.015% 가정</dd></div>
             <div><dt>세금·슬리피지</dt><dd>0.18%·0.10% 가정</dd></div>
           </dl>
@@ -126,8 +130,8 @@ export function BacktestSummaryPage({ activePage, onNavigate }: BacktestSummaryP
         <section>
           <h3>위험 지표</h3>
           <dl>
-            <div><dt>최대 낙폭</dt><dd>{formatPercent(metrics.dd)}</dd></div>
-            <div><dt>선택 월 낙폭</dt><dd>{formatPercent(selected.drawdown)}</dd></div>
+            <div><dt>최대 낙폭</dt><dd>{signedPercent(metrics.dd)}</dd></div>
+            <div><dt>선택 월 낙폭</dt><dd>{signedPercent(selected.drawdown)}</dd></div>
             <div><dt>연환산 변동성</dt><dd>{metrics.vol.toFixed(1)}%</dd></div>
             <div><dt>데이터</dt><dd>고정 배열·KRW 예시</dd></div>
           </dl>
@@ -160,10 +164,10 @@ function BacktestResultRow({ row, selected, onSelect }: { row: BacktestRow; sele
   return (
     <button className={selected ? "result-row selected" : "result-row"} type="button" role="option" aria-selected={selected} onClick={() => onSelect(row.month)}>
       <span><strong>{row.month}</strong><small>월말 고정 예시</small></span>
-      <span className={row.portfolio >= 0 ? "positive" : "negative"}>{formatPercent(row.portfolio)}</span>
-      <span>{formatPercent(row.benchmark)}</span>
-      <span className={row.excess >= 0 ? "positive" : "negative"}>{formatPercent(row.excess)}</span>
-      <span className="negative">{formatPercent(row.drawdown)}</span>
+      <span className={row.portfolio >= 0 ? "positive" : "negative"}>{signedPercent(row.portfolio)}</span>
+      <span>{signedPercent(row.benchmark)}</span>
+      <span className={row.excess >= 0 ? "positive" : "negative"}>{signedPercent(row.excess)}</span>
+      <span className="negative">{signedPercent(row.drawdown)}</span>
       <span className="result-state">{row.state}</span>
     </button>
   );

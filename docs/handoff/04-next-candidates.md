@@ -64,14 +64,15 @@
 
 사이드바에 메뉴만 있고 화면이 없던 항목은 이제 없다.
 
-`BACKEND-006`에서 결정(DEC) 데이터 통합 1차를 완료했다. DEC-1042는 대시보드·승인 대기·에이전트가 `app/fixtures/decisions.py`의 같은 정적 사실과 승인 스토어의 같은 실시간 상태를 공유한다. DEC-1043/DEC-1057 ID 충돌 버그도 이때 발견해 고쳤다.
+`BACKEND-006`에서 결정(DEC) 데이터 통합 1차를 완료했다. `BACKEND-007`에서 나머지 17개 화면을 전부 백엔드로 옮겨 **23개 화면 전체가 백엔드에 연결**됐다. `apps/web/src/fixtures/`는 완전히 비었다.
 
 ## 다음 우선순위
 
-1. 감사 로그, 결정 회고, 근거 패킷, 역할 상태 등 나머지 12개 화면을 백엔드로 옮기면서 결정 데이터를 `decisions.py`로 계속 통합한다. 옮기는 화면이 참조하는 결정 ID가 이미 등록된 것과 겹치면 재사용하고, 충돌하면 이번처럼 ID를 분리한다.
-2. OpenAPI에서 TypeScript 타입 생성 도입.
-3. Playwright 핵심 흐름 테스트. 프론트에 테스트가 0개다.
-4. 사이드바 「승인 대기 4」 배지가 하드코딩이다. `GET /api/approvals`의 `pending` 개수로 바꾼다.
+1. OpenAPI에서 TypeScript 타입 생성 도입. 엔드포인트 23개, 프론트 타입 파일 하나(`types/dashboard.ts`)가 이제 1000줄이 넘는다.
+2. Playwright 핵심 흐름 테스트. 프론트에 테스트가 0개다.
+3. 사이드바 「승인 대기 4」 배지가 하드코딩이다. `GET /api/approvals`의 `pending` 개수로 바꾼다.
+4. 16개 결정 ID 전체의 서사 대조는 아직 하지 않았다. 알려진 낮은 우선순위 불일치 2건(`docs/backend/11-remaining-screens-migration.md` 참조)이 남아 있다.
+5. `types/dashboard.ts` 파일 하나에 23개 화면 타입이 전부 들어있다. 화면별 타입 파일로 분리하는 리팩터링을 고려한다.
 
 1. 승인 흐름 수직 슬라이스: `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`, 프론트 승인 대기 화면 연결, `src/fixtures/approvals.ts` 제거.
    - 착수 전 결정: 상태 저장소(메모리 vs SQLite), `allow_methods`에 `POST` 추가 시점.

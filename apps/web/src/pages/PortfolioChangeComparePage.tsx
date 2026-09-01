@@ -1,11 +1,16 @@
 import { ArrowRight, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getPortfolioChangeCompare } from "../api/portfolioChangeCompare";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { portfolioChangeCompare } from "../fixtures/portfolioChangeCompare";
-import type { PageKey, PortfolioChangeAsset, PortfolioChangeFilter, Tone } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatTimeOfDay } from "../lib/format";
+import type { PageKey, PortfolioChangeAsset, PortfolioChangeCompareData, PortfolioChangePolicyType, Tone } from "../types/dashboard";
 import "./PortfolioChangeComparePage.css";
+
+type PortfolioChangeFilter = "all" | "up" | "down" | "check";
 
 declare global {
   interface Window {
@@ -25,20 +30,10 @@ const delta = (asset: PortfolioChangeAsset) => asset.nextWeight - asset.currentW
 const percent = (value: number) => `${value.toFixed(1)}%`;
 const point = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(1)}%p`;
 
-function policyTone(asset: PortfolioChangeAsset): Tone {
-  if (asset.policyType === "pass") return "success";
-  if (asset.policyType === "block") return "danger";
+function policyTone(policyType: PortfolioChangePolicyType): Tone {
+  if (policyType === "pass") return "success";
+  if (policyType === "block") return "danger";
   return "warning";
-}
-
-function visibleAssets(filter: PortfolioChangeFilter) {
-  return portfolioChangeCompare.assets.filter((asset) => {
-    if (filter === "all") return true;
-    if (filter === "up") return asset.direction === "up";
-    if (filter === "down") return asset.direction === "down";
-    if (filter === "check") return asset.policyType === "check";
-    return false;
-  });
 }
 
 interface PortfolioChangeComparePageProps {
@@ -47,26 +42,49 @@ interface PortfolioChangeComparePageProps {
 }
 
 export function PortfolioChangeComparePage({ activePage, onNavigate }: PortfolioChangeComparePageProps) {
+  const state = useFixture<PortfolioChangeCompareData>(() => getPortfolioChangeCompare(), "portfolio-change-compare");
   const [filter, setFilter] = useState<PortfolioChangeFilter>("all");
-  const [selectedId, setSelectedId] = useState(portfolioChangeCompare.assets[0].id);
-
-  const filteredAssets = useMemo(() => visibleAssets(filter), [filter]);
-  const selected = filteredAssets.find((asset) => asset.id === selectedId) ?? filteredAssets[0] ?? null;
-  const selectedDelta = selected ? delta(selected) : 0;
-  const checkCount = filteredAssets.filter((asset) => asset.policyType === "check").length;
-  const lastSync = portfolioChangeCompare.dataAsOf.slice(11, 16);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // See TaxFeeImpactPage for why this indirection exists: hooks must run
+  // unconditionally, but the real handler needs data only available after load.
+  const testHookRef = useRef<(filter: PortfolioChangeFilter) => void>(() => {});
 
   useEffect(() => {
-    window.__setPortfolioCompareFilterForTest = (nextFilter: PortfolioChangeFilter) => {
-      const nextVisible = visibleAssets(nextFilter);
-      setFilter(nextFilter);
-      setSelectedId(nextVisible[0]?.id ?? "");
-    };
-
+    window.__setPortfolioCompareFilterForTest = (nextFilter: PortfolioChangeFilter) => testHookRef.current(nextFilter);
     return () => {
       delete window.__setPortfolioCompareFilterForTest;
     };
   }, []);
+
+  const fallback = renderFixtureFallback(state, "변경 비교");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const portfolioChangeCompare = envelope.data;
+
+  function visibleAssets(nextFilter: PortfolioChangeFilter) {
+    return portfolioChangeCompare.assets.filter((asset) => {
+      if (nextFilter === "all") return true;
+      if (nextFilter === "up") return asset.direction === "up";
+      if (nextFilter === "down") return asset.direction === "down";
+      if (nextFilter === "check") return asset.policyType === "check";
+      return false;
+    });
+  }
+
+  const filteredAssets = visibleAssets(filter);
+  const selected = filteredAssets.find((asset) => asset.id === selectedId) ?? filteredAssets[0] ?? null;
+  const selectedDelta = selected ? delta(selected) : 0;
+  const checkCount = filteredAssets.filter((asset) => asset.policyType === "check").length;
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
+
+  testHookRef.current = (nextFilter: PortfolioChangeFilter) => {
+    const nextVisible = visibleAssets(nextFilter);
+    setFilter(nextFilter);
+    setSelectedId(nextVisible[0]?.id ?? "");
+  };
 
   function updateFilter(nextFilter: PortfolioChangeFilter) {
     const nextVisible = visibleAssets(nextFilter);
@@ -108,7 +126,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
         </div>
         <div>
           <span>외부 연결</span>
-          <strong>{portfolioChangeCompare.externalConnections}건</strong>
+          <strong>{envelope.externalConnections}건</strong>
         </div>
       </section>
 
@@ -126,7 +144,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
             </button>
           ))}
         </div>
-        <span>기준 총액 {portfolioChangeCompare.baseAmount.toLocaleString("ko-KR")}원 · 2026.08.27 15:20 KST 화면 예시</span>
+        <span>기준 총액 {portfolioChangeCompare.baseAmount.toLocaleString("ko-KR")}원 · {formatDateAndMinutes(envelope.dataAsOf)} KST 화면 예시</span>
       </section>
 
       <section className="asset-section" aria-labelledby="asset-title">
@@ -166,7 +184,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
                   <span className={assetDelta >= 0 ? "change-up" : "change-down"}>{point(assetDelta)}</span>
                   <span>{won(asset.amountChange)}</span>
                   <span>
-                    <StatusPill tone={policyTone(asset)}>{asset.policyLabel}</StatusPill>
+                    <StatusPill tone={policyTone(asset.policyType)}>{asset.policyLabel}</StatusPill>
                   </span>
                 </button>
               );
@@ -231,7 +249,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
               <h2>{selected?.name ?? "선택 자산 없음"}</h2>
               <span>{selected ? `${portfolioChangeCompare.id} · ${selected.ticker}` : "필터 결과 없음"}</span>
             </div>
-            <StatusPill tone={selected ? policyTone(selected) : "warning"}>{selected?.policyLabel ?? "빈 결과"}</StatusPill>
+            <StatusPill tone={selected ? policyTone(selected.policyType) : "warning"}>{selected?.policyLabel ?? "빈 결과"}</StatusPill>
           </div>
           <p>{selected?.summary ?? "현재 필터에 해당하는 화면용 자산 비교가 없습니다."}</p>
         </header>
@@ -242,7 +260,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
             <div><dt>현재 비중</dt><dd>{selected ? percent(selected.currentWeight) : "미표시"}</dd></div>
             <div><dt>변경 후 비중</dt><dd>{selected ? percent(selected.nextWeight) : "미표시"}</dd></div>
             <div><dt>변화폭</dt><dd>{selected ? point(selectedDelta) : "미표시"}</dd></div>
-            <div><dt>기준 시각</dt><dd>2026.08.27 15:20 KST</dd></div>
+            <div><dt>기준 시각</dt><dd>{formatDateAndMinutes(envelope.dataAsOf)} KST</dd></div>
           </dl>
         </section>
 
@@ -293,7 +311,7 @@ export function PortfolioChangeComparePage({ activePage, onNavigate }: Portfolio
         <button type="button" disabled={!selected} onClick={() => onNavigate("approvals")}>
           승인 대기 보기 <ArrowRight size={14} />
         </button>
-        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · {portfolioChangeCompare.sourceLabel}</p>
+        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · {envelope.sourceLabel}</p>
       </div>
     </aside>
   );

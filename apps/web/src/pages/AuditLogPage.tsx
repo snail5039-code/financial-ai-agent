@@ -1,10 +1,16 @@
 import { ArrowRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getAuditLogs } from "../api/auditLogs";
 import { AppShell } from "../components/AppShell";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { auditLogData, type AuditDecision, type AuditSourceKey, type AuditStepKey } from "../fixtures/auditLogs";
-import type { PageKey } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatTimeOfDay } from "../lib/format";
+import type { AuditDecisionRow, AuditLogData, PageKey } from "../types/dashboard";
 import "./AuditLogPage.css";
+
+type AuditStepKey = "analysis" | "verification" | "approval";
+type AuditSourceKey = "metrics" | "filing" | "policy";
 
 interface AuditLogPageProps {
   activePage: PageKey;
@@ -28,14 +34,20 @@ const sourceCards: Array<{ key: AuditSourceKey; title: string; note: string; sta
 ];
 
 export function AuditLogPage({ activePage, onNavigate }: AuditLogPageProps) {
-  const [decisionId, setDecisionId] = useState(auditLogData.decisions[0].id);
+  const state = useFixture<AuditLogData>(() => getAuditLogs(), "audit-logs");
+  const [decisionId, setDecisionId] = useState<string | null>(null);
   const [changesOnly, setChangesOnly] = useState(false);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>({ type: "step", key: "verification" });
-  const decision = auditLogData.decisions.find((item) => item.id === decisionId) ?? auditLogData.decisions[0];
 
-  const detail = useMemo(() => {
-    return inspectorMode.type === "step" ? auditLogData.steps[inspectorMode.key] : auditLogData.sources[inspectorMode.key];
-  }, [inspectorMode]);
+  const fallback = renderFixtureFallback(state, "감사 로그");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const auditLogData = envelope.data;
+  const decision = auditLogData.decisions.find((item) => item.id === decisionId) ?? auditLogData.decisions[0];
+  const detail = inspectorMode.type === "step" ? auditLogData.steps[inspectorMode.key] : auditLogData.sources[inspectorMode.key];
 
   const rows = auditLogData.labels
     .map((label, index) => ({
@@ -46,7 +58,7 @@ export function AuditLogPage({ activePage, onNavigate }: AuditLogPageProps) {
     }))
     .filter((row) => !changesOnly || row.changed);
 
-  function selectDecision(item: AuditDecision) {
+  function selectDecision(item: AuditDecisionRow) {
     setDecisionId(item.id);
   }
 
@@ -166,7 +178,7 @@ export function AuditLogPage({ activePage, onNavigate }: AuditLogPageProps) {
           <dl>
             <div><dt>결정 ID</dt><dd>{decision.id}</dd></div>
             <div><dt>실행 ID</dt><dd>{decision.runId}</dd></div>
-            <div><dt>기준시각</dt><dd>2026.08.25 14:32 KST</dd></div>
+            <div><dt>기준시각</dt><dd>{formatDateAndMinutes(envelope.dataAsOf)} KST</dd></div>
             <div><dt>외부데이터</dt><dd>없음</dd></div>
           </dl>
         </section>
@@ -189,7 +201,7 @@ export function AuditLogPage({ activePage, onNavigate }: AuditLogPageProps) {
     <AppShell
       title="감사 로그"
       accountLabel="시뮬레이션 계좌"
-      lastSync="14:32"
+      lastSync={formatTimeOfDay(envelope.dataAsOf)}
       activePage={activePage}
       onNavigate={onNavigate}
       main={main}

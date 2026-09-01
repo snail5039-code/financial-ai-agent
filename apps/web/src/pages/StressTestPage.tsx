@@ -1,15 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getStressTest } from "../api/stressTest";
 import { AppShell } from "../components/AppShell";
-import {
-  formatStressPercent,
-  getStressRows,
-  stressBaseAmount,
-  stressSafetyCopy,
-  stressScenarios,
-  type StressScenarioKey
-} from "../fixtures/stressTest";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import type { PageKey, StressScenarioKey, StressTestData } from "../types/dashboard";
 import "./StressTestPage.css";
+
+function formatStressPercent(value: number) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
 
 interface StressTestPageProps {
   activePage: PageKey;
@@ -17,17 +16,26 @@ interface StressTestPageProps {
 }
 
 export function StressTestPage({ activePage, onNavigate }: StressTestPageProps) {
+  const state = useFixture<StressTestData>(() => getStressTest(), "stress-test");
   const [scenarioKey, setScenarioKey] = useState<StressScenarioKey>("rates");
   const [assetKey, setAssetKey] = useState("cash");
   const [responseIndex, setResponseIndex] = useState(0);
+
+  const fallback = renderFixtureFallback(state, "스트레스 테스트");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { scenarios: stressScenarios, rowsByScenario, baseAmount: stressBaseAmount, safetyCopy: stressSafetyCopy } = envelope.data;
   const scenario = stressScenarios[scenarioKey];
-  const rows = useMemo(() => getStressRows(scenarioKey), [scenarioKey]);
+  const rows = rowsByScenario[scenarioKey];
   const selectedAsset = rows.find((row) => row.key === assetKey) ?? rows[0];
   const selectedResponse = scenario.responses[responseIndex] ?? scenario.responses[0];
 
   function selectScenario(nextScenario: StressScenarioKey) {
     setScenarioKey(nextScenario);
-    setAssetKey(getStressRows(nextScenario)[0].key);
+    setAssetKey(rowsByScenario[nextScenario][0].key);
     setResponseIndex(0);
   }
 
@@ -37,7 +45,7 @@ export function StressTestPage({ activePage, onNavigate }: StressTestPageProps) 
         <div>
           <span className="eyebrow">스트레스 테스트</span>
           <h1 id="stress-title">{scenario.label} 시나리오</h1>
-          <p>{scenario.copy}</p>
+          <p>{scenario.description}</p>
         </div>
         <div className="stress-metrics" aria-label="선택 시나리오 요약">
           <div><span>예상 손실</span><strong>{formatStressPercent(scenario.loss)}</strong></div>

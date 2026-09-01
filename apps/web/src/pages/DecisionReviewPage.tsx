@@ -1,11 +1,16 @@
 import { ArrowRight, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getDecisionReview } from "../api/decisionReview";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { decisionReview } from "../fixtures/decisionReview";
-import type { DecisionReviewFilter, DecisionReviewItem, PageKey, Tone } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatTimeOfDay } from "../lib/format";
+import type { DecisionReviewData, DecisionReviewItem, DecisionReviewOutcome, PageKey, Tone } from "../types/dashboard";
 import "./DecisionReviewPage.css";
+
+type DecisionReviewFilter = "all" | DecisionReviewOutcome | "none";
 
 declare global {
   interface Window {
@@ -26,11 +31,6 @@ const filterOptions: Array<{ key: DecisionReviewFilter; label: string }> = [
   { key: "보류", label: "보류" }
 ];
 
-function visibleDecisions(filter: DecisionReviewFilter, memoOnly: boolean) {
-  if (filter === "none") return [];
-  return decisionReview.decisions.filter((item) => (filter === "all" || item.decision === filter) && (!memoOnly || item.memo));
-}
-
 function decisionTone(decision: DecisionReviewItem["decision"]): Tone {
   if (decision === "승인") return "success";
   if (decision === "반려") return "danger";
@@ -43,29 +43,49 @@ interface DecisionReviewPageProps {
 }
 
 export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPageProps) {
+  const state = useFixture<DecisionReviewData>(() => getDecisionReview(), "decision-review");
   const [filter, setFilter] = useState<DecisionReviewFilter>("all");
   const [memoOnly, setMemoOnly] = useState(false);
-  const [selectedId, setSelectedId] = useState(decisionReview.decisions[0].id);
-  const filteredDecisions = useMemo(() => visibleDecisions(filter, memoOnly), [filter, memoOnly]);
-  const selected = filteredDecisions.find((item) => item.id === selectedId) ?? filteredDecisions[0] ?? null;
-  const memoCount = filteredDecisions.filter((item) => item.memo).length;
-  const lastSync = decisionReview.dataAsOf.slice(11, 16);
-  const setDecisionReviewFilterForTest = (nextFilter: DecisionReviewFilter, nextMemoOnly = false) => {
-    const nextVisible = visibleDecisions(nextFilter, nextMemoOnly);
-    setFilter(nextFilter);
-    setMemoOnly(nextMemoOnly);
-    setSelectedId(nextVisible[0]?.id ?? "");
-  };
-
-  Object.defineProperty(window, "__setDecisionReviewFilterForTest", { configurable: true, writable: true, value: setDecisionReviewFilterForTest });
-  Object.defineProperty(self as DecisionReviewTestWindow, "__setDecisionReviewFilterForTest", { configurable: true, writable: true, value: setDecisionReviewFilterForTest });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // See TaxFeeImpactPage for why this indirection exists: hooks must run
+  // unconditionally, but the real handler needs data only available after load.
+  const testHookRef = useRef<(filter: DecisionReviewFilter, memoOnly?: boolean) => void>(() => {});
 
   useEffect(() => {
+    const forward = (nextFilter: DecisionReviewFilter, nextMemoOnly?: boolean) => testHookRef.current(nextFilter, nextMemoOnly);
+    Object.defineProperty(window, "__setDecisionReviewFilterForTest", { configurable: true, writable: true, value: forward });
+    Object.defineProperty(self as DecisionReviewTestWindow, "__setDecisionReviewFilterForTest", { configurable: true, writable: true, value: forward });
+
     return () => {
       delete window.__setDecisionReviewFilterForTest;
       delete (self as DecisionReviewTestWindow).__setDecisionReviewFilterForTest;
     };
   }, []);
+
+  const fallback = renderFixtureFallback(state, "결정 회고");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const decisionReview = envelope.data;
+
+  function visibleDecisions(nextFilter: DecisionReviewFilter, nextMemoOnly: boolean) {
+    if (nextFilter === "none") return [];
+    return decisionReview.decisions.filter((item) => (nextFilter === "all" || item.decision === nextFilter) && (!nextMemoOnly || item.memo));
+  }
+
+  const filteredDecisions = visibleDecisions(filter, memoOnly);
+  const selected = filteredDecisions.find((item) => item.id === selectedId) ?? filteredDecisions[0] ?? null;
+  const memoCount = filteredDecisions.filter((item) => item.memo).length;
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
+
+  testHookRef.current = (nextFilter: DecisionReviewFilter, nextMemoOnly = false) => {
+    const nextVisible = visibleDecisions(nextFilter, nextMemoOnly);
+    setFilter(nextFilter);
+    setMemoOnly(nextMemoOnly);
+    setSelectedId(nextVisible[0]?.id ?? "");
+  };
 
   function updateFilter(nextFilter: DecisionReviewFilter, nextMemoOnly = memoOnly) {
     const nextVisible = visibleDecisions(nextFilter, nextMemoOnly);
@@ -79,7 +99,7 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
   const main = (
     <section className="review-main" aria-labelledby="review-title">
       <header className="review-summary">
-        <button className="test-hook-marker" data-test-hook="window.__setDecisionReviewFilterForTest('none')" type="button" onClick={() => setDecisionReviewFilterForTest("none")}>
+        <button className="test-hook-marker" data-test-hook="window.__setDecisionReviewFilterForTest('none')" type="button" onClick={() => testHookRef.current("none")}>
           window.__setDecisionReviewFilterForTest('none')
         </button>
         <div>
@@ -93,8 +113,8 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
       <section className="review-kpis" aria-label="현재 결정 회고 요약">
         <div><span>표시 결정</span><strong>{filteredDecisions.length}건</strong></div>
         <div><span>사용자 메모</span><strong>{memoCount}건</strong></div>
-        <div><span>실행 상태</span><strong>{decisionReview.executed ? "실행됨" : "실행 안 됨"}</strong></div>
-        <div><span>외부 요청</span><strong>{decisionReview.externalConnections}건</strong></div>
+        <div><span>실행 상태</span><strong>{envelope.executed ? "실행됨" : "실행 안 됨"}</strong></div>
+        <div><span>외부 요청</span><strong>{envelope.externalConnections}건</strong></div>
       </section>
 
       <section className="review-toolbar" aria-label="결정 이력 필터">
@@ -110,7 +130,7 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
       </section>
 
       <section className="review-list-section" aria-labelledby="review-list-title">
-        <div className="review-section-head"><h2 id="review-list-title">결정 이력</h2><span>기준 시각 2026.08.27 10:20 KST · 화면용 고정 예시</span></div>
+        <div className="review-section-head"><h2 id="review-list-title">결정 이력</h2><span>기준 시각 {formatDateAndMinutes(envelope.dataAsOf)} KST · 화면용 고정 예시</span></div>
         <div className="review-columns" aria-hidden="true"><span>결정</span><span>사용자 결정</span><span>메모</span><span>정책</span><span>검증</span><span>가상 경로</span><span>연결 화면</span></div>
         {filteredDecisions.length ? (
           <div className="review-list" role="listbox" aria-label="사용자 결정 이력">
@@ -118,7 +138,7 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
               const isSelected = selected?.id === item.id;
               return (
                 <button className={isSelected ? "review-row selected" : "review-row"} key={item.id} type="button" role="option" aria-selected={isSelected} tabIndex={isSelected ? 0 : -1} onClick={() => setSelectedId(item.id)}>
-                  <span><strong>{item.id} · {item.name}</strong><small>{item.ticker} · {item.time}</small></span>
+                  <span><strong>{item.id} · {item.name}</strong><small>{item.ticker} · {formatDateAndMinutes(item.reviewedAt)}</small></span>
                   <span><StatusPill tone={decisionTone(item.decision)}>{item.decision}</StatusPill></span>
                   <span className={item.memo ? "memo-mark" : "muted-mark"}>{item.memo ? "있음" : "없음"}</span>
                   <span>{item.policy}</span>
@@ -171,7 +191,7 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
             <div><dt>결정 ID</dt><dd>{selected?.id ?? "미표시"}</dd></div>
             <div><dt>종목</dt><dd>{selected ? `${selected.name} (${selected.ticker})` : "미표시"}</dd></div>
             <div><dt>사용자 결정</dt><dd>{selected?.decision ?? "미표시"}</dd></div>
-            <div><dt>기준 시각</dt><dd>{selected?.time ?? "미표시"}</dd></div>
+            <div><dt>기준 시각</dt><dd>{selected ? formatDateAndMinutes(selected.reviewedAt) : "미표시"}</dd></div>
           </dl>
         </section>
 
@@ -215,7 +235,7 @@ export function DecisionReviewPage({ activePage, onNavigate }: DecisionReviewPag
         <button type="button" disabled={!selected} onClick={() => selected && onNavigate(selected.linkPage)}>
           관련 화면 보기 <ArrowRight size={14} />
         </button>
-        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · 외부 요청 {decisionReview.externalConnections}건</p>
+        <p><ShieldAlert size={12} aria-hidden="true" /> 로컬 fixture · 외부 요청 {envelope.externalConnections}건</p>
       </div>
     </aside>
   );

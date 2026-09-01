@@ -25,7 +25,7 @@
 - React/Vite 프론트엔드 `apps/web`에는 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐다.
 - 승인 대기 화면의 주문 행 접근성 구조는 `FRONTEND-005`에서 정리됐다.
 - `FRONTEND-FINAL-AUDIT` 최초 검증은 1440×900 하단 잘림 문제로 `실패`였고, `FRONTEND-FINAL-AUDIT-R1` 재작업 후 검증자 19세대가 `FRONTEND-FINAL-AUDIT-R1-V`에서 `통과` 판정했다.
-- FastAPI 백엔드는 `apps/api`에 있고, 구현된 엔드포인트는 `GET /api/health`, `GET /api/dashboard`, `GET /api/account`, `GET /api/agents/{analysis|verification|execution}`, `GET /api/approvals`, `POST /api/approvals/{id}/{approve|reject}`다.
+- FastAPI 백엔드는 `apps/api`에 있고, **23개 화면 전부**가 백엔드 엔드포인트에 연결됐다(`BACKEND-007`). 프론트 `apps/web/src/fixtures/`는 완전히 비었다.
 - `BACKEND-005`에서 이 프로젝트 최초의 쓰기 경로(승인·반려)를 메모리 저장소로 구현했다. 승인 대기 화면은 이제 백엔드에 연결됐고 `src/fixtures/approvals.ts`는 제거했다.
 - `BACKEND-003`에서 대시보드 수직 슬라이스를 완료했다. 대시보드 화면은 서버 응답만 사용하고 프론트 `src/fixtures/dashboard.ts`는 제거됐다.
 - 프론트-백엔드 통신은 Vite `server.proxy`를 통한 같은 출처 상대 경로 `/api/*`다. 브라우저가 절대 URL을 호출하지 않는다.
@@ -42,7 +42,10 @@
 
 - `BACKEND-006`에서 결정 데이터 통합 1차를 완료했다. DEC-1042의 정적 사실과 실시간 승인 상태를 대시보드·승인 대기·에이전트 화면이 공유하고, 어느 화면에서 승인/반려해도 나머지가 즉시 반영된다.
 - 이 작업 중 실제 콘텐츠 버그를 하나 발견해 고쳤다: `agents.py`의 검증 에이전트가 "NAVER 관찰 유지, 반려"라고 쓰던 항목이 승인 대기의 실제 "NAVER 매도 8주 대기중" 주문과 같은 DEC-1043 ID를 쓰고 있었다. 후자를 DEC-1057로 옮겨 분리했다.
-- 감사 로그·결정 회고·역할 상태 등 나머지 12개 화면의 결정 데이터는 아직 통합하지 않았다. 이 화면들은 아직 백엔드에 연결되지 않은 프론트 전용 fixture라서 지금은 승인해도 갱신되지 않는 것이 관찰 가능한 버그로 나타나지는 않는다. 범위는 `docs/backend/10-decision-consolidation.md` 참조.
+- `BACKEND-007`에서 나머지 17개 화면(리스크 알림, 거래 내역, 포트폴리오 건강, 근거 패킷, 감사 로그, 결정 회고, 역할 상태, 주간 리포트, 세금·수수료, 변경 비교, 전략 조정, 백테스트, 기업 상세, 데이터 연결, 알림 설정, 투자 정책, 스트레스 테스트)를 전부 백엔드로 옮겼다. 모두 읽기 전용 `GET`이며 정책/알림 설정의 "가상 적용"은 여전히 저장되지 않는 화면 상태다.
+- 이 과정에서 DEC-1043·DEC-1044도 `decisions.py` 공유 상수로 통합했고, `evidence_packets.py`가 DEC-1042 실시간 승인 상태를 반영하도록 새로 연결했다.
+- 마이그레이션 중 실제 런타임 크래시를 하나 발견해 고쳤다: `TaxFeeImpactPage`, `DecisionReviewPage`, `AgentRoleStatusPage`, `PortfolioChangeComparePage` 4개 화면에서 조기 반환(로딩 중 return) 아래에 `useEffect`가 있어 React Hooks 순서 규칙을 위반하고 있었다. `useRef` 간접 참조로 고쳤다.
+- 16개 결정 ID 전체의 서사 대조는 아직 하지 않았다. 범위는 `docs/backend/10-decision-consolidation.md`, `docs/backend/11-remaining-screens-migration.md` 참조.
 - 검증 방법 보완: 프록시 확인은 상태 코드만 보면 안 된다. Vite는 프록시가 꺼져 있어도 SPA fallback으로 200을 돌려주므로 `content-type`까지 확인한다.
 - 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다.
 - 현재 기본 추천은 새 화면 추가보다 React/Vite 19개 화면과 `GET /api/health`를 유지하면서 다음 백엔드 범위를 작게 분리하는 것이다.

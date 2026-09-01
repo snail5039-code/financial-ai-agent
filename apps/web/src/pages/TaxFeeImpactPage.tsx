@@ -1,25 +1,30 @@
 import { ArrowRight, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getTaxFeeImpact } from "../api/taxFeeImpact";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { taxFeeImpact } from "../fixtures/taxFeeImpact";
-import type { PageKey, TaxFeeImpactFilter, TaxFeeOrder, Tone } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatTimeOfDay } from "../lib/format";
+import type { PageKey, TaxFeeImpactData, TaxFeeOrder, TaxFeeStatus, Tone } from "../types/dashboard";
 import "./TaxFeeImpactPage.css";
+
+type TaxFeeFilter = "all" | TaxFeeStatus | "none";
 
 declare global {
   interface Window {
-    __setTaxFeeImpactFilterForTest?: (filter: TaxFeeImpactFilter) => void;
+    __setTaxFeeImpactFilterForTest?: (filter: TaxFeeFilter) => void;
   }
 
-  var __setTaxFeeImpactFilterForTest: ((filter: TaxFeeImpactFilter) => void) | undefined;
+  var __setTaxFeeImpactFilterForTest: ((filter: TaxFeeFilter) => void) | undefined;
 }
 
 type TaxFeeTestWindow = Window & typeof globalThis & {
-  __setTaxFeeImpactFilterForTest?: (filter: TaxFeeImpactFilter) => void;
+  __setTaxFeeImpactFilterForTest?: (filter: TaxFeeFilter) => void;
 };
 
-const filterOptions: Array<{ key: TaxFeeImpactFilter; label: string }> = [
+const filterOptions: Array<{ key: TaxFeeFilter; label: string }> = [
   { key: "all", label: "전체" },
   { key: "영향 작음", label: "영향 작음" },
   { key: "재검토", label: "재검토" },
@@ -33,11 +38,6 @@ const netOf = (order: TaxFeeOrder) => order.gross - totalCostOf(order);
 const dragOf = (order: TaxFeeOrder) => (order.gross === 0 ? 0 : Math.abs((totalCostOf(order) / order.gross) * 100));
 const percent = (value: number) => `${value.toFixed(1)}%`;
 
-function visibleOrders(filter: TaxFeeImpactFilter) {
-  if (filter === "none") return [];
-  return taxFeeImpact.orders.filter((order) => filter === "all" || order.status === filter);
-}
-
 function statusTone(status: TaxFeeOrder["status"]): Tone {
   if (status === "영향 작음") return "success";
   if (status === "보류 권장") return "danger";
@@ -50,30 +50,52 @@ interface TaxFeeImpactPageProps {
 }
 
 export function TaxFeeImpactPage({ activePage, onNavigate }: TaxFeeImpactPageProps) {
-  const [filter, setFilter] = useState<TaxFeeImpactFilter>("all");
-  const [selectedId, setSelectedId] = useState(taxFeeImpact.orders[0].id);
-  const filteredOrders = useMemo(() => visibleOrders(filter), [filter]);
-  const selected = filteredOrders.find((order) => order.id === selectedId) ?? filteredOrders[0] ?? null;
-  const totalCost = filteredOrders.reduce((sum, order) => sum + totalCostOf(order), 0);
-  const netTotal = filteredOrders.reduce((sum, order) => sum + netOf(order), 0);
-  const lastSync = taxFeeImpact.dataAsOf.slice(11, 16);
-  const setTaxFeeImpactFilterForTest = (nextFilter: TaxFeeImpactFilter) => {
-    const nextVisible = visibleOrders(nextFilter);
-    setFilter(nextFilter);
-    setSelectedId(nextVisible[0]?.id ?? "");
-  };
-
-  Object.defineProperty(window, "__setTaxFeeImpactFilterForTest", { configurable: true, writable: true, value: setTaxFeeImpactFilterForTest });
-  Object.defineProperty(self as TaxFeeTestWindow, "__setTaxFeeImpactFilterForTest", { configurable: true, writable: true, value: setTaxFeeImpactFilterForTest });
+  const state = useFixture<TaxFeeImpactData>(() => getTaxFeeImpact(), "tax-fee-impact");
+  const [filter, setFilter] = useState<TaxFeeFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Hooks must run unconditionally on every render, but this handler is only
+  // meaningful once the fixture has loaded. The ref lets the effect below
+  // register the window hook once (empty deps) while always calling
+  // whatever the latest handler is — a no-op before load, the real one after.
+  const testHookRef = useRef<(filter: TaxFeeFilter) => void>(() => {});
 
   useEffect(() => {
+    const forward = (nextFilter: TaxFeeFilter) => testHookRef.current(nextFilter);
+    Object.defineProperty(window, "__setTaxFeeImpactFilterForTest", { configurable: true, writable: true, value: forward });
+    Object.defineProperty(self as TaxFeeTestWindow, "__setTaxFeeImpactFilterForTest", { configurable: true, writable: true, value: forward });
+
     return () => {
       delete window.__setTaxFeeImpactFilterForTest;
       delete (self as TaxFeeTestWindow).__setTaxFeeImpactFilterForTest;
     };
   }, []);
 
-  function updateFilter(nextFilter: TaxFeeImpactFilter) {
+  const fallback = renderFixtureFallback(state, "세금·수수료");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const taxFeeImpact = envelope.data;
+
+  function visibleOrders(nextFilter: TaxFeeFilter) {
+    if (nextFilter === "none") return [];
+    return taxFeeImpact.orders.filter((order) => nextFilter === "all" || order.status === nextFilter);
+  }
+
+  const filteredOrders = visibleOrders(filter);
+  const selected = filteredOrders.find((order) => order.id === selectedId) ?? filteredOrders[0] ?? null;
+  const totalCost = filteredOrders.reduce((sum, order) => sum + totalCostOf(order), 0);
+  const netTotal = filteredOrders.reduce((sum, order) => sum + netOf(order), 0);
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
+
+  testHookRef.current = (nextFilter: TaxFeeFilter) => {
+    const nextVisible = visibleOrders(nextFilter);
+    setFilter(nextFilter);
+    setSelectedId(nextVisible[0]?.id ?? "");
+  };
+
+  function updateFilter(nextFilter: TaxFeeFilter) {
     const nextVisible = visibleOrders(nextFilter);
     setFilter(nextFilter);
     if (!nextVisible.some((order) => order.id === selectedId)) {
@@ -94,7 +116,7 @@ export function TaxFeeImpactPage({ activePage, onNavigate }: TaxFeeImpactPagePro
   const main = (
     <section className="tax-main" aria-labelledby="tax-title">
       <header className="tax-summary">
-        <button className="test-hook-marker" data-test-hook="window.__setTaxFeeImpactFilterForTest('none')" type="button" onClick={() => setTaxFeeImpactFilterForTest("none")}>
+        <button className="test-hook-marker" data-test-hook="window.__setTaxFeeImpactFilterForTest('none')" type="button" onClick={() => testHookRef.current("none")}>
           window.__setTaxFeeImpactFilterForTest('none')
         </button>
         <div>
@@ -109,7 +131,7 @@ export function TaxFeeImpactPage({ activePage, onNavigate }: TaxFeeImpactPagePro
         <div><span>표시 주문</span><strong>{filteredOrders.length}건</strong></div>
         <div><span>예상 총비용</span><strong>{won(totalCost)}</strong></div>
         <div><span>비용 후 순손익</span><strong className={netTotal < 0 ? "negative" : "positive"}>{signedWon(netTotal)}</strong></div>
-        <div><span>외부 요청</span><strong>{taxFeeImpact.externalConnections}건</strong></div>
+        <div><span>외부 요청</span><strong>{envelope.externalConnections}건</strong></div>
       </section>
 
       <section className="tax-toolbar" aria-label="비용 영향 필터">
@@ -124,7 +146,7 @@ export function TaxFeeImpactPage({ activePage, onNavigate }: TaxFeeImpactPagePro
       </section>
 
       <section className="tax-list-section" aria-labelledby="tax-list-title">
-        <div className="tax-section-head"><h2 id="tax-list-title">가상 주문별 비용 영향</h2><span>기준 시각 2026.08.27 09:10 KST · 반올림 원 단위</span></div>
+        <div className="tax-section-head"><h2 id="tax-list-title">가상 주문별 비용 영향</h2><span>기준 시각 {formatDateAndMinutes(envelope.dataAsOf)} KST · 반올림 원 단위</span></div>
         <div className="tax-columns" aria-hidden="true"><span>주문</span><span>비용 전</span><span>수수료</span><span>세금</span><span>슬리피지</span><span>환전</span><span>총비용</span><span>순손익</span><span>상태</span></div>
         {filteredOrders.length ? (
           <div className="tax-list" role="listbox" aria-label="비용 영향 점검 주문 목록">
@@ -230,7 +252,7 @@ export function TaxFeeImpactPage({ activePage, onNavigate }: TaxFeeImpactPagePro
         <button type="button" disabled={!selected} onClick={() => selected && onNavigate(selected.linkPage)}>
           관련 화면 보기 <ArrowRight size={14} />
         </button>
-        <p><ShieldAlert size={12} aria-hidden="true" /> 실제 주문·체결 아님 · 외부 요청 {taxFeeImpact.externalConnections}건</p>
+        <p><ShieldAlert size={12} aria-hidden="true" /> 실제 주문·체결 아님 · 외부 요청 {envelope.externalConnections}건</p>
       </div>
     </aside>
   );

@@ -1,17 +1,14 @@
 import { PlugZap } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getDataConnections } from "../api/dataConnections";
 import { AppShell } from "../components/AppShell";
-import {
-  dataConnectionCards,
-  dataConnectionDetails,
-  dataConnectionRows,
-  dataConnectionsSafetyCopy,
-  dataQualityChips,
-  type DataConnectionFilter,
-  type DataConnectionKey
-} from "../fixtures/dataConnections";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import { formatTimeOfDay } from "../lib/format";
+import type { DataConnectionKey, DataConnectionsData, PageKey } from "../types/dashboard";
 import "./DataConnectionsPage.css";
+
+type DataConnectionFilter = "all" | "blocked" | "mock";
 
 interface DataConnectionsPageProps {
   activePage: PageKey;
@@ -19,14 +16,20 @@ interface DataConnectionsPageProps {
 }
 
 export function DataConnectionsPage({ activePage, onNavigate }: DataConnectionsPageProps) {
+  const state = useFixture<DataConnectionsData>(() => getDataConnections(), "data-connections");
   const [filter, setFilter] = useState<DataConnectionFilter>("all");
   const [selectedKey, setSelectedKey] = useState<DataConnectionKey>("opendart");
   const [checkStatus, setCheckStatus] = useState("아직 점검하지 않았습니다.");
 
-  const visibleRows = useMemo(
-    () => dataConnectionRows.filter((row) => filter === "all" || row.kind === filter),
-    [filter]
-  );
+  const fallback = renderFixtureFallback(state, "데이터 연결");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { cards: dataConnectionCards, rows: dataConnectionRows, details: dataConnectionDetails, qualityChips: dataQualityChips, safetyCopy: dataConnectionsSafetyCopy } = envelope.data;
+
+  const visibleRows = dataConnectionRows.filter((row) => filter === "all" || row.kind === filter);
   const selected = dataConnectionDetails[selectedKey];
 
   function selectSource(key: DataConnectionKey) {
@@ -139,8 +142,8 @@ export function DataConnectionsPage({ activePage, onNavigate }: DataConnectionsP
         <section>
           <h3>권한과 영향</h3>
           <dl>
-            {selected.facts.map(([label, value]) => (
-              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+            {selected.facts.map((fact) => (
+              <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>
             ))}
           </dl>
         </section>
@@ -167,7 +170,7 @@ export function DataConnectionsPage({ activePage, onNavigate }: DataConnectionsP
     <AppShell
       title="데이터 연결"
       accountLabel="시뮬레이션 계좌"
-      lastSync="14:32"
+      lastSync={formatTimeOfDay(envelope.dataAsOf)}
       activePage={activePage}
       onNavigate={onNavigate}
       main={main}

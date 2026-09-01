@@ -1,25 +1,27 @@
 import { RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { getPolicySettings } from "../api/policySettings";
 import { AppShell } from "../components/AppShell";
-import { policySettings, type PolicyCheckKey, type PolicyNumberKey } from "../fixtures/policySettings";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import { formatPercent, formatWon } from "../lib/format";
+import type { PageKey, PolicyCheckKey, PolicyNumberKey, PolicyNumberRule, PolicySettingsData } from "../types/dashboard";
 import "./PolicySettingsPage.css";
 
 type PolicyValues = Record<PolicyNumberKey, string> & Record<PolicyCheckKey, boolean>;
 type NumberErrors = Partial<Record<PolicyNumberKey, string>>;
 
-const initialValues = {
-  ...Object.fromEntries(policySettings.numberRules.map((rule) => [rule.key, rule.value])),
-  ...Object.fromEntries(policySettings.checks.map((check) => [check.key, check.value]))
-} as PolicyValues;
+function buildInitialValues(data: PolicySettingsData): PolicyValues {
+  return {
+    ...Object.fromEntries(data.numberRules.map((rule) => [rule.key, rule.value])),
+    ...Object.fromEntries(data.checks.map((check) => [check.key, check.value]))
+  } as PolicyValues;
+}
 
-const numberKeys = policySettings.numberRules.map((rule) => rule.key);
-const checkKeys = policySettings.checks.map((check) => check.key);
-
-function validateNumbers(values: PolicyValues) {
+function validateNumbers(values: PolicyValues, numberRules: PolicyNumberRule[]) {
   const errors: NumberErrors = {};
   let ok = true;
-  for (const rule of policySettings.numberRules) {
+  for (const rule of numberRules) {
     const raw = values[rule.key].trim();
     const numeric = Number(raw);
     const pattern = rule.decimals > 0 ? /^\d+(?:\.\d{1})?$/ : /^\d+$/;
@@ -42,7 +44,7 @@ function validateNumbers(values: PolicyValues) {
   return { ok, errors };
 }
 
-function changedKeys(values: PolicyValues, applied: PolicyValues) {
+function changedKeys(values: PolicyValues, applied: PolicyValues, numberKeys: PolicyNumberKey[], checkKeys: PolicyCheckKey[]) {
   return [...numberKeys, ...checkKeys].filter((key) => String(values[key]) !== String(applied[key]));
 }
 
@@ -52,33 +54,47 @@ interface PolicySettingsPageProps {
 }
 
 export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPageProps) {
-  const [values, setValues] = useState<PolicyValues>(initialValues);
-  const [applied, setApplied] = useState<PolicyValues>(initialValues);
+  const state = useFixture<PolicySettingsData>(() => getPolicySettings(), "policy-settings");
+  const [values, setValues] = useState<PolicyValues | null>(null);
+  const [applied, setApplied] = useState<PolicyValues | null>(null);
   const [saveStatus, setSaveStatus] = useState("변경사항은 화면에만 존재하며 저장되지 않았습니다.");
-  const validation = useMemo(() => validateNumbers(values), [values]);
-  const changes = useMemo(() => changedKeys(values, applied), [values, applied]);
+
+  const fallback = renderFixtureFallback(state, "투자 정책");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const policySettings = envelope.data;
+  const initialValues = buildInitialValues(policySettings);
+  const currentValues = values ?? initialValues;
+  const currentApplied = applied ?? initialValues;
+  const numberKeys = policySettings.numberRules.map((rule) => rule.key);
+  const checkKeys = policySettings.checks.map((check) => check.key);
+  const validation = validateNumbers(currentValues, policySettings.numberRules);
+  const changes = changedKeys(currentValues, currentApplied, numberKeys, checkKeys);
 
   const warnings = [
-    values.marketOrder ? "시장가 허용 시 가격 상한이 없습니다." : "",
-    !values.blockUnknown ? "출처 미확인 주문 자동 차단이 꺼져 있습니다." : "",
-    !values.blockCorrection ? "정정 공시 미확인 주문 자동 차단이 꺼져 있습니다." : "",
-    !values.limitOrder ? "지정가 주문이 허용되지 않습니다." : ""
+    currentValues.marketOrder ? "시장가 허용 시 가격 상한이 없습니다." : "",
+    !currentValues.blockUnknown ? "출처 미확인 주문 자동 차단이 꺼져 있습니다." : "",
+    !currentValues.blockCorrection ? "정정 공시 미확인 주문 자동 차단이 꺼져 있습니다." : "",
+    !currentValues.limitOrder ? "지정가 주문이 허용되지 않습니다." : ""
   ].filter(Boolean);
 
-  const maxOrder = Number(values.maxOrder);
-  const maxWeight = Number(values.maxWeight);
+  const maxOrder = Number(currentValues.maxOrder);
+  const maxWeight = Number(currentValues.maxWeight);
   const amountOk = validation.ok && policySettings.preview.amount <= maxOrder;
   const weightOk = validation.ok && policySettings.preview.nextWeight <= maxWeight;
-  const orderOk = values.limitOrder;
-  const sourceOk = !values.blockUnknown;
+  const orderOk = currentValues.limitOrder;
+  const sourceOk = !currentValues.blockUnknown;
   const blocked = !validation.ok || !amountOk || !weightOk || !orderOk || !sourceOk;
 
   function updateNumber(key: PolicyNumberKey, value: string) {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => ({ ...(current ?? initialValues), [key]: value }));
   }
 
   function updateCheck(key: PolicyCheckKey, value: boolean) {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => ({ ...(current ?? initialValues), [key]: value }));
   }
 
   function resetDefaults() {
@@ -87,13 +103,13 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
   }
 
   function cancelChanges() {
-    setValues(applied);
+    setValues(currentApplied);
     setSaveStatus("변경을 취소했습니다. 실제 저장은 없습니다.");
   }
 
   function applyMockPolicy() {
     if (!validation.ok) return;
-    setApplied(values);
+    setApplied(currentValues);
     setSaveStatus("가상 적용됨 · 화면 상태만 변경되었습니다.");
   }
 
@@ -115,7 +131,7 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
           <legend>포트폴리오 한도</legend>
           <div className="policy-field-grid">
             {policySettings.numberRules.slice(0, 4).map((rule) => (
-              <PolicyNumberField key={rule.key} rule={rule} value={values[rule.key]} error={validation.errors[rule.key]} onChange={updateNumber} />
+              <PolicyNumberField key={rule.key} rule={rule} value={currentValues[rule.key]} error={validation.errors[rule.key]} onChange={updateNumber} />
             ))}
           </div>
         </fieldset>
@@ -123,7 +139,7 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
           <legend>검증·승인 조건</legend>
           <div className="policy-field-grid">
             {policySettings.numberRules.slice(4).map((rule) => (
-              <PolicyNumberField key={rule.key} rule={rule} value={values[rule.key]} error={validation.errors[rule.key]} onChange={updateNumber} />
+              <PolicyNumberField key={rule.key} rule={rule} value={currentValues[rule.key]} error={validation.errors[rule.key]} onChange={updateNumber} />
             ))}
           </div>
         </fieldset>
@@ -132,7 +148,7 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
           <div className="policy-checks">
             {policySettings.checks.map((check) => (
               <label key={check.key}>
-                <input type="checkbox" checked={values[check.key]} onChange={(event) => updateCheck(check.key, event.currentTarget.checked)} />
+                <input type="checkbox" checked={currentValues[check.key]} onChange={(event) => updateCheck(check.key, event.currentTarget.checked)} />
                 {check.label}
               </label>
             ))}
@@ -171,9 +187,9 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
           <h3>{policySettings.preview.decisionId} 가상 적용 미리보기</h3>
           <dl>
             <div><dt>계산</dt><dd>{policySettings.preview.calculation}</dd></div>
-            <div><dt>주문 금액 한도</dt><dd>{amountOk ? `허용: 712,000원 <= ${maxOrder.toLocaleString("ko-KR")}원` : "차단: 712,000원이 한도 초과"}</dd></div>
-            <div><dt>종목 비중</dt><dd>6.65% → 7.20%</dd></div>
-            <div><dt>종목 비중 한도</dt><dd>{weightOk ? `허용: 7.20% <= ${maxWeight.toFixed(1)}%` : "차단: 7.20%가 한도 초과"}</dd></div>
+            <div><dt>주문 금액 한도</dt><dd>{amountOk ? `허용: ${formatWon(policySettings.preview.amount)} <= ${maxOrder.toLocaleString("ko-KR")}원` : `차단: ${formatWon(policySettings.preview.amount)}이 한도 초과`}</dd></div>
+            <div><dt>종목 비중</dt><dd>{formatPercent(policySettings.preview.currentWeight)} → {formatPercent(policySettings.preview.nextWeight)}</dd></div>
+            <div><dt>종목 비중 한도</dt><dd>{weightOk ? `허용: ${formatPercent(policySettings.preview.nextWeight)} <= ${maxWeight.toFixed(1)}%` : `차단: ${formatPercent(policySettings.preview.nextWeight)}가 한도 초과`}</dd></div>
             <div><dt>주문 유형</dt><dd>{policySettings.preview.orderType}</dd></div>
             <div><dt>지정가 정책</dt><dd>{orderOk ? "허용: 지정가 사용 가능" : "차단: 지정가 미허용"}</dd></div>
             <div><dt>출처</dt><dd>{policySettings.preview.sourceState}</dd></div>
@@ -212,7 +228,7 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
 }
 
 interface PolicyNumberFieldProps {
-  rule: (typeof policySettings.numberRules)[number];
+  rule: PolicyNumberRule;
   value: string;
   error?: string;
   onChange: (key: PolicyNumberKey, value: string) => void;

@@ -31,25 +31,35 @@
 
 ## API 범위
 
-실제 외부 API가 아니라 프론트엔드가 호출하는 **내부 로컬 API**만 만든다.
+실제 외부 API가 아니라 프론트엔드가 호출하는 **내부 로컬 API**만 만든다. `BACKEND-007`로 23개 화면 전부가 아래 엔드포인트에 연결됐다. 이 표가 실제 구현과 유일하게 맞는 기준이다 — 화면별 세부 계약은 `docs/backend/07-dashboard-api.md`, `08-account-and-agent-api.md`, `09-approvals-api.md`, `11-remaining-screens-migration.md`를 참조한다.
 
-| Method | Endpoint | 용도 |
+| Method | Endpoint | 화면 |
 |---|---|---|
-| `GET` | `/api/health` | 백엔드 상태 확인, `BACKEND-002` 완료 |
-| `GET` | `/api/dashboard` | 대시보드 총자산, 차트, 보유 종목, 결정 후보. `BACKEND-003` 완료 |
-| `GET` | `/api/account` | 시뮬레이션 계좌 자산 현황. `BACKEND-004` 완료 |
-| `GET` | `/api/agents/analysis` | 분석 에이전트 단계. `BACKEND-004` 완료 |
-| `GET` | `/api/agents/verification` | 검증 에이전트 단계. `BACKEND-004` 완료 |
-| `GET` | `/api/agents/execution` | 실행 에이전트 단계. `BACKEND-004` 완료 |
-| `GET` | `/api/companies/{code}` | 기업 상세 가상 근거 |
-| `GET` | `/api/approvals` | 승인 대기 목록 |
-| `POST` | `/api/approvals/{id}/approve` | 로컬 상태에서 모의승인 처리. `BACKEND-005` 완료 |
-| `POST` | `/api/approvals/{id}/reject` | 로컬 상태에서 반려 처리. `BACKEND-005` 완료 |
-| `GET` | `/api/audit-events` | 감사 로그 |
-| `GET` | `/api/policies` | 투자 정책 설정값 |
-| `PUT` | `/api/policies` | 로컬 정책 설정 저장 |
+| `GET` | `/api/health` | 백엔드 상태 확인 |
+| `GET` | `/api/dashboard` | 투자 운영 대시보드 |
+| `GET` | `/api/account` | 계좌 |
+| `GET` | `/api/agents/analysis` | 분석 에이전트 |
+| `GET` | `/api/agents/verification` | 검증 에이전트 |
+| `GET` | `/api/agents/execution` | 실행 에이전트 |
+| `GET` | `/api/approvals` | 승인 대기 |
+| `POST` | `/api/approvals/{id}/approve` | 승인 대기 · 모의승인 |
+| `POST` | `/api/approvals/{id}/reject` | 승인 대기 · 반려 |
 | `GET` | `/api/risk-alerts` | 리스크 알림 |
-| `GET` | `/api/rebalance-plan` | 전략 조정 데이터 |
+| `GET` | `/api/trade-history` | 모의 거래 내역 |
+| `GET` | `/api/portfolio-health` | 포트폴리오 건강 |
 | `GET` | `/api/evidence-packets` | 승인 전 근거 패킷 |
+| `GET` | `/api/audit-logs` | 감사 로그 |
+| `GET` | `/api/decision-review` | 결정 회고 |
+| `GET` | `/api/agent-role-status` | 에이전트 역할 상태 |
+| `GET` | `/api/weekly-report` | 주간 투자 리포트 |
+| `GET` | `/api/tax-fee-impact` | 세금·수수료 영향 점검 |
+| `GET` | `/api/portfolio-change-compare` | 포트폴리오 변경 전/후 비교 |
+| `GET` | `/api/rebalance-plan` | 전략 조정 |
+| `GET` | `/api/backtest-summary` | 백테스트 요약 |
+| `GET` | `/api/company-detail` | 기업 상세 |
+| `GET` | `/api/data-connections` | 데이터 연결 상태 |
+| `GET` | `/api/notification-settings` | 알림 설정 |
+| `GET` | `/api/policy-settings` | 투자 정책 |
+| `GET` | `/api/stress-test` | 스트레스 테스트 |
 
-모든 `POST`, `PUT`은 실제 금융 행동이 아니라 로컬 데모 상태만 바꾼다.
+모든 `POST`는 실제 금융 행동이 아니라 로컬 데모 상태만 바꾼다. 정책·알림 설정의 "가상 적용"·토글은 저장 API 없이 프론트 화면 상태로만 남는다.

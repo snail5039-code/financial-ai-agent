@@ -1,8 +1,14 @@
 import { useMemo, useState } from "react";
+import { getRiskAlerts } from "../api/riskAlerts";
 import { AppShell } from "../components/AppShell";
-import { riskAlertsSafetyCopy, riskEvents, type RiskCategory, type RiskEvent, type RiskSeverity } from "../fixtures/riskAlerts";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import { formatTimeOfDay } from "../lib/format";
+import type { RiskAlertsData, RiskCategory, RiskEvent, RiskSeverity, PageKey } from "../types/dashboard";
 import "./RiskAlertsPage.css";
+
+type SeverityFilter = "all" | RiskSeverity;
+type CategoryFilter = "all" | RiskCategory;
 
 interface RiskAlertsPageProps {
   activePage: PageKey;
@@ -10,24 +16,36 @@ interface RiskAlertsPageProps {
 }
 
 export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) {
-  const [severity, setSeverity] = useState<RiskSeverity>("all");
-  const [category, setCategory] = useState<RiskCategory>("all");
-  const [selectedId, setSelectedId] = useState(riskEvents[0].id);
+  const state = useFixture<RiskAlertsData>(() => getRiskAlerts(), "risk-alerts");
+  const [severity, setSeverity] = useState<SeverityFilter>("all");
+  const [category, setCategory] = useState<CategoryFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const visibleEvents = useMemo(
-    () => riskEvents.filter((event) => (severity === "all" || event.severity === severity) && (category === "all" || event.category === category)),
-    [severity, category]
+  const fallback = renderFixtureFallback(state, "리스크 알림");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const riskEvents = envelope.data.events;
+
+  const visibleEvents = riskEvents.filter(
+    (event) => (severity === "all" || event.severity === severity) && (category === "all" || event.category === category)
   );
   const selectedEvent = visibleEvents.find((event) => event.id === selectedId) ?? visibleEvents[0] ?? null;
 
-  function updateSeverity(nextSeverity: RiskSeverity) {
-    const nextVisible = riskEvents.filter((event) => (nextSeverity === "all" || event.severity === nextSeverity) && (category === "all" || event.category === category));
+  function updateSeverity(nextSeverity: SeverityFilter) {
+    const nextVisible = riskEvents.filter(
+      (event) => (nextSeverity === "all" || event.severity === nextSeverity) && (category === "all" || event.category === category)
+    );
     setSeverity(nextSeverity);
     setSelectedId(nextVisible[0]?.id ?? "");
   }
 
-  function updateCategory(nextCategory: RiskCategory) {
-    const nextVisible = riskEvents.filter((event) => (severity === "all" || event.severity === severity) && (nextCategory === "all" || event.category === nextCategory));
+  function updateCategory(nextCategory: CategoryFilter) {
+    const nextVisible = riskEvents.filter(
+      (event) => (severity === "all" || event.severity === severity) && (nextCategory === "all" || event.category === nextCategory)
+    );
     setCategory(nextCategory);
     setSelectedId(nextVisible[0]?.id ?? "");
   }
@@ -52,7 +70,7 @@ export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) 
         <div>
           <span>심각도</span>
           <div className="segments">
-            {(["all", "중대", "높음", "보통", "낮음"] as RiskSeverity[]).map((value) => (
+            {(["all", "중대", "높음", "보통", "낮음"] as SeverityFilter[]).map((value) => (
               <button className={severity === value ? "selected" : ""} key={value} type="button" aria-pressed={severity === value} onClick={() => updateSeverity(value)}>
                 {value === "all" ? "전체" : value}
               </button>
@@ -62,7 +80,7 @@ export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) 
         <div>
           <span>카테고리</span>
           <div className="segments risk-category-filters">
-            {(["all", "정책", "출처", "시장", "승인", "데이터"] as RiskCategory[]).map((value) => (
+            {(["all", "정책", "출처", "시장", "승인", "데이터"] as CategoryFilter[]).map((value) => (
               <button className={category === value ? "selected" : ""} key={value} type="button" aria-pressed={category === value} onClick={() => updateCategory(value)}>
                 {value === "all" ? "전체" : value}
               </button>
@@ -72,7 +90,7 @@ export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) 
       </section>
 
       <section className="event-section" aria-labelledby="event-title">
-        <div className="event-head"><h2 id="event-title">화면용 이벤트 목록</h2><span>표시 {visibleEvents.length}건 · 기준 시각 2026.08.26 15:10 KST</span></div>
+        <div className="event-head"><h2 id="event-title">화면용 이벤트 목록</h2><span>표시 {visibleEvents.length}건 · 기준 시각 {formatTimeOfDay(envelope.dataAsOf)} KST</span></div>
         <div className="event-columns" aria-hidden="true"><span>이벤트 / 시각</span><span>알림</span><span>결정 ID</span><span>카테고리</span><span>심각도</span><span>상태</span></div>
         {visibleEvents.length ? (
           <div className="event-list" role="listbox" aria-label="리스크 이벤트 목록">
@@ -87,7 +105,7 @@ export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) 
           </div>
         )}
       </section>
-      <footer className="risk-disclaimer">{riskAlertsSafetyCopy}</footer>
+      <footer className="risk-disclaimer">{envelope.data.safetyCopy}</footer>
     </section>
   );
 
@@ -118,19 +136,19 @@ export function RiskAlertsPage({ activePage, onNavigate }: RiskAlertsPageProps) 
           )}
         </nav>
       </div>
-      <footer>{riskAlertsSafetyCopy}</footer>
+      <footer>{envelope.data.safetyCopy}</footer>
     </aside>
   );
 
-  return <AppShell title="리스크 알림" accountLabel="시뮬레이션 계좌" lastSync="15:10" activePage={activePage} onNavigate={onNavigate} main={main} inspector={inspector} />;
+  return <AppShell title="리스크 알림" accountLabel="시뮬레이션 계좌" lastSync={formatTimeOfDay(envelope.dataAsOf)} activePage={activePage} onNavigate={onNavigate} main={main} inspector={inspector} />;
 }
 
 function RiskEventRow({ event, selected, onSelect }: { event: RiskEvent; selected: boolean; onSelect: (id: string) => void }) {
   return (
     <button className={selected ? "event-row selected" : "event-row"} type="button" role="option" aria-selected={selected} data-severity={event.severity} onClick={() => onSelect(event.id)}>
-      <span><strong>{event.id}</strong><small>08.26 {event.time}</small></span>
+      <span><strong>{event.id}</strong><small>08.26 {event.occurredAt}</small></span>
       <span><strong>{event.title}</strong><small>화면용 가상 알림</small></span>
-      <span>{event.decision}</span>
+      <span>{event.decisionRef}</span>
       <span>{event.category}</span>
       <span className="severity">{event.severity}</span>
       <span className="event-status">{event.status}</span>
@@ -141,7 +159,7 @@ function RiskEventRow({ event, selected, onSelect }: { event: RiskEvent; selecte
 function RiskEventDetail({ event }: { event: RiskEvent }) {
   return (
     <>
-      <section><h3>이벤트 상태</h3><dl><div><dt>심각도</dt><dd>{event.severity}</dd></div><div><dt>카테고리</dt><dd>{event.category}</dd></div><div><dt>관련 결정</dt><dd>{event.decision}</dd></div><div><dt>상태</dt><dd>{event.status}</dd></div></dl></section>
+      <section><h3>이벤트 상태</h3><dl><div><dt>심각도</dt><dd>{event.severity}</dd></div><div><dt>카테고리</dt><dd>{event.category}</dd></div><div><dt>관련 결정</dt><dd>{event.decisionRef}</dd></div><div><dt>상태</dt><dd>{event.status}</dd></div></dl></section>
       <section><h3>원인과 사용자 확인</h3><div className="cause-box"><strong>원인</strong><p>{event.cause}</p></div><div className="check-box"><strong>권장 사용자 확인</strong><p>{event.action}</p></div></section>
       <section><h3>정책과 안전 경계</h3><dl><div><dt>관련 정책</dt><dd>{event.policy}</dd></div><div><dt>데이터 상태</dt><dd>미연결</dd></div><div><dt>외부 요청</dt><dd>0건</dd></div><div><dt>실제 주문·계좌</dt><dd>없음</dd></div></dl></section>
     </>

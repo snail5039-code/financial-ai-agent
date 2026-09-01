@@ -44,3 +44,21 @@ DEC_1042 = DecisionFacts(
 DEC_1042_TARGET_WEIGHT_FROM = 6.65
 DEC_1042_TARGET_WEIGHT_TO = 7.20
 DEC_1042_EXPIRES_AT = "2026-08-27T14:42:00+09:00"
+
+DEC_1043 = DecisionFacts(
+    id="DEC-1043",
+    company="NAVER",
+    code="035420",
+    side="매도",
+    quantity=8,
+    price=220_000,
+)
+
+DEC_1044 = DecisionFacts(
+    id="DEC-1044",
+    company="KODEX 200",
+    code="069500",
+    side="매수",
+    quantity=20,
+    price=35_000,
+)

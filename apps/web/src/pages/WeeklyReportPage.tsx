@@ -1,15 +1,9 @@
 import { useState } from "react";
+import { getWeeklyReport } from "../api/weeklyReport";
 import { AppShell } from "../components/AppShell";
-import {
-  reportDetails,
-  reportRanges,
-  reportRisks,
-  reportRows,
-  weeklyReportSafetyCopy,
-  type ReportRangeKey,
-  type ReportTopicKey
-} from "../fixtures/weeklyReport";
-import type { PageKey } from "../types/dashboard";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
+import type { PageKey, ReportRangeKey, ReportTopicKey, WeeklyReportData } from "../types/dashboard";
 import "./WeeklyReportPage.css";
 
 interface WeeklyReportPageProps {
@@ -18,12 +12,21 @@ interface WeeklyReportPageProps {
 }
 
 export function WeeklyReportPage({ activePage, onNavigate }: WeeklyReportPageProps) {
+  const state = useFixture<WeeklyReportData>(() => getWeeklyReport(), "weekly-report");
   const [rangeKey, setRangeKey] = useState<ReportRangeKey>("week");
   const [topicKey, setTopicKey] = useState<ReportTopicKey>("samsung");
+
+  const fallback = renderFixtureFallback(state, "주간 투자 리포트");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const { ranges: reportRanges, rows: reportRows, risks: reportRisks, details: reportDetails, safetyCopy } = envelope.data;
   const range = reportRanges[rangeKey];
   const detail = reportDetails[topicKey];
-  const facts = typeof detail.facts === "function" ? detail.facts(range) : detail.facts;
-  const summary = typeof detail.summary === "function" ? detail.summary(range) : detail.summary;
+  const facts = detail.factsByRange[rangeKey];
+  const summary = detail.summaryByRange[rangeKey];
 
   function selectRange(nextRange: ReportRangeKey) {
     setRangeKey(nextRange);
@@ -88,7 +91,7 @@ export function WeeklyReportPage({ activePage, onNavigate }: WeeklyReportPagePro
           </button>
         ))}
       </section>
-      <footer className="weekly-disclaimer">{weeklyReportSafetyCopy}</footer>
+      <footer className="weekly-disclaimer">{safetyCopy}</footer>
     </section>
   );
 
@@ -102,7 +105,7 @@ export function WeeklyReportPage({ activePage, onNavigate }: WeeklyReportPagePro
         </header>
         <section>
           <h3>계산 근거</h3>
-          <dl>{facts.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
+          <dl>{facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
         </section>
         <section>
           <h3>연결 화면</h3>
@@ -117,7 +120,7 @@ export function WeeklyReportPage({ activePage, onNavigate }: WeeklyReportPagePro
           <p>모든 수치와 기록은 화면용 고정 예시입니다. 실제 금융 데이터, 주문, 계좌, API, DB와 연결되지 않습니다.</p>
         </section>
       </div>
-      <footer>{weeklyReportSafetyCopy}</footer>
+      <footer>{safetyCopy}</footer>
     </aside>
   );
 

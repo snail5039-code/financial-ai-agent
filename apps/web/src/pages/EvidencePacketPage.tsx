@@ -1,12 +1,13 @@
-import { ArrowRight, CheckCircle2, ShieldAlert } from "lucide-react";
+import { ArrowRight, ShieldAlert } from "lucide-react";
+import { getEvidencePackets } from "../api/evidencePackets";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { evidencePackets } from "../fixtures/evidencePackets";
-import type { PageKey, Tone } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatPercent, formatTimeOfDay, formatWon } from "../lib/format";
+import type { EvidencePacketsData, PageKey, Tone } from "../types/dashboard";
 import "./EvidencePacketPage.css";
-
-const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
 interface EvidencePacketPageProps {
   activePage: PageKey;
@@ -18,15 +19,26 @@ function toneClass(tone: Tone) {
 }
 
 export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPageProps) {
-  const packet = evidencePackets[0];
-  const lastSync = packet.dataAsOf.slice(11, 16);
+  const state = useFixture<EvidencePacketsData>(() => getEvidencePackets(), "evidence-packets");
+
+  const fallback = renderFixtureFallback(state, "근거 패킷");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const packet = envelope.data.packets[0];
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
+  const displayStatus =
+    packet.decisionStatus === "approved" ? "모의승인됨" : packet.decisionStatus === "rejected" ? "반려됨" : packet.status;
+  const displayTone: Tone = packet.decisionStatus === "pending" ? packet.statusTone : "info";
 
   const main = (
     <section className="evidence-main" aria-labelledby="evidence-title">
       <header className="evidence-summary">
         <div>
           <span className="eyebrow">승인 전 근거 패킷</span>
-          <h1 id="evidence-title">{packet.id} · {packet.status}</h1>
+          <h1 id="evidence-title">{packet.id} · {displayStatus}</h1>
           <p>{packet.summary}</p>
         </div>
         <DataBoundaryNotice />
@@ -43,11 +55,11 @@ export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPag
         </div>
         <div>
           <span>외부 연결</span>
-          <strong>{packet.externalConnections}건</strong>
+          <strong>{envelope.externalConnections}건</strong>
         </div>
         <div>
           <span>실행 상태</span>
-          <strong>{packet.executed ? "실행됨" : "실행 안 됨"}</strong>
+          <strong>{envelope.executed ? "실행됨" : "실행 안 됨"}</strong>
         </div>
       </section>
 
@@ -57,12 +69,12 @@ export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPag
           <h2 id="decision-card-title">{packet.company} {packet.quantity}주 지정가 매수</h2>
           <p>{packet.code} · {packet.proposal}</p>
         </div>
-        <StatusPill tone={packet.statusTone}>{packet.status}</StatusPill>
+        <StatusPill tone={displayTone}>{displayStatus}</StatusPill>
         <dl>
-          <div><dt>지정가</dt><dd>{won(packet.price)}</dd></div>
-          <div><dt>최대 금액</dt><dd>{won(packet.amount)}</dd></div>
-          <div><dt>목표 비중</dt><dd>{packet.targetWeight}</dd></div>
-          <div><dt>만료</dt><dd>{packet.expiresAt}</dd></div>
+          <div><dt>지정가</dt><dd>{formatWon(packet.price)}</dd></div>
+          <div><dt>최대 금액</dt><dd>{formatWon(packet.amount)}</dd></div>
+          <div><dt>목표 비중</dt><dd>{formatPercent(packet.targetWeightFrom)} → {formatPercent(packet.targetWeightTo)}</dd></div>
+          <div><dt>만료</dt><dd>{formatTimeOfDay(packet.expiresAt)}</dd></div>
         </dl>
       </section>
 
@@ -102,7 +114,7 @@ export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPag
               <h2>{packet.company}</h2>
               <span>{packet.id} · {packet.code}</span>
             </div>
-            <StatusPill tone={packet.statusTone}>{packet.status}</StatusPill>
+            <StatusPill tone={displayTone}>{displayStatus}</StatusPill>
           </div>
         </header>
 
@@ -111,7 +123,7 @@ export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPag
           <strong>{packet.calculation.formula} = {packet.calculation.result}</strong>
           <dl>
             <div><dt>수량</dt><dd>{packet.quantity}주</dd></div>
-            <div><dt>지정가</dt><dd>{won(packet.price)}</dd></div>
+            <div><dt>지정가</dt><dd>{formatWon(packet.price)}</dd></div>
             <div><dt>반올림</dt><dd>{packet.calculation.rounding}</dd></div>
           </dl>
         </section>
@@ -159,7 +171,7 @@ export function EvidencePacketPage({ activePage, onNavigate }: EvidencePacketPag
 
       <div className="approval-panel evidence-actions">
         <div className="expiry">
-          <span>이 패킷은 <b>{packet.expiresAt}</b>까지 승인 대기와 연결됩니다.</span>
+          <span>이 패킷은 <b>{formatTimeOfDay(packet.expiresAt)}</b>까지 승인 대기와 연결됩니다.</span>
           <small>{packet.safetyCopy}</small>
         </div>
         <button type="button" onClick={() => onNavigate("approvals")}>

@@ -90,19 +90,9 @@ npm run dev
 
 브라우저에서 `http://127.0.0.1:5173/`을 엽니다. 프론트는 절대 URL을 호출하지 않고 같은 출처 상대 경로 `/api/*`만 호출하며, Vite dev 서버가 이를 로컬 백엔드로 전달합니다.
 
-현재 구현된 백엔드 엔드포인트는 다음과 같습니다.
+React 23개 화면 전부가 백엔드 `GET` 엔드포인트에 연결돼 있습니다. 프론트 `src/fixtures/` 디렉터리는 완전히 비었습니다. 전체 엔드포인트 목록은 `docs/fullstack/03-data-api-contract.md`를 참고하세요.
 
-```text
-http://127.0.0.1:8000/api/health
-http://127.0.0.1:8000/api/dashboard
-http://127.0.0.1:8000/api/account
-http://127.0.0.1:8000/api/agents/analysis
-http://127.0.0.1:8000/api/agents/verification
-http://127.0.0.1:8000/api/agents/execution
-http://127.0.0.1:8000/api/approvals
-```
-
-`/api/approvals/{id}/approve`와 `/api/approvals/{id}/reject`는 `POST` 전용입니다.
+`/api/approvals/{id}/approve`와 `/api/approvals/{id}/reject`만 `POST`이고 나머지는 전부 `GET`입니다.
 
 `/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태입니다.
 

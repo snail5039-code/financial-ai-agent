@@ -2,10 +2,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.account import router as account_router
+from app.routers.agent_role_status import router as agent_role_status_router
 from app.routers.agents import router as agents_router
 from app.routers.approvals import router as approvals_router
+from app.routers.audit_logs import router as audit_logs_router
+from app.routers.backtest_summary import router as backtest_summary_router
+from app.routers.company_detail import router as company_detail_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.data_connections import router as data_connections_router
+from app.routers.decision_review import router as decision_review_router
+from app.routers.evidence_packets import router as evidence_packets_router
 from app.routers.health import router as health_router
+from app.routers.notification_settings import router as notification_settings_router
+from app.routers.policy_settings import router as policy_settings_router
+from app.routers.portfolio_change_compare import router as portfolio_change_compare_router
+from app.routers.portfolio_health import router as portfolio_health_router
+from app.routers.rebalance_plan import router as rebalance_plan_router
+from app.routers.risk_alerts import router as risk_alerts_router
+from app.routers.stress_test import router as stress_test_router
+from app.routers.tax_fee_impact import router as tax_fee_impact_router
+from app.routers.trade_history import router as trade_history_router
+from app.routers.weekly_report import router as weekly_report_router
 from app.store.approvals import ApprovalStore
 
 # The Vite dev server proxies /api to this app, so the browser normally makes
@@ -39,6 +56,23 @@ def create_app() -> FastAPI:
     app.include_router(account_router)
     app.include_router(agents_router)
     app.include_router(approvals_router)
+    app.include_router(risk_alerts_router)
+    app.include_router(trade_history_router)
+    app.include_router(portfolio_health_router)
+    app.include_router(evidence_packets_router)
+    app.include_router(audit_logs_router)
+    app.include_router(decision_review_router)
+    app.include_router(agent_role_status_router)
+    app.include_router(weekly_report_router)
+    app.include_router(tax_fee_impact_router)
+    app.include_router(portfolio_change_compare_router)
+    app.include_router(rebalance_plan_router)
+    app.include_router(backtest_summary_router)
+    app.include_router(company_detail_router)
+    app.include_router(data_connections_router)
+    app.include_router(notification_settings_router)
+    app.include_router(policy_settings_router)
+    app.include_router(stress_test_router)
     return app
 
 
