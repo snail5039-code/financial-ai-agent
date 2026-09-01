@@ -78,7 +78,13 @@ export interface NavItem {
  * formatting lives in `src/lib/format.ts`.
  */
 
-/** Safety metadata every local fixture response carries. */
+/**
+ * Safety metadata every local fixture response carries. `externalConnections`
+ * is 0 for every screen except Company Detail, which honestly reports 1 while
+ * its filings just came from a live, read-only OpenDART call — see
+ * `getCompanyDetail` in `../api/companyDetail` for the one place a non-zero
+ * value is expected and allowed through `assertFixtureEnvelope`.
+ */
 export interface FixtureEnvelope<TData> {
   generatedAt: string;
   dataAsOf: string;
@@ -86,7 +92,7 @@ export interface FixtureEnvelope<TData> {
   isMock: true;
   paperOnly: true;
   executed: false;
-  externalConnections: 0;
+  externalConnections: number;
   disclaimer: string;
   data: TData;
 }

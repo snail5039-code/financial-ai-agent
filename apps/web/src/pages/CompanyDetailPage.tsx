@@ -128,9 +128,13 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
       <section className="filings" aria-labelledby="filings-title">
         <div className="company-section-label">
           <h2 id="filings-title">공시·출처</h2>
-          <span>OpenDART 미연결 · 실제 접수번호 아님</span>
+          <span>{companyDetail.filingsConnected ? "OpenDART 실제 공시 연결" : "OpenDART 미연결 · 실제 접수번호 아님"}</span>
         </div>
-        <div className="filing-list" role="listbox" aria-label="화면 예시 공시">
+        <div
+          className="filing-list"
+          role="listbox"
+          aria-label={companyDetail.filingsConnected ? "OpenDART 실제 공시" : "화면 예시 공시"}
+        >
           {companyDetail.filings.map((filing) => (
             <button
               className="filing-choice"
@@ -146,7 +150,11 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
             </button>
           ))}
         </div>
-        <p className="filing-warning">실제 공시 검증 미수행 · 화면용 가상 예시 · 투자 판단·주문 사용 금지</p>
+        <p className="filing-warning">
+          {companyDetail.filingsConnected
+            ? "OpenDART 실제 공시 목록 · 원문 내용은 검증하지 않음 · 투자 판단·주문 사용 금지"
+            : "실제 공시 검증 미수행 · 화면용 가상 예시 · 투자 판단·주문 사용 금지"}
+        </p>
       </section>
     </article>
   );
@@ -157,7 +165,11 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
         <header>
           <span>근거 검증 인스펙터</span>
           <h2>{selected.title}</h2>
-          <p>{selected.kind === "filing" ? "화면 예시 공시 · 선택됨" : `${selected.kind === "positive" ? "긍정 근거" : "반대 근거"} · 선택됨`}</p>
+          <p>
+            {selected.kind === "filing"
+              ? `${companyDetail.filingsConnected ? "OpenDART 실제 공시" : "화면 예시 공시"} · 선택됨`
+              : `${selected.kind === "positive" ? "긍정 근거" : "반대 근거"} · 선택됨`}
+          </p>
         </header>
         <section>
           <h3>선택 항목 설명</h3>
@@ -166,7 +178,7 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
         <section>
           <h3>검증 상태</h3>
           <dl>
-            <div><dt>실제 공시 원문</dt><dd>미연결</dd></div>
+            <div><dt>실제 공시 원문</dt><dd>{companyDetail.filingsConnected ? "OpenDART 연결됨" : "미연결"}</dd></div>
             <div><dt>실제 수치 검산</dt><dd>미수행</dd></div>
             <div><dt>외부 시세/API</dt><dd>미연결</dd></div>
             <div><dt>판단 사용 가능</dt><dd className="loss">금지</dd></div>
@@ -186,7 +198,10 @@ export function CompanyDetailPage({ activePage, onNavigate }: CompanyDetailPageP
         <button type="button" onClick={() => onNavigate("dashboard")}>
           <ArrowLeft size={13} /> 투자 운영 대시보드로 돌아가기
         </button>
-        <p><ShieldAlert size={12} /> 실제 시세·공시·계좌·API 미연결</p>
+        <p>
+          <ShieldAlert size={12} />{" "}
+          {companyDetail.filingsConnected ? "실제 시세·계좌·API 미연결 · 공시는 OpenDART 실제 연결" : "실제 시세·공시·계좌·API 미연결"}
+        </p>
       </div>
     </aside>
   );

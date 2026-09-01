@@ -537,9 +537,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["AccountData"];
@@ -635,9 +634,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["AgentRoleStatusData"];
@@ -739,9 +737,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["AgentScreenData"];
@@ -837,9 +834,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["ApprovalOrder"];
@@ -931,9 +927,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["ApprovalsData"];
@@ -1016,9 +1011,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["AuditLogData"];
@@ -1145,9 +1139,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["BacktestSummaryData"];
@@ -1198,6 +1191,11 @@ export interface components {
             evidence: components["schemas"]["CompanyEvidenceItem"][];
             /** Filings */
             filings: components["schemas"]["CompanyEvidenceItem"][];
+            /**
+             * Filingsconnected
+             * @default false
+             */
+            filingsConnected: boolean;
         };
         /** CompanyDetailEnvelope */
         CompanyDetailEnvelope: {
@@ -1228,9 +1226,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["CompanyDetailData"];
@@ -1437,9 +1434,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["DashboardData"];
@@ -1608,9 +1604,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["DataConnectionsData"];
@@ -1663,9 +1658,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["DecisionReviewData"];
@@ -1840,9 +1834,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["EvidencePacketsData"];
@@ -2011,9 +2004,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["NotificationSettingsData"];
@@ -2130,9 +2122,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["PolicySettingsData"];
@@ -2217,9 +2208,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["PortfolioChangeCompareData"];
@@ -2277,9 +2267,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["PortfolioHealthData"];
@@ -2330,9 +2319,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["RebalancePlanData"];
@@ -2519,9 +2507,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["RiskAlertsData"];
@@ -2671,9 +2658,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["StressTestData"];
@@ -2716,9 +2702,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["TaxFeeImpactData"];
@@ -2809,9 +2794,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["TradeHistoryData"];
@@ -2928,9 +2912,8 @@ export interface components {
             /**
              * Externalconnections
              * @default 0
-             * @constant
              */
-            externalConnections: 0;
+            externalConnections: number;
             /** Disclaimer */
             disclaimer: string;
             data: components["schemas"]["WeeklyReportData"];

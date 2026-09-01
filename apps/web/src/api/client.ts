@@ -74,16 +74,25 @@ async function request<TResponse>(path: string, init?: RequestInit): Promise<TRe
 
 /**
  * Refuses any payload that does not declare itself as a mock, paper-only,
- * unexecuted, zero-connection fixture. A response that fails this check is not
- * rendered at all, so a screen can never present non-mock data as if it were
- * part of the mockup.
+ * unexecuted fixture with an expected `externalConnections` count. A response
+ * that fails this check is not rendered at all, so a screen can never present
+ * non-mock data as if it were part of the mockup.
+ *
+ * `allowedExternalConnections` defaults to "must be exactly 0" for every
+ * screen. Only `getCompanyDetail` passes `[0, 1]`, since its filings can
+ * honestly be 1 (a live OpenDART call) — see `FixtureEnvelope` in
+ * `../types/dashboard`. Nowhere else should ever need a value other than the
+ * default; that's what keeps this check meaningful.
  */
-function assertFixtureEnvelope<TData>(payload: FixtureEnvelope<TData>): FixtureEnvelope<TData> {
+function assertFixtureEnvelope<TData>(
+  payload: FixtureEnvelope<TData>,
+  allowedExternalConnections: readonly number[] = [0]
+): FixtureEnvelope<TData> {
   const isSafeFixture =
     payload?.isMock === true &&
     payload?.paperOnly === true &&
     payload?.executed === false &&
-    payload?.externalConnections === 0;
+    allowedExternalConnections.includes(payload?.externalConnections);
 
   if (!isSafeFixture) {
     throw new ApiError("응답의 모의 데이터 안전 표시가 확인되지 않아 화면에 사용하지 않습니다.");
@@ -92,8 +101,11 @@ function assertFixtureEnvelope<TData>(payload: FixtureEnvelope<TData>): FixtureE
   return payload;
 }
 
-export async function getFixture<TData>(path: string): Promise<FixtureEnvelope<TData>> {
-  return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path));
+export async function getFixture<TData>(
+  path: string,
+  allowedExternalConnections?: readonly number[]
+): Promise<FixtureEnvelope<TData>> {
+  return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path), allowedExternalConnections);
 }
 
 /**

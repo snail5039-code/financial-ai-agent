@@ -4,7 +4,7 @@
 
 ## ⚠️ 미커밋 작업 있음
 
-작업 디렉터리에 `FRONTEND-006`~`FRONTEND-011`이 전부 완료됐지만 아직 커밋하지 않았다 (이 프로젝트는 사용자가 명시적으로 "커밋"이라고 지시할 때만 커밋한다). `git status`로 보면 아래가 미커밋 상태다:
+작업 디렉터리에 `FRONTEND-006`~`FRONTEND-012`가 전부 완료됐지만 아직 커밋하지 않았다 (이 프로젝트는 사용자가 명시적으로 "커밋"이라고 지시할 때만 커밋한다). `git status`로 보면 아래가 미커밋 상태다:
 
 - `apps/web/package.json`/`package-lock.json`, `apps/web/vite.config.ts`, `apps/web/src/types/dashboard.ts`(1112→352줄), 신규 `apps/web/src/types/api.generated.ts`, 신규 `apps/api/scripts/`(OpenAPI export 스크립트) — **FRONTEND-006** (OpenAPI→TS 타입 생성)
 - `apps/web/src/components/AppShell.tsx`, `apps/web/src/api/approvals.ts`, `apps/web/src/pages/ApprovalQueuePage.tsx`, 신규 `apps/web/src/lib/useApprovalsPendingCount.ts` — **FRONTEND-006** (사이드바 「승인 대기」 배지 하드코딩 제거)
@@ -13,9 +13,10 @@
 - `apps/api/app/schemas/{agent_role_status,agents,decision_review,risk_alerts,tax_fee_impact,trade_history}.py` — **FRONTEND-009** (`linkPage`/`page` 필드를 `str`에서 전용 `Literal`로 좁힘, `types/dashboard.ts`의 관련 오버라이드 6곳 제거)
 - 신규 `apps/web/e2e/all-screens-load.spec.ts` — **FRONTEND-010** (23개 화면 전부를 순회하며 에러 화면·JS 예외 부재를 확인하는 얕은 회귀 스윕 추가)
 - `apps/api/app/store/approvals.py`(SQLite 재작성), `apps/api/app/main.py`(`APPROVALS_DB_PATH` 환경변수, 기본 파일 경로), `apps/web/playwright.config.ts`(테스트는 `:memory:` 강제) — **FRONTEND-011** (`ApprovalStore`를 메모리 딕셔너리에서 SQLite로 전환, 사용자 요청)
-- `.gitignore`, `README.md`, `docs/handoff/01-current-state.md`(이 파일), `docs/handoff/04-next-candidates.md`도 위 작업들에 맞춰 같이 수정했다.
+- 신규 `apps/api/app/config.py`, `apps/api/app/integrations/`, `apps/api/.env.example`, `apps/api/app/schemas/common.py`(`externalConnections` 타입 완화), `apps/api/app/schemas/company_detail.py`(`filingsConnected` 필드), `apps/api/app/routers/company_detail.py`, `apps/api/pyproject.toml`(httpx를 런타임 의존성으로, `python-dotenv` 추가), `apps/api/tests/test_company_detail.py`, `apps/web/src/api/client.ts`·`companyDetail.ts`, `apps/web/src/pages/CompanyDetailPage.tsx`, `apps/web/src/types/dashboard.ts`, 신규 `apps/web/e2e/opendart-company-detail.spec.ts` — **FRONTEND-012** (OpenDART 공시 연동, 사용자 요청)
+- `.gitignore`, `README.md`, `docs/handoff/01-current-state.md`(이 파일), `docs/handoff/04-next-candidates.md`, `docs/fullstack/00-readme.md`·`01-overview.md`·`04-frontend-backend-scope.md`·`05-safety-validation.md`도 위 작업들에 맞춰 같이 수정했다.
 
-**전부 검증 완료**: 백엔드 `uv run pytest`(venv 직접 실행 시 `apps/api/.venv/Scripts/python.exe -m pytest -q`) 110개 통과, 프론트 `npm run typecheck`·`npm run build` 통과, `npm run test:e2e`(Playwright) 3개 통과(연속 두 번 실행해 상태 오염 없음도 확인). 커밋 여부·범위는 사용자에게 확인 후 진행한다.
+**전부 검증 완료**: 백엔드 `uv run pytest`(venv 직접 실행 시 `apps/api/.venv/Scripts/python.exe -m pytest -q`) 113개 통과, 프론트 `npm run typecheck`·`npm run build` 통과, `npm run test:e2e`(Playwright) 5개 통과(연속 실행해 상태 오염 없음도 확인). 커밋 여부·범위는 사용자에게 확인 후 진행한다.
 
 ## 저장소 상태
 
@@ -75,6 +76,15 @@
 - `FRONTEND-009`에서 `linkPage`/`page` 필드 타입 불일치를 고쳤다. `HealthCheck.linkPage`만 Pydantic `Literal`이고 `AgentWorkItem`/`TaxFeeOrder`/`DecisionReviewItem`/`AgentRoleStatusItem`/`RiskEvent`/`TradeRelatedLink`는 `str`이었다. 각 스키마 파일에 실제 fixture 값만 모은 전용 `Literal`(`AgentWorkItemLinkPage` 등)을 새로 만들어 좁혔다. 프론트에서 이 필드들을 `PageKey`로 좁히던 `Api<T, {linkPage: PageKey}>` 오버라이드 6곳이 이제 필요 없어져 `types/dashboard.ts`에서 지웠다(352줄). 백엔드 `pytest` 110개·프론트 `typecheck`/`build`/`test:e2e` 전부 통과.
 - `FRONTEND-010`에서 Playwright 커버리지를 넓혔다. 기존 3개(대시보드·내비게이션·승인)는 깊은 흐름 검증이고, 나머지 20개 화면은 손으로 클릭해야만 회귀를 잡을 수 있었다. `e2e/all-screens-load.spec.ts`를 추가해 23개 화면 전부를 순회하며 `FixtureFallback`의 에러 화면과 uncaught JS 예외가 없는지만 얕게 확인한다. 화면별 세부 내용은 검증하지 않지만, "화면이 아예 안 뜬다"류의 회귀는 이제 전체 화면에서 잡힌다. 연속 3회 실행해 안정성 확인.
 - `FRONTEND-011`에서 `ApprovalStore`를 SQLite로 전환했다(사용자가 Postgres 대안을 먼저 제안했으나, 로컬 단일 프로세스 데모에 외부 서비스 의존은 과하다고 판단해 SQLite로 확정). 4개 주문의 정적 사실(회사명·가격 등)은 그대로 `build_approval_orders()`에서 오고, 실제로 바뀌는 `decisionStatus`/`decidedAt`만 `approval_decisions` 테이블에 저장한다 — 재시작해도 결정이 없는 ID는 여전히 "pending"이라 재시딩이 필요 없는 구조. `ApprovalStore(db_path=":memory:")`가 기본값이라 `create_app()`을 인자 없이 호출하는 기존 21개 테스트 파일은 전혀 안 건드려도 격리가 유지된다. 실제 앱은 `app/main.py`가 `APPROVALS_DB_PATH` 환경변수(기본값 `apps/api/data/approvals.db`)로 실제 파일을 쓰고, Playwright e2e는 같은 변수를 `:memory:`로 오버라이드해 격리한다. FastAPI가 sync 라우터를 스레드풀에서 돌리는 점 때문에 `sqlite3.connect(..., check_same_thread=False)` + `threading.Lock`으로 접근을 직렬화했다. 브라우저로 DEC-1042 승인 후 서버를 완전히 재시작해 승인 상태가 유지되는 것, 나머지 3건은 그대로 pending인 것을 확인했다. 백엔드 `pytest` 110개(무변경), 프론트 `build`·`test:e2e`(연속 2회) 전부 통과.
+- `FRONTEND-012`에서 이 프로젝트 최초로 실제 외부 API(금융감독원 OpenDART 공시 조회)를 연결했다. 사용자가 명시적으로 요청했고, 처음엔 "완전 자동 실거래"까지 논의가 갔으나 그건 별도로 거절했다(사람 승인 없는 실제 금융 거래 실행은 Anthropic 운영 규칙과 이 프로젝트의 `AGENTS.md` 둘 다에서 금지). OpenDART는 계좌·금액과 무관한 읽기 전용 공개 데이터라 이번 범위에 포함했다.
+  - `app/config.py`(신규): `apps/api/.env`에서 `OPENDART_API_KEY`를 읽는다. `.env`는 git 미포함(`.env.example`만 커밋), 키는 사용자가 opendart.fss.or.kr에서 직접 무료 발급.
+  - `app/integrations/opendart.py`(신규): `corpCode.xml`(종목코드→corp_code 매핑, 최초 1회 다운로드 후 `apps/api/data/`에 캐시)과 `list.json`(최근 공시 목록) 호출. `httpx.AsyncClient` 사용, 이 앱에서 실제 외부 URL을 호출하는 유일한 파일이다.
+  - `app/routers/company_detail.py`: `OPENDART_API_KEY`가 설정돼 있고 호출이 성공하면 `filings`를 실제 공시로 교체하고 `filingsConnected: true`를 세팅. 키가 없거나 호출이 실패하면(네트워크 오류, rate limit, 빈 결과 등) 기존 fixture 플레이스홀더로 조용히 폴백 — 화면이 절대 깨지지 않는다.
+  - **핵심 설계 충돌과 해결**: `FixtureEnvelope.externalConnections`가 `Literal[0]`으로 타입 자체에 박혀 있어서(주석: "실제 연결은 이 계약으로 아예 표현할 수 없도록") OpenDART가 실제로 연결돼도 정직하게 표시할 방법이 없었다. 프론트도 `externalConnections === 0`이 아니면 응답을 통째로 거부한다(`assertFixtureEnvelope`). 사용자에게 두 가지 선택지(스키마를 정직하게 고치기 vs `externalConnections`는 0 유지하고 `filingsConnected`로만 표시)를 제시했고, "스키마 고치기"로 확정했다. `externalConnections`를 `Literal[0]` → `int`로 바꾸고, 기업 상세만 연결 성공 시 `1`을 보낸다. 프론트 `assertFixtureEnvelope`에 허용 목록 파라미터를 추가해 기본값은 여전히 `[0]`(다른 22개 화면은 그대로 엄격), `getCompanyDetail`만 `[0, 1]`을 넘긴다.
+  - 프론트 `CompanyDetailPage.tsx`의 하드코딩된 "OpenDART 미연결" 문구 4곳을 `filingsConnected` 기준 조건부로 바꿨다 — 안 그러면 실제로 연결된 뒤에도 화면이 "미연결"이라고 거짓말하게 된다.
+  - 검증: 백엔드에 mock 기반 테스트 3개 추가(성공/실패/빈 결과 폴백) — `httpx`로 실제 네트워크를 부르지 않고 `app.routers.company_detail.fetch_recent_disclosures`를 monkeypatch. 프론트는 실제 키가 없어 라이브 경로를 못 돌려봐서, Playwright에서 `page.route`로 응답을 가로채 "연결됨" 상태를 흉내 낸 e2e 테스트 1개 추가(`opendart-company-detail.spec.ts`). 백엔드 `pytest` 113개, 프론트 `build`·`test:e2e`(5개) 전부 통과. 브라우저로 키 없는 기본 상태(기존과 동일한 "미연결" 문구) 직접 확인.
+  - 문서: `docs/fullstack/00-readme.md`·`01-overview.md`·`04-frontend-backend-scope.md`·`05-safety-validation.md`의 "실제 외부 API 연결 안 함" 계열 문장에 OpenDART 예외를 명시. `05-safety-validation.md`의 금지 문자열 목록에서 "OpenDART API key"를 뺐다(이제 `app/integrations/opendart.py`·`app/config.py`에 한해 허용).
+  - **OpenDART 키 발급은 사용자가 차후로 미뤘다** — `apps/api/.env`는 아직 없고, 라이브 경로는 이번 세션에서 mock으로만 검증했다(실제 호출은 아직 안 해봄). 사용자가 opendart.fss.or.kr에서 키를 발급받아 `apps/api/.env`에 `OPENDART_API_KEY`를 채우면, README.md의 안내대로 백엔드를 재시작하고 실제 응답으로 한 번 더 확인한다.
 
 ## 최근 검증 메모
 

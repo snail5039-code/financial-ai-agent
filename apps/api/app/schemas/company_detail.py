@@ -70,6 +70,12 @@ class CompanyDetailData(BaseModel):
     metrics: list[CompanyMetric]
     evidence: list[CompanyEvidenceItem]
     filings: list[CompanyEvidenceItem]
+    # True only when `filings` just came back from a live OpenDART call this
+    # request. False (the default) covers both "no OPENDART_API_KEY configured"
+    # and "the call failed" — either way `filings` is the fixture's clearly
+    # labeled placeholder list. The frontend must not claim "실제 공시" unless
+    # this is true.
+    filingsConnected: bool = False
 
 
 class CompanyDetailEnvelope(FixtureEnvelope):

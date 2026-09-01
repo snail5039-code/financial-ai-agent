@@ -16,8 +16,14 @@ class FixtureEnvelope(BaseModel):
     """Common safety metadata carried by every local fixture response.
 
     Subclasses add a `data` field with the screen specific fixture body.
-    The safety flags are typed as literals so a real connection cannot be
-    represented by this contract at all.
+    `isMock`/`paperOnly`/`executed` are typed as literals so this contract can
+    never claim a real trade happened. `externalConnections` is a plain,
+    honest count instead: every screen still defaults to 0, except Company
+    Detail, which reports 1 while its filings just came from a live OpenDART
+    call (see app/routers/company_detail.py, app/integrations/opendart.py).
+    OpenDART is read-only public disclosure data with no account or money
+    involved — nothing else in this app is allowed to raise this above 0
+    without the same explicit, narrow justification.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,5 +34,5 @@ class FixtureEnvelope(BaseModel):
     isMock: Literal[True] = True
     paperOnly: Literal[True] = True
     executed: Literal[False] = False
-    externalConnections: Literal[0] = 0
+    externalConnections: int = 0
     disclaimer: str

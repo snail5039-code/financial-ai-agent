@@ -41,7 +41,7 @@
 - 구현된 라우터는 `GET /api/health`, `GET /api/dashboard`, `GET /api/account`, `GET /api/agents/{stage}`, `GET /api/approvals`, `POST /api/approvals/{id}/{approve|reject}`
 - `/api/health` 응답은 평면 JSON, 화면용 fixture 응답은 `data` 봉투 구조
 - `/api/approvals` 등 나머지 경로는 아직 미구현이며 404가 기대 상태
-- 실제 금융 데이터·계좌·주문·체결·공시·시세·환율·AI 실행·외부 API·운영 DB는 연결하지 않음
+- 실제 금융 데이터·계좌·주문·체결·시세·환율·AI 실행·운영 DB는 연결하지 않음. 예외: 기업 상세의 공시는 OpenDART에 실제 연결(2026-09-01~, `05-safety-validation.md` 참고)
 - 승인·반려 상태 변경은 후속 승인 흐름 단계에서만 메모리 fixture로 다룸
 
 ## 백엔드 2단계

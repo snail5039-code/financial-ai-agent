@@ -21,6 +21,11 @@ COMPANY_DETAIL_DATA_AS_OF = "2026-08-25T14:32:00+09:00"
 COMPANY_DETAIL_SOURCE_LABEL = "로컬 fixture"
 
 COMPANY_DETAIL_DISCLAIMER = "모의투자 · 가상 예시 · 실제 시세·공시·계좌·API 미연결 · 투자 권유 아님"
+# Only true once `filings` is live OpenDART data (see app/routers/company_detail.py) —
+# price/chart/metrics/account stay synthetic either way.
+COMPANY_DETAIL_DISCLAIMER_WITH_LIVE_FILINGS = (
+    "모의투자 · 가상 예시 · 시세·계좌 미연결 · 공시는 OpenDART 실제 데이터 · 투자 권유 아님"
+)
 
 
 def _samsung_holding():
