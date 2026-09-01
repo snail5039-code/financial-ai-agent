@@ -65,7 +65,9 @@ python -m http.server 4173
 http://127.0.0.1:4173/mockup/financial-dashboard/
 ```
 
-React/Vite 23개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트 5개 화면은 백엔드에서만 데이터를 받고, 나머지 18개 화면은 아직 프론트 로컬 fixture를 씁니다.
+React/Vite 23개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트·승인 대기 6개 화면은 백엔드에서만 데이터를 받고, 나머지 17개 화면은 아직 프론트 로컬 fixture를 씁니다.
+
+승인 대기 화면의 「모의승인」·「반려」 버튼은 이 프로젝트 최초의 쓰기 경로입니다. 클릭하면 로컬 백엔드의 메모리 상태가 실제로 바뀌고(서버를 재시작하면 초기화됩니다), 페이지를 새로고침해도 결정 상태가 유지됩니다. 물론 실제 주문·체결은 여전히 생성되지 않습니다.
 
 계좌와 세 에이전트 화면은 정적 목업에 대응 파일이 없습니다. 목업 사이드바에는 메뉴만 `href="#"`로 있었고 화면이 없었기 때문에, `FINANCIAL_AI_AGENT_IDEA.md`의 역할 정의를 근거로 React에만 새로 만들었습니다. 정적 목업은 19개 기준서로 동결합니다.
 
@@ -86,7 +88,7 @@ npm run dev
 
 브라우저에서 `http://127.0.0.1:5173/`을 엽니다. 프론트는 절대 URL을 호출하지 않고 같은 출처 상대 경로 `/api/*`만 호출하며, Vite dev 서버가 이를 로컬 백엔드로 전달합니다.
 
-현재 구현된 백엔드 엔드포인트는 여섯입니다.
+현재 구현된 백엔드 엔드포인트는 다음과 같습니다.
 
 ```text
 http://127.0.0.1:8000/api/health
@@ -95,7 +97,10 @@ http://127.0.0.1:8000/api/account
 http://127.0.0.1:8000/api/agents/analysis
 http://127.0.0.1:8000/api/agents/verification
 http://127.0.0.1:8000/api/agents/execution
+http://127.0.0.1:8000/api/approvals
 ```
+
+`/api/approvals/{id}/approve`와 `/api/approvals/{id}/reject`는 `POST` 전용입니다.
 
 `/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태입니다.
 
@@ -125,7 +130,7 @@ uv run pytest
 - `FINANCIAL_AI_FULLSTACK_PLAN.md`: 실제 금융 API 없이 프론트엔드와 백엔드를 연결하는 풀스택 전환 계획 요약
 - `docs/fullstack/`: 풀스택 전환 세부 계획 분할 문서
 - `apps/web/`: React/Vite 19개 화면 프론트엔드 앱
-- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 현재 6개 `GET` 엔드포인트
+- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 현재 6개 `GET` 엔드포인트와 승인·반려 `POST` 2개
 - `docs/backend/`: 백엔드 범위, 안전 경계, API 계약 분할 문서
 - `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
 - `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서

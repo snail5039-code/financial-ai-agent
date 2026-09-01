@@ -60,9 +60,16 @@
 
 ## 다음 우선순위
 
-`BACKEND-CORS-001`, `BACKEND-003`, `BACKEND-004`는 완료됐다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트 5개 화면이 백엔드에만 의존한다. React 화면은 23개다.
+`BACKEND-CORS-001`, `BACKEND-003`, `BACKEND-004`, `BACKEND-005`는 완료됐다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트·승인 대기 6개 화면이 백엔드에만 의존한다. React 화면은 23개다.
 
 사이드바에 메뉴만 있고 화면이 없던 항목은 이제 없다.
+
+## 다음 우선순위
+
+1. 결정(DEC) 데이터 통합: 감사 로그, 결정 회고, 근거 패킷, 역할 상태 등이 승인 대기와 같은 결정을 각자 fixture로 따로 들고 있다. 승인해도 이 화면들이 갱신되지 않는다. `app/fixtures/decisions.py` 같은 단일 소스로 모으고 화면들이 이를 공유하게 한다.
+2. OpenAPI에서 TypeScript 타입 생성 도입.
+3. Playwright 핵심 흐름 테스트. 프론트에 테스트가 0개다.
+4. 사이드바 「승인 대기 4」 배지가 하드코딩이다. `GET /api/approvals`의 `pending` 개수로 바꾼다.
 
 1. 승인 흐름 수직 슬라이스: `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`, 프론트 승인 대기 화면 연결, `src/fixtures/approvals.ts` 제거.
    - 착수 전 결정: 상태 저장소(메모리 vs SQLite), `allow_methods`에 `POST` 추가 시점.

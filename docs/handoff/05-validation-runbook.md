@@ -116,10 +116,14 @@ curl -s -H "Accept: application/json" -o /dev/null -w "%{http_code} %{content_ty
 - `/api/account`의 합계 항등식이 성립해야 한다: 투자금액+현금=총자산, 실현+미실현=누적손익, 입금-출금=원금, 자산군 합계=총자산, 통화 합계=총자산.
 - `/api/account`의 총자산·원금·현금·미실현손익이 `/api/dashboard`와 일치해야 한다.
 - 세 에이전트 경로의 `pipeline`이 서로 같아야 하고 실행 단계 `state`가 `blocked`여야 한다.
+- `POST /api/approvals/{id}/approve`, `.../reject`는 `pending`인 건만 성공하고, 이미 결정된 건을 다시 결정하면 `409`, 모르는 ID는 `404`여야 한다.
+- 승인·반려 후에도 봉투 `executed`는 여전히 `false`여야 한다. 모의승인은 실제 체결을 뜻하지 않는다.
+- 승인·반려는 서버 프로세스가 살아있는 동안 유지되어야 한다. 페이지를 새로고침해도 상태가 유지되는지 확인한다(클라이언트 상태가 아니라 서버 메모리에 있다는 뜻).
+- 서로 다른 앱 인스턴스(테스트) 간에 승인 상태가 새지 않아야 한다.
 - 모든 `capabilities[].connected`가 `false`여야 한다.
 - 실행 경로의 모든 항목 `실행 결과`가 `실행 안 됨`이고 `executionGrade`가 `자동 실행`이 아니어야 한다.
 - 검증 경로의 모든 항목 `출처 뒷받침`이 `미확인`이어야 한다.
-- `uv run pytest` 기준 백엔드 테스트 39개가 통과해야 한다.
+- `uv run pytest` 기준 백엔드 테스트 49개가 통과해야 한다.
 - CORS origin은 `http://127.0.0.1:5173`, `http://localhost:5173`만 허용되어야 하고, `allow_methods`는 `GET`, `allow_headers`는 명시 목록이어야 한다.
 - 프론트는 Vite `server.proxy`로 `/api`를 `http://127.0.0.1:8000`에 전달한다. 브라우저는 절대 URL을 직접 호출하지 않는다.
 

@@ -43,8 +43,8 @@
 | `GET` | `/api/agents/execution` | 실행 에이전트 단계. `BACKEND-004` 완료 |
 | `GET` | `/api/companies/{code}` | 기업 상세 가상 근거 |
 | `GET` | `/api/approvals` | 승인 대기 목록 |
-| `POST` | `/api/approvals/{id}/approve` | 로컬 상태에서 모의승인 처리 |
-| `POST` | `/api/approvals/{id}/reject` | 로컬 상태에서 반려 처리 |
+| `POST` | `/api/approvals/{id}/approve` | 로컬 상태에서 모의승인 처리. `BACKEND-005` 완료 |
+| `POST` | `/api/approvals/{id}/reject` | 로컬 상태에서 반려 처리. `BACKEND-005` 완료 |
 | `GET` | `/api/audit-events` | 감사 로그 |
 | `GET` | `/api/policies` | 투자 정책 설정값 |
 | `PUT` | `/api/policies` | 로컬 정책 설정 저장 |

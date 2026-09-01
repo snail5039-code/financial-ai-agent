@@ -21,7 +21,20 @@ export class ApiError extends Error {
   }
 }
 
-async function getJson<TResponse>(path: string): Promise<TResponse> {
+/** FastAPI's error body shape: `{"detail": "..."}`. */
+async function readErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.clone().json();
+    if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+      return (body as { detail: string }).detail;
+    }
+  } catch {
+    // Not JSON, or no body. Fall through to a generic message.
+  }
+  return null;
+}
+
+async function request<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
   if (!path.startsWith(LOCAL_API_PREFIX)) {
     throw new ApiError(`로컬 백엔드 경로가 아닙니다: ${path}`);
   }
@@ -29,8 +42,8 @@ async function getJson<TResponse>(path: string): Promise<TResponse> {
   let response: Response;
   try {
     response = await fetch(path, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      ...init,
+      headers: { Accept: "application/json", ...init?.headers },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
   } catch {
@@ -40,11 +53,16 @@ async function getJson<TResponse>(path: string): Promise<TResponse> {
   if (!response.ok) {
     // The dev server turns a refused connection to the backend into a 5xx of its
     // own, so a server-side status usually means the backend is not running.
-    const reason =
-      response.status >= 500
-        ? "로컬 백엔드가 응답하지 못했습니다. FastAPI 서버가 실행 중인지 확인하세요."
-        : "로컬 백엔드가 요청을 처리하지 못했습니다.";
-    throw new ApiError(`${reason} (HTTP ${response.status})`, response.status);
+    if (response.status >= 500) {
+      throw new ApiError(
+        `로컬 백엔드가 응답하지 못했습니다. FastAPI 서버가 실행 중인지 확인하세요. (HTTP ${response.status})`,
+        response.status
+      );
+    }
+    // A 4xx from this backend is a meaningful domain error (unknown id,
+    // already-decided order) — surface FastAPI's own `detail` when present.
+    const detail = await readErrorDetail(response);
+    throw new ApiError(detail ?? `로컬 백엔드가 요청을 처리하지 못했습니다. (HTTP ${response.status})`, response.status);
   }
 
   try {
@@ -75,5 +93,14 @@ function assertFixtureEnvelope<TData>(payload: FixtureEnvelope<TData>): FixtureE
 }
 
 export async function getFixture<TData>(path: string): Promise<FixtureEnvelope<TData>> {
-  return assertFixtureEnvelope(await getJson<FixtureEnvelope<TData>>(path));
+  return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path));
+}
+
+/**
+ * POSTs a local demo action (e.g. approve/reject) with no request body and
+ * returns the resulting fixture envelope. Same safety check as `getFixture` —
+ * a response that doesn't declare itself a mock is never used.
+ */
+export async function postFixtureAction<TData>(path: string): Promise<FixtureEnvelope<TData>> {
+  return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path, { method: "POST" }));
 }

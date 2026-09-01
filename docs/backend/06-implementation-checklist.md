@@ -41,6 +41,21 @@
 - `uv run pytest` 39개 통과, `npm run typecheck`·`npm run build` 통과
 - 4개 신규 화면 1440×900 렌더링 확인, 오버플로 0, 콘솔 오류 없음
 
+## BACKEND-005 완료 항목
+
+- `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject` 구현 완료
+- 이 프로젝트 최초의 쓰기 경로. `ApprovalStore`가 메모리에 상태를 들고 `list()`/`get()`/`decide()` 세 메서드만 노출
+- 스토어는 `create_app()`마다 새로 생성해 `app.state`에 저장. 모듈 전역 아님 — 테스트 간 상태 오염 없음
+- `decisionStatus`는 `pending`/`approved`/`rejected` 세 값뿐. `executed`류 값은 스키마에 없음
+- 이미 결정된 건 재결정 시 `409`, 모르는 ID는 `404`
+- CORS `allow_methods`에 `POST` 추가
+- 프론트 `ApprovalQueuePage`를 백엔드에 연결. `overrides` 맵으로 재요청 없이 즉시 반영
+- `src/api/client.ts`에 `postFixtureAction()` 추가, FastAPI `detail` 메시지를 그대로 노출
+- 프론트 `src/fixtures/approvals.ts` 제거
+- 테스트 39개에서 49개로 확장
+- `uv run pytest` 49개 통과, `npm run typecheck`·`npm run build` 통과
+- 실제 클릭으로 승인·반려·새로고침 후 상태 유지·409 충돌을 브라우저에서 확인
+
 ## 다음 구현자 체크리스트
 
 - 작업 시작 전 `AGENTS.md`와 `docs/backend/00-readme.md`를 읽는다.

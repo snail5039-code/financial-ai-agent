@@ -1,15 +1,30 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
+import { approveOrder, getApprovals, rejectOrder } from "../api/approvals";
+import { ApiError } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
 import { StatusPill } from "../components/StatusPill";
-import { approvalOrders, type ApprovalOrder } from "../fixtures/approvals";
-import type { PageKey } from "../types/dashboard";
+import { useFixture } from "../lib/useFixture";
+import { formatDateAndMinutes, formatShares, formatTimeOfDay, formatWon } from "../lib/format";
+import type { ApprovalCategory, ApprovalOrder, ApprovalsData, PageKey } from "../types/dashboard";
 import "./ApprovalQueuePage.css";
 
-const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
-type FilterKey = "all" | ApprovalOrder["filter"];
-type LocalState = "pending" | "approved" | "rejected";
+type FilterKey = "all" | ApprovalCategory;
+
+const FILTER_OPTIONS: Array<[FilterKey, string]> = [
+  ["all", "전체"],
+  ["conditional", "조건부"],
+  ["verified", "확인됨"],
+  ["attention", "확인필요"]
+];
+
+function stateLabel(order: ApprovalOrder) {
+  if (order.decisionStatus === "approved") return "모의승인됨";
+  if (order.decisionStatus === "rejected") return "반려됨";
+  return order.reviewLabel;
+}
 
 interface ApprovalQueuePageProps {
   activePage: PageKey;
@@ -17,36 +32,52 @@ interface ApprovalQueuePageProps {
 }
 
 export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageProps) {
+  const state = useFixture<ApprovalsData>(() => getApprovals(), "approvals");
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [selectedId, setSelectedId] = useState(approvalOrders[0].id);
-  const [states, setStates] = useState<Record<string, LocalState>>(() =>
-    Object.fromEntries(approvalOrders.map((order) => [order.id, "pending"]))
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Decisions made in this session, layered over the fetched list so a
+  // approve/reject reflects immediately without re-fetching (and re-flashing
+  // the loading screen) on every click. Cleared whenever a fresh envelope
+  // arrives (e.g. the user hit "다시 시도" after a load failure).
+  const [overrides, setOverrides] = useState<Record<string, ApprovalOrder>>({});
 
-  const visibleOrders = useMemo(
-    () => approvalOrders.filter((order) => filter === "all" || order.filter === filter),
-    [filter]
-  );
-  const selected = approvalOrders.find((order) => order.id === selectedId) ?? visibleOrders[0] ?? approvalOrders[0];
-  const selectedState = states[selected.id];
+  useEffect(() => {
+    setOverrides({});
+  }, [state.envelope]);
+
+  const fallback = renderFixtureFallback(state, "승인 대기");
+  if (fallback) return fallback;
+
+  const envelope = state.envelope;
+  if (!envelope) return null;
+
+  const orders = envelope.data.orders.map((order) => overrides[order.id] ?? order);
+  const visibleOrders = orders.filter((order) => filter === "all" || order.category === filter);
+  const selected = orders.find((order) => order.id === selectedId) ?? visibleOrders[0] ?? orders[0];
+  const selectedIsPending = selected.decisionStatus === "pending";
+  const selectedIsBusy = pendingActionId === selected.id;
 
   function updateFilter(nextFilter: FilterKey) {
-    const nextVisible = approvalOrders.filter((order) => nextFilter === "all" || order.filter === nextFilter);
+    const nextVisible = orders.filter((order) => nextFilter === "all" || order.category === nextFilter);
     setFilter(nextFilter);
     if (nextVisible.length > 0 && !nextVisible.some((order) => order.id === selectedId)) {
       setSelectedId(nextVisible[0].id);
     }
   }
 
-  function stateLabel(order: ApprovalOrder) {
-    const state = states[order.id];
-    if (state === "approved") return "모의승인됨";
-    if (state === "rejected") return "반려됨";
-    return order.status;
-  }
-
-  function decide(state: LocalState) {
-    setStates((current) => ({ ...current, [selected.id]: state }));
+  async function decide(orderId: string, action: "approve" | "reject") {
+    setActionError(null);
+    setPendingActionId(orderId);
+    try {
+      const result = action === "approve" ? await approveOrder(orderId) : await rejectOrder(orderId);
+      setOverrides((current) => ({ ...current, [orderId]: result.data }));
+    } catch (cause) {
+      setActionError(cause instanceof ApiError ? cause.message : "요청을 처리하지 못했습니다.");
+    } finally {
+      setPendingActionId(null);
+    }
   }
 
   const main = (
@@ -55,7 +86,7 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
         <div>
           <span className="eyebrow">투자 운영</span>
           <h1 id="approval-title">승인 대기</h1>
-          <p>검증 결과와 주문 한도를 비교한 뒤 로컬 모의 상태만 변경합니다.</p>
+          <p>검증 결과와 주문 한도를 비교한 뒤 로컬 백엔드의 모의 상태만 변경합니다.</p>
         </div>
         <DataBoundaryNotice />
       </header>
@@ -66,24 +97,19 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
           <span>처리할 가상 요청</span>
         </div>
         <div className="segments approval-filters" role="group" aria-label="승인 상태 필터">
-          {[
-            ["all", "전체"],
-            ["conditional", "조건부"],
-            ["verified", "확인됨"],
-            ["attention", "확인필요"]
-          ].map(([key, label]) => (
+          {FILTER_OPTIONS.map(([key, label]) => (
             <button
               className={filter === key ? "selected" : ""}
               key={key}
               type="button"
               aria-pressed={filter === key}
-              onClick={() => updateFilter(key as FilterKey)}
+              onClick={() => updateFilter(key)}
             >
               {label}
             </button>
           ))}
         </div>
-        <span className="sync">마지막 검증 14:31</span>
+        <span className="sync">마지막 검증 {formatTimeOfDay(envelope.dataAsOf)}</span>
       </div>
 
       <div className="orders-table" role="grid" aria-label="화면용 가상 승인 대기 주문">
@@ -114,16 +140,18 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
                   aria-pressed={order.id === selected.id}
                   onClick={() => setSelectedId(order.id)}
                 >
-                  <StatusPill tone={states[order.id] === "pending" ? order.tone : "info"}>{stateLabel(order)}</StatusPill>
+                  <StatusPill tone={order.decisionStatus === "pending" ? order.tone : "info"}>
+                    {stateLabel(order)}
+                  </StatusPill>
                 </button>
               </span>
               <span role="gridcell"><strong>{order.company}</strong><small>{order.code}</small></span>
               <span className={order.side === "매수" ? "buy" : "sell"} role="gridcell">{order.side}</span>
-              <span role="gridcell">{order.quantity}주</span>
-              <span role="gridcell">{won(order.price)}</span>
-              <span role="gridcell">{won(order.amount)}</span>
+              <span role="gridcell">{formatShares(order.quantity)}</span>
+              <span role="gridcell">{formatWon(order.price)}</span>
+              <span role="gridcell">{formatWon(order.amount)}</span>
               <span role="gridcell">{order.verification}</span>
-              <span role="gridcell">{order.expiry}</span>
+              <span role="gridcell">{formatTimeOfDay(order.expiresAt)}</span>
             </div>
           ))
         ) : (
@@ -143,7 +171,7 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
               <h2>{selected.company}</h2>
               <span>{selected.id} · {selected.code}</span>
             </div>
-            <StatusPill tone={selectedState === "pending" ? selected.tone : "info"}>{stateLabel(selected)}</StatusPill>
+            <StatusPill tone={selectedIsPending ? selected.tone : "info"}>{stateLabel(selected)}</StatusPill>
           </div>
         </header>
 
@@ -153,7 +181,7 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
               <div className={index < 2 ? "step done" : "step current"}>
                 <i>{index < 2 ? <CheckCircle2 size={11} /> : null}</i>
                 <b>{step}</b>
-                <span>{index < 2 ? "완료" : selected.expiry}</span>
+                <span>{index < 2 ? "완료" : formatTimeOfDay(selected.expiresAt)}</span>
               </div>
               {index < 2 ? <div className={index === 0 ? "line done" : "line"} /> : null}
             </div>
@@ -162,42 +190,57 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
 
         <section className="inspector-section proposal">
           <h3>주문 조건</h3>
-          <strong>{selected.company} {selected.quantity}주 지정가 {selected.side}</strong>
+          <strong>{selected.company} {formatShares(selected.quantity)} 지정가 {selected.side}</strong>
           <dl>
-            <div><dt>지정가</dt><dd>{won(selected.price)}</dd></div>
-            <div><dt>최대 금액</dt><dd>{won(selected.amount)}</dd></div>
-            <div><dt>계산식</dt><dd>{selected.quantity} × {selected.price.toLocaleString("ko-KR")} = {won(selected.amount)}</dd></div>
+            <div><dt>지정가</dt><dd>{formatWon(selected.price)}</dd></div>
+            <div><dt>최대 금액</dt><dd>{formatWon(selected.amount)}</dd></div>
+            <div><dt>계산식</dt><dd>{selected.quantity} × {selected.price.toLocaleString("ko-KR")} = {formatWon(selected.amount)}</dd></div>
           </dl>
         </section>
 
         <section className="inspector-section verification">
           <h3>시뮬레이션 검증 결과</h3>
           <dl>
-            <div><dt>정책 한도</dt><dd className={selected.policy.includes("통과") ? "success" : "warning"}>{selected.policy}</dd></div>
-            <div><dt>근거 출처</dt><dd className="warning">{selected.source}</dd></div>
+            <div><dt>정책 한도</dt><dd className={selected.policyPassed ? "success" : "warning"}>{selected.policyLabel}</dd></div>
+            <div><dt>근거 출처</dt><dd className="warning">{selected.sourceLabel}</dd></div>
             <div><dt>실제 주문</dt><dd className="success">생성 안 됨</dd></div>
           </dl>
           <div className="warning">
-            <b>{selected.warning}</b>
-            <p>{selected.warningText}</p>
+            <b>{selected.warningTitle}</b>
+            <p>{selected.warningDetail}</p>
           </div>
         </section>
       </div>
 
       <div className="approval-panel">
         <div className="expiry">
-          <span>이 모의승인은 <b>{selected.expiry}</b>에 만료됩니다.</span>
+          <span>이 모의승인은 <b>{formatTimeOfDay(selected.expiresAt)}</b>에 만료됩니다.</span>
           <small>실제 주문·체결은 생성되지 않습니다.</small>
         </div>
-        {selectedState !== "pending" ? (
+        {!selectedIsPending ? (
           <div className="decision-message" aria-live="polite">
-            {selectedState === "approved" ? "모의승인됨 · 실제 주문은 생성되지 않았습니다." : "반려됨 · 가상 요청이 종료되었습니다."}
+            {selected.decisionStatus === "approved"
+              ? `모의승인됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
+              : `반려됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · 가상 요청이 종료되었습니다.`}
           </div>
         ) : null}
+        {actionError ? (
+          <div className="decision-message" role="alert">{actionError}</div>
+        ) : null}
         <div className="actions">
-          <button type="button" disabled={selectedState !== "pending"} onClick={() => decide("rejected")}>반려</button>
-          <button type="button" disabled={selectedState !== "pending"} onClick={() => decide("approved")}>
-            {won(selected.amount)} 한도 내 모의승인
+          <button
+            type="button"
+            disabled={!selectedIsPending || selectedIsBusy}
+            onClick={() => decide(selected.id, "reject")}
+          >
+            반려
+          </button>
+          <button
+            type="button"
+            disabled={!selectedIsPending || selectedIsBusy}
+            onClick={() => decide(selected.id, "approve")}
+          >
+            {formatWon(selected.amount)} 한도 내 모의승인
           </button>
         </div>
         <button className="evidence-link" type="button" onClick={() => onNavigate("evidence")}>
@@ -213,7 +256,7 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
     <AppShell
       title="승인 대기"
       accountLabel="시뮬레이션 계좌"
-      lastSync="14:31"
+      lastSync={formatTimeOfDay(envelope.dataAsOf)}
       activePage={activePage}
       onNavigate={onNavigate}
       main={main}

@@ -391,3 +391,42 @@ export interface AgentScreenData {
 }
 
 export type AgentScreenEnvelope = FixtureEnvelope<AgentScreenData>;
+
+/* 승인 대기 화면 --------------------------------------------------------- */
+
+export type ApprovalCategory = "conditional" | "verified" | "attention";
+
+/** The only states an order can be in. There is no "executed" or "filled". */
+export type DecisionStatus = "pending" | "approved" | "rejected";
+
+export interface ApprovalOrder {
+  id: string;
+  company: string;
+  code: string;
+  side: "매수" | "매도";
+  quantity: number;
+  price: number;
+  amount: number;
+  /** Fixed verification review label; does not change after a decision. */
+  reviewLabel: string;
+  category: ApprovalCategory;
+  /** The field that changes: pending -> approved | rejected. */
+  decisionStatus: DecisionStatus;
+  verification: string;
+  expiresAt: string;
+  policyLabel: string;
+  policyPassed: boolean;
+  sourceLabel: string;
+  warningTitle: string;
+  warningDetail: string;
+  tone: Tone;
+  decidedAt: string | null;
+}
+
+export interface ApprovalsData {
+  orders: ApprovalOrder[];
+}
+
+export type ApprovalsEnvelope = FixtureEnvelope<ApprovalsData>;
+/** Returned by approve/reject: `data` is the single order that changed. */
+export type ApprovalActionEnvelope = FixtureEnvelope<ApprovalOrder>;

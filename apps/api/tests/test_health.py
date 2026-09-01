@@ -25,6 +25,6 @@ def test_health_returns_local_fixture_safety_fields() -> None:
 def test_unimplemented_api_path_is_not_found() -> None:
     client = TestClient(create_app())
 
-    response = client.get("/api/approvals")
+    response = client.get("/api/rebalance-plan")
 
     assert response.status_code == 404

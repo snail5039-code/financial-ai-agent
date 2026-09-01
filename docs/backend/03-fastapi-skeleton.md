@@ -18,26 +18,33 @@ apps/api/
 │  │  ├─ __init__.py
 │  │  ├─ dashboard.py
 │  │  ├─ account.py
-│  │  └─ agents.py
+│  │  ├─ agents.py
+│  │  └─ approvals.py
+│  ├─ store/
+│  │  ├─ __init__.py
+│  │  └─ approvals.py
 │  ├─ routers/
 │  │  ├─ __init__.py
 │  │  ├─ health.py
 │  │  ├─ dashboard.py
 │  │  ├─ account.py
-│  │  └─ agents.py
+│  │  ├─ agents.py
+│  │  └─ approvals.py
 │  ├─ schemas/
 │  │  ├─ __init__.py
 │  │  ├─ common.py
 │  │  ├─ health.py
 │  │  ├─ dashboard.py
 │  │  ├─ account.py
-│  │  └─ agents.py
+│  │  ├─ agents.py
+│  │  └─ approvals.py
 ├─ tests/
 │  ├─ __init__.py
 │  ├─ test_health.py
 │  ├─ test_dashboard.py
 │  ├─ test_account.py
-│  └─ test_agents.py
+│  ├─ test_agents.py
+│  └─ test_approvals.py
 ├─ pyproject.toml
 └─ uv.lock
 ```
@@ -52,6 +59,8 @@ apps/api/
 - `schemas/health.py`: health 평면 JSON 응답 타입
 - `routers/account.py`: `GET /api/account` 엔드포인트
 - `routers/agents.py`: `GET /api/agents/{analysis|verification|execution}` 엔드포인트
+- `routers/approvals.py`: `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`
+- `store/approvals.py`: 승인 상태 메모리 저장소. `list()`/`get()`/`decide()` 세 메서드만 라우터가 호출하므로 SQLite로 바꿔도 이 파일만 교체하면 됨
 - `schemas/dashboard.py`: 대시보드 봉투와 본문 타입
 - `schemas/account.py`: 계좌 봉투와 본문 타입
 - `schemas/agents.py`: 세 에이전트 단계가 공유하는 봉투와 본문 타입
