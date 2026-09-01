@@ -16,20 +16,28 @@ apps/api/
 │  ├─ clock.py
 │  ├─ fixtures/
 │  │  ├─ __init__.py
-│  │  └─ dashboard.py
+│  │  ├─ dashboard.py
+│  │  ├─ account.py
+│  │  └─ agents.py
 │  ├─ routers/
 │  │  ├─ __init__.py
 │  │  ├─ health.py
-│  │  └─ dashboard.py
+│  │  ├─ dashboard.py
+│  │  ├─ account.py
+│  │  └─ agents.py
 │  ├─ schemas/
 │  │  ├─ __init__.py
 │  │  ├─ common.py
 │  │  ├─ health.py
-│  │  └─ dashboard.py
+│  │  ├─ dashboard.py
+│  │  ├─ account.py
+│  │  └─ agents.py
 ├─ tests/
 │  ├─ __init__.py
 │  ├─ test_health.py
-│  └─ test_dashboard.py
+│  ├─ test_dashboard.py
+│  ├─ test_account.py
+│  └─ test_agents.py
 ├─ pyproject.toml
 └─ uv.lock
 ```
@@ -42,8 +50,12 @@ apps/api/
 - `routers/dashboard.py`: `GET /api/dashboard` 엔드포인트
 - `schemas/common.py`: 모든 fixture 응답이 공유하는 안전 봉투 `FixtureEnvelope`와 `Tone`
 - `schemas/health.py`: health 평면 JSON 응답 타입
+- `routers/account.py`: `GET /api/account` 엔드포인트
+- `routers/agents.py`: `GET /api/agents/{analysis|verification|execution}` 엔드포인트
 - `schemas/dashboard.py`: 대시보드 봉투와 본문 타입
-- `fixtures/dashboard.py`: 대시보드 fixture 리터럴
+- `schemas/account.py`: 계좌 봉투와 본문 타입
+- `schemas/agents.py`: 세 에이전트 단계가 공유하는 봉투와 본문 타입
+- `fixtures/dashboard.py`, `fixtures/account.py`, `fixtures/agents.py`: 화면별 fixture 리터럴
 - `tests/`: 안전 플래그, 응답 구조, 숫자 계약, 금액 정합성 검증
 
 ## 명명 원칙

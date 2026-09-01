@@ -37,3 +37,61 @@ a:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
+
+/* 로컬 fixture 로딩·오류 공통 화면 --------------------------------------- */
+
+.loading-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.error-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.error-screen > div {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  max-width: 520px;
+  padding: 24px 28px;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.error-screen h1 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.error-screen p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.error-screen code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+}
+
+.error-screen button {
+  margin-top: 4px;
+  padding: 6px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}

@@ -34,9 +34,10 @@
 
 - `BACKEND-002`에서 FastAPI 프로젝트 최소 골격 생성 완료
 - `BACKEND-003`에서 `GET /api/dashboard`와 프론트 대시보드 연결 완료
+- `BACKEND-004`에서 `GET /api/account`, `GET /api/agents/{analysis|verification|execution}`과 신규 화면 4개 완료
 - 프론트는 Vite `server.proxy`로 같은 출처 `/api/*`만 호출하고 절대 URL을 쓰지 않음
 - CORS는 2차 경계로만 유지. origin은 `http://127.0.0.1:5173`, `http://localhost:5173`, 메서드는 `GET`, 헤더는 명시 목록
-- 구현된 라우터는 `GET /api/health`와 `GET /api/dashboard`
+- 구현된 라우터는 `GET /api/health`, `GET /api/dashboard`, `GET /api/account`, `GET /api/agents/{stage}`
 - `/api/health` 응답은 평면 JSON, 화면용 fixture 응답은 `data` 봉투 구조
 - `/api/approvals` 등 나머지 경로는 아직 미구현이며 404가 기대 상태
 - 실제 금융 데이터·계좌·주문·체결·공시·시세·환율·AI 실행·외부 API·운영 DB는 연결하지 않음

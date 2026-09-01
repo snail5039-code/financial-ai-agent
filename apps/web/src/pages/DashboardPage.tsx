@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, CircleDot, XCircle } from "lucide-react";
 import { getDashboard } from "../api/dashboard";
-import { ApiError } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { DataBoundaryNotice } from "../components/DataBoundaryNotice";
+import { renderFixtureFallback } from "../components/FixtureFallback";
+import { useFixture } from "../lib/useFixture";
 import { MockChart } from "../components/MockChart";
 import { StatusPill } from "../components/StatusPill";
 import {
@@ -15,7 +16,7 @@ import {
   formatTimeOfDay,
   formatWon
 } from "../lib/format";
-import type { DashboardEnvelope, EvidenceItem, Holding, PageKey, Tone } from "../types/dashboard";
+import type { DashboardData, EvidenceItem, Holding, PageKey, Tone } from "../types/dashboard";
 import "./DashboardPage.css";
 
 function toneIcon(tone: Tone) {
@@ -86,57 +87,16 @@ interface DashboardPageProps {
 }
 
 export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
-  const [envelope, setEnvelope] = useState<DashboardEnvelope | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
+  const state = useFixture<DashboardData>(() => getDashboard(), "dashboard");
   const [decisionMessage, setDecisionMessage] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    setEnvelope(null);
-    setLoadError(null);
+  const fallback = renderFixtureFallback(state, "대시보드");
+  if (fallback) return fallback;
 
-    getDashboard()
-      .then((payload) => {
-        if (active) setEnvelope(payload);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setLoadError(error instanceof ApiError ? error.message : "대시보드 데이터를 불러오지 못했습니다.");
-      });
+  const envelope = state.envelope;
+  if (!envelope) return null;
 
-    return () => {
-      active = false;
-    };
-  }, [reloadToken]);
-
-  const retry = useCallback(() => setReloadToken((token) => token + 1), []);
-
-  const lastSync = useMemo(() => {
-    if (!envelope) return "대기";
-    return formatTimeOfDay(envelope.dataAsOf);
-  }, [envelope]);
-
-  if (loadError) {
-    return (
-      <div className="error-screen" role="alert">
-        <div>
-          <h1>대시보드 데이터를 불러오지 못했습니다</h1>
-          <p>{loadError}</p>
-          <p>
-            로컬 FastAPI 백엔드를 <code>apps/api</code>에서 실행한 뒤 다시 시도하세요. 이 화면은 로컬
-            fixture만 사용하며 실제 계좌·주문·외부 API와 연결되지 않습니다.
-          </p>
-          <button type="button" onClick={retry}>다시 시도</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!envelope) {
-    return <div className="loading-screen">로컬 fixture를 불러오는 중</div>;
-  }
-
+  const lastSync = formatTimeOfDay(envelope.dataAsOf);
   const dashboard = envelope.data;
   const { summary, decision } = dashboard;
 

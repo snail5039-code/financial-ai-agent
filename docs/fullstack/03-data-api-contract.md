@@ -37,6 +37,10 @@
 |---|---|---|
 | `GET` | `/api/health` | 백엔드 상태 확인, `BACKEND-002` 완료 |
 | `GET` | `/api/dashboard` | 대시보드 총자산, 차트, 보유 종목, 결정 후보. `BACKEND-003` 완료 |
+| `GET` | `/api/account` | 시뮬레이션 계좌 자산 현황. `BACKEND-004` 완료 |
+| `GET` | `/api/agents/analysis` | 분석 에이전트 단계. `BACKEND-004` 완료 |
+| `GET` | `/api/agents/verification` | 검증 에이전트 단계. `BACKEND-004` 완료 |
+| `GET` | `/api/agents/execution` | 실행 에이전트 단계. `BACKEND-004` 완료 |
 | `GET` | `/api/companies/{code}` | 기업 상세 가상 근거 |
 | `GET` | `/api/approvals` | 승인 대기 목록 |
 | `POST` | `/api/approvals/{id}/approve` | 로컬 상태에서 모의승인 처리 |

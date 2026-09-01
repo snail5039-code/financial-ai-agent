@@ -15,6 +15,7 @@
 5. `05-safety-boundary.md`: 실제 금융 연결 금지 기준과 금지 문자열을 확인한다.
 6. `06-implementation-checklist.md`: 다음 구현자와 검증자의 체크리스트를 확인한다.
 7. `07-dashboard-api.md`: `GET /api/dashboard` 계약, 숫자 표현 규칙, 전송 경로를 확인한다.
+8. `08-account-and-agent-api.md`: 계좌와 분석·검증·실행 에이전트 4개 엔드포인트를 확인한다.
 
 ## 상위 참조
 
@@ -31,5 +32,7 @@
 - 현재 백엔드는 실제 금융 API 대신 로컬 상태 확인 응답과 로컬 fixture 응답만 제공한다.
 - `BACKEND-003`에서 CORS 헤더 명시화도 함께 처리했다. `allow_headers`는 `Accept`, `Accept-Language`, `Content-Type` 명시 목록이다.
 - 프론트는 Vite `server.proxy`로 같은 출처 `/api/*`만 호출한다. 브라우저에서 절대 URL을 부르지 않는다.
+- `BACKEND-004`에서 `GET /api/account`와 `GET /api/agents/{analysis|verification|execution}`을 추가했다. 사이드바에 메뉴만 있고 화면이 없던 4개 항목을 채운 것이다.
+- 이 4개 화면은 정적 목업에 대응 파일이 없다. `FINANCIAL_AI_AGENT_IDEA.md`의 역할 정의를 근거로 새로 설계했다.
 - 다음 구현 후보는 승인 흐름(`GET /api/approvals`, 모의승인·반려)이다. 쓰기 경로라서 메모리 저장소와 CORS 메서드 정책 결정이 먼저 필요하다.
 - 장기 API 전체 목록은 이 폴더에 복사하지 않고 `docs/fullstack/03-data-api-contract.md`를 참조한다.

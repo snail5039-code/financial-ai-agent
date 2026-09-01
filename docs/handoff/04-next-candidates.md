@@ -60,7 +60,9 @@
 
 ## 다음 우선순위
 
-`BACKEND-CORS-001`과 `BACKEND-003`은 완료됐다. 대시보드 화면은 백엔드 `GET /api/dashboard`에만 의존한다.
+`BACKEND-CORS-001`, `BACKEND-003`, `BACKEND-004`는 완료됐다. 대시보드·계좌·분석 에이전트·검증 에이전트·실행 에이전트 5개 화면이 백엔드에만 의존한다. React 화면은 23개다.
+
+사이드바에 메뉴만 있고 화면이 없던 항목은 이제 없다.
 
 1. 승인 흐름 수직 슬라이스: `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`, 프론트 승인 대기 화면 연결, `src/fixtures/approvals.ts` 제거.
    - 착수 전 결정: 상태 저장소(메모리 vs SQLite), `allow_methods`에 `POST` 추가 시점.

@@ -25,17 +25,22 @@
 - React/Vite 프론트엔드 `apps/web`에는 정적 목업 19개에 대응하는 19개 화면 이전이 완료됐다.
 - 승인 대기 화면의 주문 행 접근성 구조는 `FRONTEND-005`에서 정리됐다.
 - `FRONTEND-FINAL-AUDIT` 최초 검증은 1440×900 하단 잘림 문제로 `실패`였고, `FRONTEND-FINAL-AUDIT-R1` 재작업 후 검증자 19세대가 `FRONTEND-FINAL-AUDIT-R1-V`에서 `통과` 판정했다.
-- FastAPI 백엔드는 `apps/api`에 있고, 구현된 엔드포인트는 `GET /api/health`와 `GET /api/dashboard`다.
+- FastAPI 백엔드는 `apps/api`에 있고, 구현된 엔드포인트는 `GET /api/health`, `GET /api/dashboard`, `GET /api/account`, `GET /api/agents/{analysis|verification|execution}`다.
 - `BACKEND-003`에서 대시보드 수직 슬라이스를 완료했다. 대시보드 화면은 서버 응답만 사용하고 프론트 `src/fixtures/dashboard.ts`는 제거됐다.
 - 프론트-백엔드 통신은 Vite `server.proxy`를 통한 같은 출처 상대 경로 `/api/*`다. 브라우저가 절대 URL을 호출하지 않는다.
 - 응답 계약은 금액 정수·비율 퍼센트 단위 원본 숫자이고, 화면 문자열은 프론트 `src/lib/format.ts`가 만든다.
-- 나머지 18개 화면은 아직 프론트 로컬 fixture를 사용한다.
+- `BACKEND-004`에서 계좌·분석 에이전트·검증 에이전트·실행 에이전트 4개 화면을 새로 만들어 백엔드에 연결했다. React 화면은 19개에서 23개가 됐다.
+- 이 4개는 정적 목업에 대응 파일이 없다. 목업 사이드바에 `href="#"` 메뉴만 있었고 화면이 없었다. `FINANCIAL_AI_AGENT_IDEA.md` 역할 정의를 근거로 새로 설계했다.
+- React 네비게이션에서 누락돼 있던 「실행 에이전트」 항목도 복구했다.
+- 정적 목업은 19개 기준서로 동결한다. 새 화면은 React에만 추가한다.
+- 백엔드에 연결된 화면은 5개(대시보드·계좌·분석·검증·실행)이고, 나머지 18개는 아직 프론트 로컬 fixture를 사용한다.
 - `/api/approvals` 등 나머지 경로는 아직 구현하지 않았으며 404가 기대 상태다.
 - 실제 금융 데이터, 계좌, 주문, AI 실행, 외부 API, 운영 DB는 연결하지 않는다.
 
 ## 다음 작업
 
 - 다음 작업은 승인 흐름 수직 슬라이스(`GET /api/approvals`, 모의승인·반려)다.
+- 검증 방법 보완: 프록시 확인은 상태 코드만 보면 안 된다. Vite는 프록시가 꺼져 있어도 SPA fallback으로 200을 돌려주므로 `content-type`까지 확인한다.
 - 화면 추가가 다시 필요해질 경우 다음 화면 번호는 `MOCKUP-020`이다.
 - 현재 기본 추천은 새 화면 추가보다 React/Vite 19개 화면과 `GET /api/health`를 유지하면서 다음 백엔드 범위를 작게 분리하는 것이다.
 - 풀스택 전환 계획은 루트 요약 문서와 `docs/fullstack/` 분할 문서로 나눴다.

@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers.account import router as account_router
+from app.routers.agents import router as agents_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.health import router as health_router
 
@@ -27,6 +29,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(health_router)
     app.include_router(dashboard_router)
+    app.include_router(account_router)
+    app.include_router(agents_router)
     return app
 
 

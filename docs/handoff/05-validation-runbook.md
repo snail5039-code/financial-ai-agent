@@ -47,8 +47,9 @@ python -m http.server 4173 --bind 127.0.0.1
   - `cd apps/web`
   - `npm run typecheck`
   - `npm run build`
-- 19개 화면 라우팅:
+- 23개 화면 라우팅:
   - 포트폴리오
+  - 계좌
   - 기업 상세
   - 거래 내역
   - 세금·수수료
@@ -61,6 +62,9 @@ python -m http.server 4173 --bind 127.0.0.1
   - 포트폴리오 건강
   - 승인 대기
   - 역할 상태
+  - 분석 에이전트
+  - 검증 에이전트
+  - 실행 에이전트
   - 투자 리포트
   - 감사 로그
   - 결정 회고
@@ -95,13 +99,27 @@ python -m http.server 4173 --bind 127.0.0.1
 - `/api/health`는 HTTP 200 JSON으로 응답해야 한다.
 - 응답은 평면 JSON이며 `status`, `service`, `generatedAt`, `dataAsOf`, `sourceLabel`, `isMock`, `paperOnly`, `externalConnections`, `executed`, `disclaimer`를 포함해야 한다.
 - `isMock`은 `true`, `paperOnly`는 `true`, `externalConnections`는 `0`, `executed`는 `false`여야 한다.
-- `BACKEND-003` 이후 `GET /api/dashboard`가 추가됐다. `/api/approvals` 등 미구현 경로는 404가 기대 상태다.
+- `BACKEND-003` 이후 `GET /api/dashboard`, `BACKEND-004` 이후 `GET /api/account`와 `GET /api/agents/{analysis|verification|execution}`이 추가됐다. `/api/approvals` 등 미구현 경로는 404가 기대 상태다.
+- **프록시 확인은 상태 코드만 보지 않는다.** Vite dev 서버는 프록시가 꺼져 있으면 `/api/*`를 SPA fallback으로 처리해 `index.html`을 200으로 돌려준다. `content-type`까지 확인한다.
+
+```bash
+curl -s -H "Accept: application/json" -o /dev/null -w "%{http_code} %{content_type}
+" http://127.0.0.1:5173/api/account
+```
+
+  `200 application/json`이어야 한다. `200 text/html`이면 프록시가 꺼진 상태다. 브랜치를 전환하면 `vite.config.ts`가 잠깐 옛 내용이 되어 Vite가 프록시 없는 설정으로 재시작할 수 있으므로, `git checkout` 뒤에는 dev 서버를 다시 시작한다.
 - `/api/dashboard`는 HTTP 200 JSON으로 응답해야 한다.
 - `/api/dashboard` 응답은 `data` 래퍼가 있는 봉투 구조이며 `generatedAt`, `dataAsOf`, `sourceLabel`, `isMock`, `paperOnly`, `executed`, `externalConnections`, `disclaimer`, `data`를 포함해야 한다.
 - `/api/dashboard` 금액 필드는 정수, 비율 필드는 퍼센트 단위 숫자여야 한다. 포맷된 문자열(`"128,450,000원"`)이 응답에 있으면 실패로 본다.
 - 보유 종목 `value` 합계가 `summary.totalAsset`과 일치해야 한다.
 - 현금 행처럼 해당 없는 필드는 `"-"`가 아니라 `null`이어야 한다.
-- `uv run pytest` 기준 백엔드 테스트 9개가 통과해야 한다.
+- `/api/account`의 합계 항등식이 성립해야 한다: 투자금액+현금=총자산, 실현+미실현=누적손익, 입금-출금=원금, 자산군 합계=총자산, 통화 합계=총자산.
+- `/api/account`의 총자산·원금·현금·미실현손익이 `/api/dashboard`와 일치해야 한다.
+- 세 에이전트 경로의 `pipeline`이 서로 같아야 하고 실행 단계 `state`가 `blocked`여야 한다.
+- 모든 `capabilities[].connected`가 `false`여야 한다.
+- 실행 경로의 모든 항목 `실행 결과`가 `실행 안 됨`이고 `executionGrade`가 `자동 실행`이 아니어야 한다.
+- 검증 경로의 모든 항목 `출처 뒷받침`이 `미확인`이어야 한다.
+- `uv run pytest` 기준 백엔드 테스트 39개가 통과해야 한다.
 - CORS origin은 `http://127.0.0.1:5173`, `http://localhost:5173`만 허용되어야 하고, `allow_methods`는 `GET`, `allow_headers`는 명시 목록이어야 한다.
 - 프론트는 Vite `server.proxy`로 `/api`를 `http://127.0.0.1:8000`에 전달한다. 브라우저는 절대 URL을 직접 호출하지 않는다.
 

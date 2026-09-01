@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 export type PageKey =
   | "dashboard"
+  | "account"
   | "company"
   | "approvals"
   | "taxFee"
@@ -20,7 +21,10 @@ export type PageKey =
   | "rebalance"
   | "weekly"
   | "stress"
-  | "health";
+  | "health"
+  | "analysisAgent"
+  | "verificationAgent"
+  | "executionAgent";
 
 export interface NavItem {
   label: string;
@@ -261,3 +265,129 @@ export interface AgentRoleStatusData {
   safetyCopy: string;
   roles: AgentRoleStatusItem[];
 }
+
+/* 계좌 화면 ------------------------------------------------------------- */
+
+export interface AccountSummary {
+  totalAsset: number;
+  investedAmount: number;
+  cashAmount: number;
+  principal: number;
+  realizedProfit: number;
+  unrealizedProfit: number;
+  depositTotal: number;
+  withdrawalTotal: number;
+  lastVerifiedAt: string;
+}
+
+export interface AssetClassRow {
+  label: string;
+  value: number;
+  weight: number;
+  tone: Tone;
+  note: string;
+}
+
+export interface CurrencyRow {
+  code: string;
+  label: string;
+  value: number;
+  weight: number;
+  note: string;
+}
+
+export interface ReturnRow {
+  period: string;
+  profit: number;
+  profitRate: number;
+  /** Return with deposits and withdrawals removed. */
+  netInvestmentRate: number;
+  benchmarkRate: number;
+}
+
+export interface CashFlowRow {
+  id: string;
+  occurredAt: string;
+  kind: "입금" | "출금";
+  amount: number;
+  memo: string;
+}
+
+export interface AccountData {
+  title: string;
+  accountLabel: string;
+  accountKind: string;
+  currency: "KRW";
+  summary: AccountSummary;
+  assetClasses: AssetClassRow[];
+  currencies: CurrencyRow[];
+  returns: ReturnRow[];
+  cashFlows: CashFlowRow[];
+  safetyCopy: string;
+}
+
+export type AccountEnvelope = FixtureEnvelope<AccountData>;
+
+/* 에이전트 단계 화면 ----------------------------------------------------- */
+
+export type AgentStage = "analysis" | "verification" | "execution";
+
+export type ExecutionGrade = "자동 실행" | "간편 승인" | "강화 승인" | "실행 금지";
+
+export interface AgentMetric {
+  label: string;
+  value: string;
+  tone: Tone;
+}
+
+export interface AgentCapability {
+  label: string;
+  detail: string;
+  /** Always false. Nothing on these screens is wired to a real source. */
+  connected: false;
+}
+
+export interface AgentWorkField {
+  label: string;
+  value: string;
+}
+
+export interface AgentWorkItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  decisionId: string;
+  action: string;
+  status: string;
+  statusTone: Tone;
+  userApprovalRequired: boolean;
+  fields: AgentWorkField[];
+  notes: string[];
+  summary: string;
+  linkPage: PageKey;
+  linkLabel: string;
+}
+
+export interface AgentStageStep {
+  stage: AgentStage;
+  label: string;
+  state: "done" | "current" | "waiting" | "blocked";
+  detail: string;
+}
+
+export interface AgentScreenData {
+  stage: AgentStage;
+  title: string;
+  agentName: string;
+  roleSummary: string;
+  status: string;
+  statusTone: Tone;
+  executionGrade: ExecutionGrade | null;
+  pipeline: AgentStageStep[];
+  metrics: AgentMetric[];
+  capabilities: AgentCapability[];
+  items: AgentWorkItem[];
+  safetyCopy: string;
+}
+
+export type AgentScreenEnvelope = FixtureEnvelope<AgentScreenData>;

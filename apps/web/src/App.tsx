@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { AccountPage } from "./pages/AccountPage";
+import { AgentStagePage } from "./pages/AgentStagePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ApprovalQueuePage } from "./pages/ApprovalQueuePage";
 import { AgentRoleStatusPage } from "./pages/AgentRoleStatusPage";
@@ -22,6 +24,22 @@ import type { PageKey } from "./types/dashboard";
 
 export function App() {
   const [page, setPage] = useState<PageKey>("dashboard");
+
+  if (page === "account") {
+    return <AccountPage activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "analysisAgent") {
+    return <AgentStagePage stage="analysis" activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "verificationAgent") {
+    return <AgentStagePage stage="verification" activePage={page} onNavigate={setPage} />;
+  }
+
+  if (page === "executionAgent") {
+    return <AgentStagePage stage="execution" activePage={page} onNavigate={setPage} />;
+  }
 
   if (page === "approvals") {
     return <ApprovalQueuePage activePage={page} onNavigate={setPage} />;

@@ -27,6 +27,20 @@
 - `uv run pytest` 9개 통과, `npm run typecheck`·`npm run build` 통과
 - 1440×900 렌더링 회귀 확인, 콘솔 오류 없음, 모든 요청 호스트 `127.0.0.1:5173`
 
+## BACKEND-004 완료 항목
+
+- `GET /api/account` 구현 완료. 대시보드 fixture에서 유도한 값이라 두 화면이 어긋날 수 없음
+- `GET /api/agents/{analysis|verification|execution}` 구현 완료. 세 단계가 한 스키마를 공유
+- `AgentCapability.connected`를 `Literal[False]`로 강제해 연결됨 상태를 표현 불가로 만듦
+- 실행 단계 `executionGrade`에서 `자동 실행` 배제, 전 항목 `실행 결과: 실행 안 됨`
+- 프론트 `AccountPage`, `AgentStagePage`(3개 화면 공유) 추가
+- 공통 `useFixture` 훅과 `renderFixtureFallback` 추가, `DashboardPage`도 이관
+- `.loading-screen`/`.error-screen`을 `styles/global.css`로 이동
+- React 네비게이션에서 누락돼 있던 「실행 에이전트」 항목 복구
+- 테스트 9개에서 39개로 확장
+- `uv run pytest` 39개 통과, `npm run typecheck`·`npm run build` 통과
+- 4개 신규 화면 1440×900 렌더링 확인, 오버플로 0, 콘솔 오류 없음
+
 ## 다음 구현자 체크리스트
 
 - 작업 시작 전 `AGENTS.md`와 `docs/backend/00-readme.md`를 읽는다.
