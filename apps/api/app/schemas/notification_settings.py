@@ -44,19 +44,22 @@ class NotificationSettingsEnvelope(FixtureEnvelope):
 
 
 class NotificationApplyRequest(BaseModel):
-    """Only `types`/`defaultSeverity` are saved — channels have no editable
-    control on the screen (enabling browser/email/messenger would imply a
-    real permission request or external connection this app never makes), so
-    there is nothing user-set to persist for them."""
+    """`channels` here is only ever a virtual on/off preference — saving
+    `browser`/`email`/`messenger` as enabled never requests a real browser
+    permission or opens a real connection. Each channel's `state`/`summary`
+    text (from the fixture, never overridden) is what honestly describes its
+    real (dis)connection status regardless of this toggle."""
 
     model_config = ConfigDict(extra="forbid")
 
+    channels: dict[NotificationChannelId, bool]
     types: dict[NotificationTypeId, bool]
     defaultSeverity: NotificationSeverity
 
     @model_validator(mode="after")
-    def _require_every_type(self) -> "NotificationApplyRequest":
-        missing = set(get_args(NotificationTypeId)) - self.types.keys()
-        if missing:
-            raise ValueError(f"missing types: {sorted(missing)}")
+    def _require_every_channel_and_type(self) -> "NotificationApplyRequest":
+        missing_channels = set(get_args(NotificationChannelId)) - self.channels.keys()
+        missing_types = set(get_args(NotificationTypeId)) - self.types.keys()
+        if missing_channels or missing_types:
+            raise ValueError(f"missing channels: {sorted(missing_channels)}, missing types: {sorted(missing_types)}")
         return self

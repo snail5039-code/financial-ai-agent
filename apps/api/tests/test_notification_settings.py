@@ -34,17 +34,19 @@ def test_only_in_app_channel_is_enabled_by_default() -> None:
 
 
 ALL_TYPES_ENABLED = {"policy": True, "source": True, "approval": True, "data": True, "volatility": True, "cost": True}
+ALL_CHANNELS_ENABLED = {"inapp": True, "browser": True, "email": True, "messenger": True}
 
 
 def test_appliedAt_is_null_until_first_apply() -> None:
     assert get_payload()["data"]["appliedAt"] is None
 
 
-def test_apply_persists_types_and_severity_and_sets_appliedAt() -> None:
+def test_apply_persists_channels_types_and_severity_and_sets_appliedAt() -> None:
     client = TestClient(create_app())
 
     response = client.post(
-        "/api/notification-settings/apply", json={"types": ALL_TYPES_ENABLED, "defaultSeverity": "보통"}
+        "/api/notification-settings/apply",
+        json={"channels": ALL_CHANNELS_ENABLED, "types": ALL_TYPES_ENABLED, "defaultSeverity": "보통"},
     )
 
     assert response.status_code == 200
@@ -52,26 +54,36 @@ def test_apply_persists_types_and_severity_and_sets_appliedAt() -> None:
     assert data["appliedAt"]
     assert data["defaultSeverity"] == "보통"
     assert all(t["enabled"] for t in data["types"])
+    assert all(c["enabled"] for c in data["channels"])
+    # Enabling a channel is purely a saved preference — it never changes the
+    # honest real-connection copy the fixture supplies for it.
+    browser = next(c for c in data["channels"] if c["id"] == "browser")
+    assert browser["state"] == "권한 요청 없음"
+    assert browser["summary"] == "브라우저 알림 권한은 요청하지 않습니다."
 
     refetched = client.get("/api/notification-settings").json()["data"]
     assert refetched["appliedAt"] == data["appliedAt"]
     assert refetched["defaultSeverity"] == "보통"
+    assert all(c["enabled"] for c in refetched["channels"])
 
 
 def test_apply_missing_type_returns_422() -> None:
     client = TestClient(create_app())
 
     response = client.post(
-        "/api/notification-settings/apply", json={"types": {"policy": True}, "defaultSeverity": "보통"}
+        "/api/notification-settings/apply",
+        json={"channels": ALL_CHANNELS_ENABLED, "types": {"policy": True}, "defaultSeverity": "보통"},
     )
 
     assert response.status_code == 422
 
 
-def test_apply_leaves_channels_untouched() -> None:
+def test_apply_missing_channel_returns_422() -> None:
     client = TestClient(create_app())
 
-    client.post("/api/notification-settings/apply", json={"types": ALL_TYPES_ENABLED, "defaultSeverity": "중대"})
+    response = client.post(
+        "/api/notification-settings/apply",
+        json={"channels": {"inapp": True}, "types": ALL_TYPES_ENABLED, "defaultSeverity": "보통"},
+    )
 
-    channels = {c["id"]: c["enabled"] for c in client.get("/api/notification-settings").json()["data"]["channels"]}
-    assert channels == {"inapp": True, "browser": False, "email": False, "messenger": False}
+    assert response.status_code == 422

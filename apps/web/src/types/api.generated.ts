@@ -455,10 +455,13 @@ export interface paths {
         put?: never;
         /**
          * Apply Notification Settings
-         * @description Saves the event-type toggles and severity threshold so they survive a
-         *     restart. Channels stay untouched — there is no control on the screen to
-         *     change them (see `NotificationApplyRequest`). No real notification is
-         *     ever sent by this endpoint or anything it configures.
+         * @description Saves the channel/event-type toggles and severity threshold so they
+         *     survive a restart. A channel's `enabled` flag is purely a virtual
+         *     preference (see `NotificationApplyRequest`) — its `state`/`summary` text
+         *     always comes from the fixture and is never overridden, so "미연결"/
+         *     "권한 요청 없음" keeps describing the channel honestly regardless of this
+         *     toggle. No real notification is ever sent by this endpoint or anything it
+         *     configures.
          */
         post: operations["apply_notification_settings_api_notification_settings_apply_post"];
         delete?: never;
@@ -1991,12 +1994,17 @@ export interface components {
         };
         /**
          * NotificationApplyRequest
-         * @description Only `types`/`defaultSeverity` are saved — channels have no editable
-         *     control on the screen (enabling browser/email/messenger would imply a
-         *     real permission request or external connection this app never makes), so
-         *     there is nothing user-set to persist for them.
+         * @description `channels` here is only ever a virtual on/off preference — saving
+         *     `browser`/`email`/`messenger` as enabled never requests a real browser
+         *     permission or opens a real connection. Each channel's `state`/`summary`
+         *     text (from the fixture, never overridden) is what honestly describes its
+         *     real (dis)connection status regardless of this toggle.
          */
         NotificationApplyRequest: {
+            /** Channels */
+            channels: {
+                [key: string]: boolean;
+            };
             /** Types */
             types: {
                 [key: string]: boolean;

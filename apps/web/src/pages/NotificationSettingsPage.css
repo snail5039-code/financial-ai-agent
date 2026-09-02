@@ -156,6 +156,31 @@
   color: var(--green);
 }
 
+.channel-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 0 !important;
+}
+
+.channel-card-head strong {
+  margin: 0;
+}
+
+.channel-enabled-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0 !important;
+  border-radius: 50%;
+  background: #d7d7db;
+  flex: 0 0 auto;
+}
+
+.channel-enabled-dot.on {
+  background: var(--green);
+}
+
 .type-list {
   display: grid;
   height: 195px;
@@ -374,6 +399,23 @@
 .notification-inspector dd {
   font-weight: 650;
   text-align: right;
+}
+
+.channel-toggle-button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+}
+
+.channel-toggle-button.on {
+  border-color: var(--blue);
+  background: #eef6ff;
+  color: var(--blue);
 }
 
 .preview-card {
