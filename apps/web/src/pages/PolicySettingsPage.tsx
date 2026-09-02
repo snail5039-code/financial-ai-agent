@@ -1,12 +1,19 @@
 import { RotateCcw } from "lucide-react";
 import { useState } from "react";
-import { getPolicySettings } from "../api/policySettings";
+import { applyPolicySettings, getPolicySettings } from "../api/policySettings";
+import { ApiError } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { renderFixtureFallback } from "../components/FixtureFallback";
 import { useFixture } from "../lib/useFixture";
 import { formatPercent, formatWon } from "../lib/format";
 import type { PageKey, PolicyCheckKey, PolicyNumberKey, PolicyNumberRule, PolicySettingsData } from "../types/dashboard";
 import "./PolicySettingsPage.css";
+
+function formatAppliedAt(appliedAt: string | null): string {
+  if (!appliedAt) return "저장된 적용 없음 · 화면 기본값 표시 중";
+  const time = new Date(appliedAt).toLocaleString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  return `가상 적용됨 · 서버에 저장됨 (${time} 적용, 재시작해도 유지)`;
+}
 
 type PolicyValues = Record<PolicyNumberKey, string> & Record<PolicyCheckKey, boolean>;
 type NumberErrors = Partial<Record<PolicyNumberKey, string>>;
@@ -57,7 +64,13 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
   const state = useFixture<PolicySettingsData>(() => getPolicySettings(), "policy-settings");
   const [values, setValues] = useState<PolicyValues | null>(null);
   const [applied, setApplied] = useState<PolicyValues | null>(null);
-  const [saveStatus, setSaveStatus] = useState("변경사항은 화면에만 존재하며 저장되지 않았습니다.");
+  // `undefined` means "no apply happened yet this page session — trust the
+  // server's own appliedAt from the initial GET" (which already reflects a
+  // save from an earlier session, since the server merges it into
+  // numberRules/checks before this page ever sees them).
+  const [appliedAt, setAppliedAt] = useState<string | null | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  const [localNotice, setLocalNotice] = useState<string | null>(null);
 
   const fallback = renderFixtureFallback(state, "투자 정책");
   if (fallback) return fallback;
@@ -69,6 +82,8 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
   const initialValues = buildInitialValues(policySettings);
   const currentValues = values ?? initialValues;
   const currentApplied = applied ?? initialValues;
+  const currentAppliedAt = appliedAt === undefined ? policySettings.appliedAt : appliedAt;
+  const saveStatus = saving ? "서버에 저장하는 중..." : (localNotice ?? formatAppliedAt(currentAppliedAt));
   const numberKeys = policySettings.numberRules.map((rule) => rule.key);
   const checkKeys = policySettings.checks.map((check) => check.key);
   const validation = validateNumbers(currentValues, policySettings.numberRules);
@@ -99,18 +114,27 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
 
   function resetDefaults() {
     setValues(initialValues);
-    setSaveStatus("초기값으로 되돌렸습니다. 실제 저장은 없습니다.");
+    setLocalNotice("초기값으로 되돌렸습니다. 아직 저장 전입니다.");
   }
 
   function cancelChanges() {
     setValues(currentApplied);
-    setSaveStatus("변경을 취소했습니다. 실제 저장은 없습니다.");
+    setLocalNotice("변경을 취소했습니다. 저장된 값은 그대로입니다.");
   }
 
-  function applyMockPolicy() {
-    if (!validation.ok) return;
-    setApplied(currentValues);
-    setSaveStatus("가상 적용됨 · 화면 상태만 변경되었습니다.");
+  async function applyMockPolicy() {
+    if (!validation.ok || saving) return;
+    setSaving(true);
+    setLocalNotice(null);
+    try {
+      const result = await applyPolicySettings(currentValues);
+      setApplied(currentValues);
+      setAppliedAt(result.data.appliedAt);
+    } catch (err) {
+      setLocalNotice(err instanceof ApiError ? `저장 실패: ${err.message}` : "가상 적용 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const main = (
@@ -207,7 +231,9 @@ export function PolicySettingsPage({ activePage, onNavigate }: PolicySettingsPag
         <div role="status">{validation.ok ? "" : "입력 오류를 수정해야 가상 적용할 수 있습니다."}</div>
         <div>
           <button type="button" onClick={cancelChanges}>변경 취소</button>
-          <button type="button" disabled={!validation.ok || !changes.length} onClick={applyMockPolicy}>가상 정책 적용</button>
+          <button type="button" disabled={!validation.ok || !changes.length || saving} onClick={applyMockPolicy}>
+            {saving ? "저장 중..." : "가상 정책 적용"}
+          </button>
         </div>
         <small>{policySettings.safetyCopy}</small>
       </footer>

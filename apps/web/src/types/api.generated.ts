@@ -444,6 +444,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notification-settings/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Notification Settings
+         * @description Saves the event-type toggles and severity threshold so they survive a
+         *     restart. Channels stay untouched — there is no control on the screen to
+         *     change them (see `NotificationApplyRequest`). No real notification is
+         *     ever sent by this endpoint or anything it configures.
+         */
+        post: operations["apply_notification_settings_api_notification_settings_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/policy-settings": {
         parameters: {
             query?: never;
@@ -455,6 +478,27 @@ export interface paths {
         get: operations["get_policy_settings_api_policy_settings_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/policy-settings/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Policy Settings
+         * @description Saves a "가상 정책 적용" so it survives a restart. This never enforces a
+         *     real order or touches a real account.
+         */
+        post: operations["apply_policy_settings_api_policy_settings_apply_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1945,6 +1989,24 @@ export interface components {
             /** Disclaimer */
             disclaimer: string;
         };
+        /**
+         * NotificationApplyRequest
+         * @description Only `types`/`defaultSeverity` are saved — channels have no editable
+         *     control on the screen (enabling browser/email/messenger would imply a
+         *     real permission request or external connection this app never makes), so
+         *     there is nothing user-set to persist for them.
+         */
+        NotificationApplyRequest: {
+            /** Types */
+            types: {
+                [key: string]: boolean;
+            };
+            /**
+             * Defaultseverity
+             * @enum {string}
+             */
+            defaultSeverity: "중대" | "높음" | "보통";
+        };
         /** NotificationChannel */
         NotificationChannel: {
             /**
@@ -1974,6 +2036,8 @@ export interface components {
              * @enum {string}
              */
             defaultSeverity: "중대" | "높음" | "보통";
+            /** Appliedat */
+            appliedAt?: string | null;
         };
         /** NotificationSettingsEnvelope */
         NotificationSettingsEnvelope: {
@@ -2023,6 +2087,34 @@ export interface components {
             desc: string;
             /** Enabled */
             enabled: boolean;
+        };
+        /**
+         * PolicyApplyRequest
+         * @description Mirrors the frontend's `PolicyValues` shape — one field per number
+         *     rule and check key, all required, so a partial apply can't leave some
+         *     keys silently unset.
+         */
+        PolicyApplyRequest: {
+            /** Maxweight */
+            maxWeight: string;
+            /** Maxorder */
+            maxOrder: string;
+            /** Maxloss */
+            maxLoss: string;
+            /** Mincash */
+            minCash: string;
+            /** Volatility */
+            volatility: string;
+            /** Expiry */
+            expiry: string;
+            /** Limitorder */
+            limitOrder: boolean;
+            /** Marketorder */
+            marketOrder: boolean;
+            /** Blockunknown */
+            blockUnknown: boolean;
+            /** Blockcorrection */
+            blockCorrection: boolean;
         };
         /** PolicyCheckRule */
         PolicyCheckRule: {
@@ -2092,6 +2184,8 @@ export interface components {
             /** Checks */
             checks: components["schemas"]["PolicyCheckRule"][];
             preview: components["schemas"]["PolicyPreview"];
+            /** Appliedat */
+            appliedAt?: string | null;
         };
         /** PolicySettingsEnvelope */
         PolicySettingsEnvelope: {
@@ -3429,6 +3523,39 @@ export interface operations {
             };
         };
     };
+    apply_notification_settings_api_notification_settings_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_policy_settings_api_policy_settings_get: {
         parameters: {
             query?: never;
@@ -3445,6 +3572,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PolicySettingsEnvelope"];
+                };
+            };
+        };
+    };
+    apply_policy_settings_api_policy_settings_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicySettingsEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

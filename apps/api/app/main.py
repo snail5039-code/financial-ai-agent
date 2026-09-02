@@ -27,6 +27,8 @@ from app.routers.tax_fee_impact import router as tax_fee_impact_router
 from app.routers.trade_history import router as trade_history_router
 from app.routers.weekly_report import router as weekly_report_router
 from app.store.approvals import ApprovalStore
+from app.store.notification_settings import NotificationSettingsStore
+from app.store.policy_settings import PolicySettingsStore
 
 # The Vite dev server proxies /api to this app, so the browser normally makes
 # same-origin requests and never sends a CORS preflight. These settings stay as
@@ -45,9 +47,19 @@ ALLOWED_REQUEST_HEADERS = ["Accept", "Accept-Language", "Content-Type"]
 DEFAULT_APPROVALS_DB_PATH = os.environ.get(
     "APPROVALS_DB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "approvals.db")
 )
+DEFAULT_POLICY_SETTINGS_DB_PATH = os.environ.get(
+    "POLICY_SETTINGS_DB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "policy_settings.db")
+)
+DEFAULT_NOTIFICATION_SETTINGS_DB_PATH = os.environ.get(
+    "NOTIFICATION_SETTINGS_DB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "notification_settings.db")
+)
 
 
-def create_app(approval_db_path: str = ":memory:") -> FastAPI:
+def create_app(
+    approval_db_path: str = ":memory:",
+    policy_settings_db_path: str = ":memory:",
+    notification_settings_db_path: str = ":memory:",
+) -> FastAPI:
     app = FastAPI(
         title="Financial AI Agent Local Fixture API",
         version="0.1.0",
@@ -60,11 +72,14 @@ def create_app(approval_db_path: str = ":memory:") -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=ALLOWED_REQUEST_HEADERS,
     )
-    if approval_db_path != ":memory:":
-        Path(approval_db_path).parent.mkdir(parents=True, exist_ok=True)
+    for db_path in (approval_db_path, policy_settings_db_path, notification_settings_db_path):
+        if db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     # One store per app instance (not a module-level singleton) so tests that
     # each call create_app() get independent, isolated demo state.
     app.state.approval_store = ApprovalStore(approval_db_path)
+    app.state.policy_settings_store = PolicySettingsStore(policy_settings_db_path)
+    app.state.notification_settings_store = NotificationSettingsStore(notification_settings_db_path)
 
     app.include_router(health_router)
     app.include_router(dashboard_router)
@@ -91,4 +106,8 @@ def create_app(approval_db_path: str = ":memory:") -> FastAPI:
     return app
 
 
-app = create_app(approval_db_path=DEFAULT_APPROVALS_DB_PATH)
+app = create_app(
+    approval_db_path=DEFAULT_APPROVALS_DB_PATH,
+    policy_settings_db_path=DEFAULT_POLICY_SETTINGS_DB_PATH,
+    notification_settings_db_path=DEFAULT_NOTIFICATION_SETTINGS_DB_PATH,
+)

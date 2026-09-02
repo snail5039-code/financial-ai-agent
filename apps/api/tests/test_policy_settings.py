@@ -39,3 +39,59 @@ def test_preview_agrees_with_dashboard_and_approvals_on_dec_1042() -> None:
     assert preview["decisionId"] == "DEC-1042"
     assert preview["amount"] == dashboard["limitAmount"] == order["amount"]
     assert preview["nextWeight"] == dashboard["targetWeightTo"]
+
+
+VALID_APPLY_BODY = {
+    "maxWeight": "12.0",
+    "maxOrder": "2000000",
+    "maxLoss": "4.0",
+    "minCash": "10.0",
+    "volatility": "30.0",
+    "expiry": "15",
+    "limitOrder": True,
+    "marketOrder": True,
+    "blockUnknown": False,
+    "blockCorrection": True,
+}
+
+
+def test_appliedAt_is_null_until_first_apply() -> None:
+    assert get_payload()["data"]["appliedAt"] is None
+
+
+def test_apply_persists_values_and_sets_appliedAt() -> None:
+    client = TestClient(create_app())
+
+    response = client.post("/api/policy-settings/apply", json=VALID_APPLY_BODY)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["appliedAt"]
+    values = {rule["key"]: rule["value"] for rule in data["numberRules"]}
+    assert values["maxWeight"] == "12.0"
+    checks = {check["key"]: check["value"] for check in data["checks"]}
+    assert checks["blockUnknown"] is False
+
+    # A fresh GET on the same app instance reflects the saved apply, not the
+    # fixture defaults.
+    refetched = client.get("/api/policy-settings").json()["data"]
+    assert refetched["appliedAt"] == data["appliedAt"]
+    assert refetched["numberRules"][0]["value"] == "12.0"
+
+
+def test_apply_out_of_range_number_returns_422_and_does_not_persist() -> None:
+    client = TestClient(create_app())
+
+    response = client.post("/api/policy-settings/apply", json={**VALID_APPLY_BODY, "maxWeight": "999"})
+
+    assert response.status_code == 422
+    assert client.get("/api/policy-settings").json()["data"]["appliedAt"] is None
+
+
+def test_apply_state_is_isolated_per_app_instance() -> None:
+    first = TestClient(create_app())
+    second = TestClient(create_app())
+
+    first.post("/api/policy-settings/apply", json=VALID_APPLY_BODY)
+
+    assert second.get("/api/policy-settings").json()["data"]["appliedAt"] is None

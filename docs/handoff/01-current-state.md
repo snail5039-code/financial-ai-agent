@@ -1,6 +1,6 @@
 # 현재 상태 요약
 
-기준일: 2026-09-01 KST
+기준일: 2026-09-02 KST
 
 ## 커밋 상태 (2026-09-01 갱신)
 
@@ -13,13 +13,25 @@
 
 **검증 완료**: 백엔드 `apps/api/.venv/Scripts/python.exe -m pytest -q` 113개 통과. 브라우저로 기업 상세 화면을 직접 열어 "OpenDART 실제 공시 연결" 배지와 삼성전자 실제 공시 3건(대규모기업집단현황공시 등, 2026.08.28~31 접수)이 정상 렌더링되는 것을 확인했다.
 
+## 2026-09-02: 투자 정책·알림 설정 "가상 적용"을 SQLite에 저장
+
+두 화면 모두 원래 `app/fixtures/policy_settings.py`·`notification_settings.py` 코드 주석에 "저장되지 않는 화면 상태(by design)"라고 명시돼 있었다 — 편집·적용이 순전히 프론트엔드 로컬 상태였다. 사용자가 명시적으로 "저장도, 모의도 해야 한다"고 방향을 뒤집어서, 승인 저장소(`ApprovalStore`)와 같은 패턴으로 SQLite 저장을 추가했다. 여전히 완전히 paper/demo 상태다 — 실제 주문·계좌·정책 엔진에는 아무 영향이 없다.
+
+- 신규 `app/store/policy_settings.py`(`PolicySettingsStore`), `app/store/notification_settings.py`(`NotificationSettingsStore`) — `ApprovalStore`와 동일하게 `db_path=":memory:"` 기본값(테스트 격리), `app/main.py`가 실제 파일 경로(`apps/api/data/policy_settings.db`·`notification_settings.db`, `.gitignore`의 `apps/api/data/`에 이미 포함)를 넘긴다.
+- `POST /api/policy-settings/apply`: 6개 숫자 규칙 + 4개 체크박스를 저장. 서버가 각 규칙의 min/max로 재검증해 범위를 벗어나면 422(클라이언트 검증을 신뢰하지 않고 영구 저장 전에 한 번 더 막는다).
+- `POST /api/notification-settings/apply`: 6개 알림 유형 enabled + `defaultSeverity`만 저장. 채널(`channels`)은 화면에 토글 컨트롤이 없어서(브라우저 권한 요청·이메일/메신저 연결처럼 실제로 연결하지 않는 것들이라 일부러 안 만듦) 저장 대상에서 제외했다.
+- 두 `PolicySettingsData`/`NotificationSettingsData`에 `appliedAt: str | None` 필드 추가 — 저장 이력이 없으면 `null`, 저장되면 그 시각. `GET`이 저장된 값을 fixture 기본값 위에 덮어써서 응답하므로 재시작해도 마지막 저장 상태가 그대로 보인다.
+- 두 화면의 `POLICY_SETTINGS_DISCLAIMER`/`NOTIFICATION_SETTINGS_DISCLAIMER` 문구가 예전엔 "정책 저장 없음"/"계좌·API·DB 미연결"이라고 저장 자체를 부정하고 있어서, 이제 저장은 하되 실제 계좌·주문·외부 API와는 무관하다는 쪽으로 정직하게 고쳤다.
+- 프론트: `PolicySettingsPage.tsx`의 "가상 정책 적용" 버튼과 `NotificationSettingsPage.tsx`에 새로 추가한 "유형·심각도 설정 저장" 버튼이 각각 `POST .../apply`를 호출하고, 저장 시각을 "가상 적용됨 · 서버에 저장됨 (HH:MM, 재시작해도 유지)" 식으로 표시한다. `api/client.ts`에 JSON 바디를 보내는 `postFixture` 헬퍼를 추가했다(기존 `postFixtureAction`은 바디 없는 POST 전용).
+- `apps/web/playwright.config.ts`가 새 두 스토어의 `*_DB_PATH` 환경변수도 `:memory:`로 오버라이드하도록 갱신(승인 저장소와 동일한 이유 — e2e 실행끼리 상태가 새면 안 됨).
+- 검증: 백엔드 `pytest` 121개 통과(신규 10개: 저장/재조회/범위초과 422/타입 누락 422/앱 인스턴스 간 격리). 프론트 `typecheck`·`build`·`test:e2e`(5개) 통과. 브라우저로 직접 두 화면 모두 값 변경 → 저장 → 전체 새로고침 → 값 유지 확인, 이어서 실제 API 서버(8000)를 완전히 재시작해 `apps/api/data/policy_settings.db`·`notification_settings.db` 파일 기반으로도 유지되는 것까지 확인했다.
+
 ## 저장소 상태
 
 - 원본 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`
 - 기본 브랜치: `main`
 - 원격 저장소: `https://github.com/snail5039-code/financial-ai-agent`
-- `origin/main`은 `804606a 기업 상세 화면 공시를 OpenDART 실제 API에 연결 (최초 실제 외부 API)` 기준이다.
-- 로컬 `main`은 그 위에 `d511cee OpenDART 공시 조회에 날짜 범위 누락 버그 수정, 테스트 격리 보완` 1개를 더 갖고 있다 — 아직 푸시 안 함(사용자 지시 대기).
+- `origin/main`은 `f7efc52 핸드오프 문서의 stale한 커밋·OpenDART 키 상태 서술 갱신` 기준이다(그 아래 `d511cee`가 OpenDART 버그 수정 커밋). 위 "투자 정책·알림 설정 저장" 작업은 이 문서 기준 시점에 아직 커밋 전이다 — 커밋 여부는 사용자 지시로 진행한다.
 - `MOCKUP-015` 세금·수수료 영향 점검 화면은 완료·검증·커밋·푸시했다.
 - `MOCKUP-016` 사용자 승인 이력·결정 회고 화면도 완료·검증·커밋·푸시했다.
 - `MOCKUP-017` 에이전트별 역할 상태판은 완료·검증·커밋·푸시했다.

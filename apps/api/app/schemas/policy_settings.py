@@ -58,7 +58,30 @@ class PolicySettingsData(BaseModel):
     numberRules: list[PolicyNumberRule] = Field(min_length=1)
     checks: list[PolicyCheckRule] = Field(min_length=1)
     preview: PolicyPreview
+    # None until the first "가상 정책 적용" — set to that apply's server time
+    # afterward, so a restart still shows the persisted values, not silently
+    # reverted-looking fixture defaults.
+    appliedAt: str | None = None
 
 
 class PolicySettingsEnvelope(FixtureEnvelope):
     data: PolicySettingsData
+
+
+class PolicyApplyRequest(BaseModel):
+    """Mirrors the frontend's `PolicyValues` shape — one field per number
+    rule and check key, all required, so a partial apply can't leave some
+    keys silently unset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    maxWeight: str
+    maxOrder: str
+    maxLoss: str
+    minCash: str
+    volatility: str
+    expiry: str
+    limitOrder: bool
+    marketOrder: bool
+    blockUnknown: bool
+    blockCorrection: bool

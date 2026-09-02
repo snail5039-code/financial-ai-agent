@@ -1,10 +1,13 @@
 """Local notification settings fixture. Ported from
 `src/fixtures/notificationSettings.ts`.
 
-Channel/type toggles and the severity threshold are explicitly a
-"저장되지 않는 화면 상태" (not-saved screen state) by product design — the
-frontend keeps editing them locally after loading these initial values; there
-is no PUT/save endpoint here to match, on purpose.
+These are the fixture defaults `build_notification_settings_data()` always
+returns. `app/routers/notification_settings.py` overlays any event-type
+toggles and severity threshold saved via `POST /api/notification-settings/apply`
+(persisted by `app/store/notification_settings.py`) on top of them — so those
+survive a server restart. Channels have no editable control on the screen, so
+they're never overridden. Nothing here sends a real notification, requests a
+browser permission, or connects to email/messenger/an external API.
 """
 
 from app.schemas.notification_settings import NotificationChannel, NotificationSettingsData, NotificationType
@@ -14,8 +17,8 @@ NOTIFICATION_SETTINGS_DATA_AS_OF = "2026-08-27T15:20:00+09:00"
 NOTIFICATION_SETTINGS_SOURCE_LABEL = "로컬 fixture"
 
 NOTIFICATION_SETTINGS_DISCLAIMER = (
-    "모의투자 · 화면 검토용 가상 예시 · 실제 주문 아님 · 실제 계좌·API·DB 미연결 · "
-    "실제 알림 발송 없음 · 브라우저 권한 요청 없음 · 외부 요청 0건"
+    "모의투자 · 화면 검토용 가상 예시 · 실제 주문 아님 · 유형·심각도 설정은 로컬에 저장됨 · "
+    "실제 계좌·외부 API 미연결 · 실제 알림 발송 없음 · 브라우저 권한 요청 없음 · 외부 요청 0건"
 )
 
 

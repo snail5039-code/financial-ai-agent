@@ -31,3 +31,47 @@ def test_only_in_app_channel_is_enabled_by_default() -> None:
     assert channels["browser"] is False
     assert channels["email"] is False
     assert channels["messenger"] is False
+
+
+ALL_TYPES_ENABLED = {"policy": True, "source": True, "approval": True, "data": True, "volatility": True, "cost": True}
+
+
+def test_appliedAt_is_null_until_first_apply() -> None:
+    assert get_payload()["data"]["appliedAt"] is None
+
+
+def test_apply_persists_types_and_severity_and_sets_appliedAt() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/notification-settings/apply", json={"types": ALL_TYPES_ENABLED, "defaultSeverity": "보통"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["appliedAt"]
+    assert data["defaultSeverity"] == "보통"
+    assert all(t["enabled"] for t in data["types"])
+
+    refetched = client.get("/api/notification-settings").json()["data"]
+    assert refetched["appliedAt"] == data["appliedAt"]
+    assert refetched["defaultSeverity"] == "보통"
+
+
+def test_apply_missing_type_returns_422() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/notification-settings/apply", json={"types": {"policy": True}, "defaultSeverity": "보통"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_apply_leaves_channels_untouched() -> None:
+    client = TestClient(create_app())
+
+    client.post("/api/notification-settings/apply", json={"types": ALL_TYPES_ENABLED, "defaultSeverity": "중대"})
+
+    channels = {c["id"]: c["enabled"] for c in client.get("/api/notification-settings").json()["data"]["channels"]}
+    assert channels == {"inapp": True, "browser": False, "email": False, "messenger": False}

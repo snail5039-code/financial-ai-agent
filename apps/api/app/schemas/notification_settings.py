@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.common import FixtureEnvelope
 
@@ -35,7 +35,28 @@ class NotificationSettingsData(BaseModel):
     channels: list[NotificationChannel] = Field(min_length=1)
     types: list[NotificationType] = Field(min_length=1)
     defaultSeverity: NotificationSeverity
+    # None until the first save — set to that save's server time afterward.
+    appliedAt: str | None = None
 
 
 class NotificationSettingsEnvelope(FixtureEnvelope):
     data: NotificationSettingsData
+
+
+class NotificationApplyRequest(BaseModel):
+    """Only `types`/`defaultSeverity` are saved — channels have no editable
+    control on the screen (enabling browser/email/messenger would imply a
+    real permission request or external connection this app never makes), so
+    there is nothing user-set to persist for them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    types: dict[NotificationTypeId, bool]
+    defaultSeverity: NotificationSeverity
+
+    @model_validator(mode="after")
+    def _require_every_type(self) -> "NotificationApplyRequest":
+        missing = set(get_args(NotificationTypeId)) - self.types.keys()
+        if missing:
+            raise ValueError(f"missing types: {sorted(missing)}")
+        return self

@@ -116,3 +116,17 @@ export async function getFixture<TData>(
 export async function postFixtureAction<TData>(path: string): Promise<FixtureEnvelope<TData>> {
   return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path, { method: "POST" }));
 }
+
+/**
+ * POSTs a local demo action with a JSON body (e.g. "가상 정책 적용") and
+ * returns the resulting fixture envelope. Same safety check as `getFixture`.
+ */
+export async function postFixture<TData>(path: string, body: unknown): Promise<FixtureEnvelope<TData>> {
+  return assertFixtureEnvelope(
+    await request<FixtureEnvelope<TData>>(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+}

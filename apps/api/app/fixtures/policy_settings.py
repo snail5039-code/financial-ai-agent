@@ -1,8 +1,12 @@
 """Local policy settings fixture. Ported from `src/fixtures/policySettings.ts`.
 
-Number rule defaults, checks, and the "가상 정책 적용" flow are all
-"저장되지 않는 화면 상태" by design — editing and applying happens purely in
-frontend state after loading these initial values.
+These are the fixture defaults `build_policy_settings_data()` always returns.
+`app/routers/policy_settings.py` overlays any values saved via
+`POST /api/policy-settings/apply` (persisted by `app/store/policy_settings.py`)
+on top of them before a response goes out — so "가상 정책 적용" now survives a
+server restart instead of resetting every time, the same way approvals do.
+It's still entirely a paper/demo setting: nothing here enforces a real order
+or touches a real account.
 """
 
 from app.fixtures.decisions import DEC_1042, DEC_1042_TARGET_WEIGHT_FROM, DEC_1042_TARGET_WEIGHT_TO
@@ -12,7 +16,7 @@ POLICY_SETTINGS_DATA_AS_OF = "2026-08-25T14:32:00+09:00"
 
 POLICY_SETTINGS_SOURCE_LABEL = "로컬 fixture"
 
-POLICY_SETTINGS_DISCLAIMER = "모의투자 · 가상 예시 · 실제 계좌·정책 저장·주문·API 호출 없음"
+POLICY_SETTINGS_DISCLAIMER = "모의투자 · 가상 예시 · 가상 정책 적용은 로컬에 저장됨 · 실제 계좌·주문·API 호출 없음"
 
 
 def build_policy_settings_data() -> PolicySettingsData:

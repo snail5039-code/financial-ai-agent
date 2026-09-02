@@ -1,15 +1,22 @@
 import { useState } from "react";
-import { getNotificationSettings } from "../api/notificationSettings";
+import { applyNotificationSettings, getNotificationSettings } from "../api/notificationSettings";
+import { ApiError } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { renderFixtureFallback } from "../components/FixtureFallback";
 import { useFixture } from "../lib/useFixture";
-import type { NotificationChannelId, NotificationSettingsData, NotificationSeverity, NotificationType, PageKey } from "../types/dashboard";
+import type { NotificationChannelId, NotificationSettingsData, NotificationSeverity, NotificationType, NotificationTypeId, PageKey } from "../types/dashboard";
 import "./NotificationSettingsPage.css";
 
 function severityLabel(severity: NotificationSeverity) {
   if (severity === "중대") return "중대만";
   if (severity === "보통") return "보통 포함";
   return "높음 이상";
+}
+
+function formatAppliedAt(appliedAt: string | null): string {
+  if (!appliedAt) return "저장된 설정 없음 · 화면 기본값 표시 중";
+  const time = new Date(appliedAt).toLocaleString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  return `저장됨 (${time}, 재시작해도 유지)`;
 }
 
 interface NotificationSettingsPageProps {
@@ -23,6 +30,11 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
   const [severity, setSeverity] = useState<NotificationSeverity | null>(null);
   const [types, setTypes] = useState<NotificationType[] | null>(null);
   const [preview, setPreview] = useState({ title: "대기 중", body: "버튼을 누르면 화면 안에서만 예시 알림을 표시합니다." });
+  // `undefined` means "not saved this page session — trust the server's own
+  // appliedAt from the initial GET", same pattern as PolicySettingsPage.
+  const [appliedAt, setAppliedAt] = useState<string | null | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const fallback = renderFixtureFallback(state, "알림 설정");
   if (fallback) return fallback;
@@ -34,8 +46,31 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
   const notificationChannels = envelope.data.channels;
   const activeSeverity = severity ?? envelope.data.defaultSeverity;
   const activeTypes = types ?? defaultTypes;
+  const currentAppliedAt = appliedAt === undefined ? envelope.data.appliedAt : appliedAt;
   const selectedChannel = notificationChannels.find((channel) => channel.id === selectedChannelId) ?? notificationChannels[0];
   const activeTypeCount = activeTypes.filter((type) => type.enabled).length;
+  const hasUnsavedChanges =
+    severity !== null && severity !== envelope.data.defaultSeverity
+      ? true
+      : (types ?? []).some((type) => type.enabled !== defaultTypes.find((t) => t.id === type.id)?.enabled);
+
+  async function saveNotificationSettings() {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const typesById = Object.fromEntries(activeTypes.map((type) => [type.id, type.enabled])) as Record<
+        NotificationTypeId,
+        boolean
+      >;
+      const result = await applyNotificationSettings({ types: typesById, defaultSeverity: activeSeverity });
+      setAppliedAt(result.data.appliedAt);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? `저장 실패: ${err.message}` : "설정 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function toggleType(target: NotificationType) {
     setTypes((current) => (current ?? defaultTypes).map((type) => (type.id === target.id ? { ...type, enabled: !type.enabled } : type)));
@@ -93,7 +128,10 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
         </div>
 
         <div className="setting-block rules-block">
-          <div className="setting-block-head"><h2>수신 기준</h2><span>저장되지 않는 화면 상태</span></div>
+          <div className="setting-block-head">
+            <h2>수신 기준</h2>
+            <span>{saving ? "저장하는 중..." : saveError ?? formatAppliedAt(currentAppliedAt)}</span>
+          </div>
           <div className="rule-row">
             <span>심각도 기준</span>
             <div className="segments" role="group" aria-label="심각도 기준">
@@ -113,13 +151,18 @@ export function NotificationSettingsPage({ activePage, onNavigate }: Notificatio
             <strong>22:00-08:00</strong>
             <small>이 시간에는 앱 내부 배지만 표시하는 예시입니다.</small>
           </div>
-          <button
-            className="preview-button"
-            type="button"
-            onClick={() => setPreview({ title: "화면용 테스트 알림", body: "확인이 필요한 리스크 이벤트가 있습니다. 실제 발송·권한 요청·매수/매도 지시는 없습니다." })}
-          >
-            화면용 테스트 알림 미리보기
-          </button>
+          <div className="notification-save-row">
+            <button
+              className="preview-button"
+              type="button"
+              onClick={() => setPreview({ title: "화면용 테스트 알림", body: "확인이 필요한 리스크 이벤트가 있습니다. 실제 발송·권한 요청·매수/매도 지시는 없습니다." })}
+            >
+              화면용 테스트 알림 미리보기
+            </button>
+            <button className="save-button" type="button" disabled={!hasUnsavedChanges || saving} onClick={saveNotificationSettings}>
+              {saving ? "저장 중..." : "유형·심각도 설정 저장"}
+            </button>
+          </div>
         </div>
       </section>
       <footer className="notification-disclaimer">{envelope.data.safetyCopy}</footer>
