@@ -36,6 +36,11 @@ class ApprovalOrder(BaseModel):
     warningDetail: str
     tone: Tone
     decidedAt: str | None = None
+    # Set only when approving this order actually placed a live order against
+    # KIS's 모의투자(paper trading) account (see app/integrations/kis.py) —
+    # KIS's own order number, not a locally-invented id. `None` means this
+    # approval only changed local demo state, same as before KIS existed.
+    kisOrderNo: str | None = None
 
 
 class ApprovalsData(BaseModel):

@@ -35,6 +35,20 @@
 - 프론트: 채널 카드에 활성 여부를 나타내는 작은 점(dot) 표시 추가, 인스펙터의 "가상 활성화" 행이 이제 켜짐/꺼짐 토글 버튼. 저장 버튼 라벨을 "채널·유형·심각도 설정 저장"으로 변경.
 - 검증: 백엔드 `pytest` 121개(채널 저장/누락 422 테스트로 교체, 순 증감 0). 프론트 `typecheck`·`build`·`test:e2e`(5개) 통과. 브라우저로 브라우저 채널을 켜짐으로 저장 → 새로고침 → 유지 확인, 이어서 실제 서버 재시작으로 SQLite 파일 기반 유지까지 확인. 이 스키마 변경으로 기존 `apps/api/data/notification_settings.db`(컬럼 없음)가 호환 깨져서 로컬에서 삭제하고 새로 만들게 했다 — 이 파일은 매 세션 로컬 생성물이라 커밋 대상이 아니다.
 
+## 2026-09-02: 한국투자증권(KIS) 모의투자 API 연동 — 이 프로젝트 최초의 "실제 주문 실행" 경로
+
+사용자가 "AI가 제안하면 승인 눌러서 실제로 살 수 있게" 만들자고 요청했다. 실제 계좌·실제 자금으로 매수·매도를 실행하는 기능은 명확히 거절했다(Anthropic 운영 규칙·이 프로젝트 `AGENTS.md` 둘 다 위반) — 대신 최초 기획 문서 `FINANCIAL_AI_AGENT_IDEA.md`의 4단계("실행 에이전트": "증권사 **모의투자** API 연동")를 재확인하고, 한국투자증권(KIS) Developers의 **모의투자(paper trading)** API로 시작했다. 실제 서버·실제 인증·실제 주문 흐름이지만 KIS 자신이 관리하는 가상계좌라 실제 자금은 전혀 움직이지 않는다. 사용자는 아직 KIS 키를 발급받지 않았다(삼성증권 사용 중 — 삼성증권은 개인 개발자에게 API를 안 열어줘서 KIS로 결정) — 이번 세션은 그 키가 없어도 전부 mock으로 검증 가능한 "골격"까지다.
+
+- 신규 `app/integrations/kis.py`: OAuth 토큰 발급·캐싱(1일 유효, 만료 5분 전 자동 갱신), 잔고조회(`inquire-balance`, tr_id `VTTC8434R`), 현재가 조회(`inquire-price`, tr_id `FHKST01010100`), 모의투자 매수·매도 주문(`order-cash`, tr_id `VTTC0012U`/`VTTC0011U`). **실전투자 도메인(`openapi.koreainvestment.com`)과 그 tr_id(`T`/`J`/`C`로 시작)는 이 파일에 코드로도 존재하지 않는다** — 구조적으로 실전 주문을 낼 수 없다. 엔드포인트 사양은 KIS 공식 GitHub([koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api))에서 직접 확인했다.
+- 신규 `app/config.py`의 `KIS_PAPER_APP_KEY`/`KIS_PAPER_APP_SECRET`/`KIS_PAPER_CANO`/`KIS_PAPER_ACNT_PRDT_CD` — 넷 중 하나라도 비면 기존과 동일하게 fixture로 동작(OpenDART와 같은 폴백 원칙).
+- `app/routers/dashboard.py`: KIS가 설정돼 있으면 `holdings`를 실제 모의투자 잔고로 교체(`holdingsConnected: true`). 그 외(차트, AI 판단 근거)는 여전히 fixture. `DashboardData.holdingsConnected`, `DashboardDecision.kisOrderNo` 필드 신규.
+- `app/routers/approvals.py`: KIS가 설정돼 있으면 "승인"이 실제로 `place_paper_order`를 호출해 그 가상계좌로 지정가 주문을 전송하고, 성공하면 KIS의 진짜 주문번호(`ODNO`)를 `ApprovalOrder.kisOrderNo`에 저장한다. **주문 전송이 실패하면 승인 자체를 502로 실패시킨다** — OpenDART처럼 조용히 fixture로 폴백하지 않는다("승인 = 실제로 KIS에 주문이 나갔다"는 의미가 깨지면 안 되기 때문. 성공/실패의 의미가 OpenDART와 다르다는 점에 유의). 반려는 side effect 없이 언제나 로컬 상태만 바꾼다(승인만 주문을 낸다).
+- `app/schemas/common.py`의 `FixtureEnvelope` 독스트링을 갱신: `executed: false`는 KIS 모의투자로 실제 주문이 나간 뒤에도 유지된다 — 그 계좌가 가상계좌라서 그런 것이지 주문이 안 나가서가 아니라는 점을 명시했다. `externalConnections`는 대시보드/승인 대기도 (OpenDART처럼) `1`을 보고할 수 있게 확장.
+- 프론트: `assertFixtureEnvelope`에 대시보드·승인 대기용 `[0, 1]` 허용 추가(`getDashboard`/`getApprovals`/`approveOrder`). **`api/client.ts`의 기존 버그를 하나 고쳤다**: 5xx 응답은 무조건 "백엔드 응답 없음"으로 뭉뚱그려 FastAPI의 진짜 `detail`(예: KIS 502 사유)을 숨기고 있었다 — 이제 상태 코드와 무관하게 `detail`이 있으면 그걸 먼저 보여준다. `DashboardPage.tsx`/`ApprovalQueuePage.tsx`의 "실제 주문은 생성되지 않습니다" 고정 문구를 `kisOrderNo` 유무에 따라 정직하게 바꿨다.
+- 안전 문서 갱신: `docs/fullstack/05-safety-validation.md`의 금지 문자열 목록에서 "KIS"/"Broker"/"real order"를 무조건 금지 문자열로 두던 것을, "실전투자 도메인·tr_id만 금지"로 정밀화했다(이 프로젝트가 이제 정당하게 "KIS"라는 이름을 코드·문서에 쓰기 때문). `00-readme.md`, `04-frontend-backend-scope.md`, 루트 `README.md`의 "실제 연결 안 함" 계열 문장에 KIS 모의투자 예외를 명시.
+- 검증: 백엔드 `pytest` 134개(신규 13개: `kis.py` 자체의 요청 형태·tr_id 선택·토큰 캐싱을 `httpx.AsyncClient`를 가짜로 바꿔 직접 검증 5개 + 대시보드 KIS 오버레이 성공/실패/빈결과/kisOrderNo 전파 4개 + 승인 시 KIS 주문 성공/매도 tr_id/실패 시 502·pending 유지/반려는 KIS 호출 안 함 4개). 프론트 `typecheck`·`build`·`test:e2e`(5개) 통과. 브라우저로 KIS 미설정 상태에서 기존 승인 흐름이 그대로 동작하는 것(회귀 없음)까지 확인했다 — **실제 KIS 계정으로는 아직 한 번도 안 해봤다**(사용자가 아직 키가 없음).
+- **다음 세션이 먼저 할 일**: 사용자가 한국투자증권 실계좌 개설 → 모의투자 참가신청 → [apiportal.koreainvestment.com](https://apiportal.koreainvestment.com/intro)에서 모의투자용 앱키/앱시크리트 발급 → 계좌번호(8+2자리) 확인 → `apps/api/.env`의 `KIS_PAPER_*` 4개 값을 채우면, 백엔드 재시작 후 대시보드 실제 잔고와 승인 시 실제 모의투자 주문 전송을 라이브로 한 번 확인해야 한다(OpenDART 때 `bgn_de` 버그처럼, mock 테스트로는 못 잡는 문제가 있을 가능성이 있다).
+
 ## 저장소 상태
 
 - 원본 작업공간: `C:\Users\snail\OneDrive\바탕 화면\new_idea`

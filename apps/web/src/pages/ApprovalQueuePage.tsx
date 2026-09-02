@@ -214,7 +214,10 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
           <dl>
             <div><dt>정책 한도</dt><dd className={selected.policyPassed ? "success" : "warning"}>{selected.policyLabel}</dd></div>
             <div><dt>근거 출처</dt><dd className="warning">{selected.sourceLabel}</dd></div>
-            <div><dt>실제 주문</dt><dd className="success">생성 안 됨</dd></div>
+            <div>
+              <dt>KIS 모의투자 주문</dt>
+              <dd className="success">{selected.kisOrderNo ? `전송됨 · 주문번호 ${selected.kisOrderNo}` : "생성 안 됨"}</dd>
+            </div>
           </dl>
           <div className="warning">
             <b>{selected.warningTitle}</b>
@@ -226,12 +229,14 @@ export function ApprovalQueuePage({ activePage, onNavigate }: ApprovalQueuePageP
       <div className="approval-panel">
         <div className="expiry">
           <span>이 모의승인은 <b>{formatTimeOfDay(selected.expiresAt)}</b>에 만료됩니다.</span>
-          <small>실제 주문·체결은 생성되지 않습니다.</small>
+          <small>실제(비가상) 자금은 이동하지 않습니다. KIS 모의투자가 연결된 경우 승인 시 그 가상계좌로 지정가 주문이 전송됩니다.</small>
         </div>
         {!selectedIsPending ? (
           <div className="decision-message" aria-live="polite">
             {selected.decisionStatus === "approved"
-              ? `모의승인됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
+              ? selected.kisOrderNo
+                ? `모의승인됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · KIS 모의투자 주문번호 ${selected.kisOrderNo} (실제 자금 이동 없음).`
+                : `모의승인됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
               : `반려됨 · ${selected.decidedAt ? formatDateAndMinutes(selected.decidedAt) : ""} · 가상 요청이 종료되었습니다.`}
           </div>
         ) : null}

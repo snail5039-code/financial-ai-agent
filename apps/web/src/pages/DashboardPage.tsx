@@ -307,12 +307,14 @@ export function DashboardPage({ activePage, onNavigate }: DashboardPageProps) {
       <div className="approval-panel">
         <div className="expiry">
           <span>이 모의승인은 <b>{formatTimeOfDay(decision.expiresAt)}</b>에 만료됩니다.</span>
-          <small>승인해도 실제 주문은 생성되지 않습니다.</small>
+          <small>실제(비가상) 자금은 이동하지 않습니다. KIS 모의투자가 연결된 경우 승인 시 그 가상계좌로 지정가 주문이 전송됩니다.</small>
         </div>
         {!decisionIsPending ? (
           <div className="decision-message" aria-live="polite">
             {decision.decisionStatus === "approved"
-              ? `모의승인됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
+              ? decision.kisOrderNo
+                ? `모의승인됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · KIS 모의투자 주문번호 ${decision.kisOrderNo} (실제 자금 이동 없음).`
+                : `모의승인됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · 실제 주문은 생성되지 않았습니다.`
               : `반려됨 · ${decision.decidedAt ? formatDateAndMinutes(decision.decidedAt) : ""} · 로컬 화면 상태만 변경되었습니다.`}
           </div>
         ) : null}

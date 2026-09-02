@@ -51,18 +51,23 @@ async function request<TResponse>(path: string, init?: RequestInit): Promise<TRe
   }
 
   if (!response.ok) {
-    // The dev server turns a refused connection to the backend into a 5xx of its
-    // own, so a server-side status usually means the backend is not running.
+    // A meaningful domain error (unknown id, already-decided order, a KIS
+    // 모의투자 order that FastAPI itself rejected with a 502) carries its own
+    // `detail` — surface that whenever present, regardless of status code.
+    const detail = await readErrorDetail(response);
+    if (detail) {
+      throw new ApiError(detail, response.status);
+    }
+    // No JSON `detail` body at all usually means the dev server turned a
+    // refused connection to the backend into a bare 5xx of its own (the
+    // backend process isn't running), not a real response from our own app.
     if (response.status >= 500) {
       throw new ApiError(
         `로컬 백엔드가 응답하지 못했습니다. FastAPI 서버가 실행 중인지 확인하세요. (HTTP ${response.status})`,
         response.status
       );
     }
-    // A 4xx from this backend is a meaningful domain error (unknown id,
-    // already-decided order) — surface FastAPI's own `detail` when present.
-    const detail = await readErrorDetail(response);
-    throw new ApiError(detail ?? `로컬 백엔드가 요청을 처리하지 못했습니다. (HTTP ${response.status})`, response.status);
+    throw new ApiError(`로컬 백엔드가 요청을 처리하지 못했습니다. (HTTP ${response.status})`, response.status);
   }
 
   try {
@@ -79,8 +84,10 @@ async function request<TResponse>(path: string, init?: RequestInit): Promise<TRe
  * non-mock data as if it were part of the mockup.
  *
  * `allowedExternalConnections` defaults to "must be exactly 0" for every
- * screen. Only `getCompanyDetail` passes `[0, 1]`, since its filings can
- * honestly be 1 (a live OpenDART call) — see `FixtureEnvelope` in
+ * screen. Three call sites pass `[0, 1]` instead, each for one narrow, named
+ * reason: `getCompanyDetail` (filings can honestly be 1 — a live OpenDART
+ * call), `getDashboard`/`getApprovals`/`approveOrder` (holdings or an order
+ * can honestly be 1 — a live KIS 모의투자 call). See `FixtureEnvelope` in
  * `../types/dashboard`. Nowhere else should ever need a value other than the
  * default; that's what keeps this check meaningful.
  */
@@ -113,8 +120,14 @@ export async function getFixture<TData>(
  * returns the resulting fixture envelope. Same safety check as `getFixture` —
  * a response that doesn't declare itself a mock is never used.
  */
-export async function postFixtureAction<TData>(path: string): Promise<FixtureEnvelope<TData>> {
-  return assertFixtureEnvelope(await request<FixtureEnvelope<TData>>(path, { method: "POST" }));
+export async function postFixtureAction<TData>(
+  path: string,
+  allowedExternalConnections?: readonly number[]
+): Promise<FixtureEnvelope<TData>> {
+  return assertFixtureEnvelope(
+    await request<FixtureEnvelope<TData>>(path, { method: "POST" }),
+    allowedExternalConnections
+  );
 }
 
 /**

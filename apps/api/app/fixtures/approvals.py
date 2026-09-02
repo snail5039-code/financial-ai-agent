@@ -18,6 +18,14 @@ APPROVALS_DISCLAIMER = (
     "연결되지 않습니다. 모의승인과 반려는 로컬 데모 상태만 변경합니다."
 )
 
+# Shown instead of APPROVALS_DISCLAIMER once at least one order here actually
+# went to KIS's 모의투자(paper trading) server — see app/routers/approvals.py.
+APPROVALS_DISCLAIMER_WITH_LIVE_ORDERS = (
+    "모의승인 시 한국투자증권 모의투자(가상계좌) 서버에 실제로 지정가 주문이 "
+    "전송됩니다 · 그 계좌는 KIS가 관리하는 가상계좌이므로 실제 자금은 이동하지 "
+    "않습니다 · 반려는 여전히 로컬 데모 상태만 변경합니다."
+)
+
 
 def build_approval_orders() -> list[ApprovalOrder]:
     return [

@@ -32,17 +32,32 @@ DASHBOARD_DISCLAIMER = (
     "연결되지 않습니다."
 )
 
+# Shown instead of DASHBOARD_DISCLAIMER when `holdings` came from a live KIS
+# 모의투자 balance inquiry — see app/routers/dashboard.py.
+DASHBOARD_DISCLAIMER_WITH_LIVE_HOLDINGS = (
+    "보유 종목은 한국투자증권 모의투자(가상계좌) 서버의 실제 잔고입니다 · "
+    "실제 자금은 이동하지 않습니다 · 나머지 화면(차트·판단 근거)은 여전히 "
+    "화면 검토용 가상 예시입니다."
+)
+
 
 def build_dashboard_data(
     decision_status: DecisionStatus = "pending",
     decided_at: str | None = None,
+    kis_order_no: str | None = None,
 ) -> DashboardData:
     """Build the dashboard fixture.
 
-    `decision_status`/`decided_at` are live values for DEC-1042, read by the
-    router from the same approval store the approvals queue writes to. They
-    default to "pending"/None only so tests and other direct callers that
-    don't care about live state can call this with no arguments.
+    `decision_status`/`decided_at`/`kis_order_no` are live values for
+    DEC-1042, read by the router from the same approval store the approvals
+    queue writes to. They default to "pending"/`None`/`None` only so tests
+    and other direct callers that don't care about live state can call this
+    with no arguments.
+
+    `holdings`/`holdingsConnected` here are always the fixture list/`False` —
+    the router overlays a live KIS 모의투자 balance on top afterward when
+    configured (`app/routers/dashboard.py`), the same way Company Detail
+    overlays live OpenDART filings.
     """
     return DashboardData(
         title="투자 운영",
@@ -166,6 +181,7 @@ def build_dashboard_data(
             expiresAt=DEC_1042_EXPIRES_AT,
             decisionStatus=decision_status,
             decidedAt=decided_at,
+            kisOrderNo=kis_order_no,
             evidence=[
                 DashboardEvidence(
                     title="영업현금흐름 전년 동기 대비 개선",

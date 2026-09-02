@@ -88,6 +88,10 @@ class DashboardDecision(BaseModel):
     # two independent copies that can disagree.
     decisionStatus: DecisionStatus
     decidedAt: str | None = None
+    # Same field as ApprovalOrder.kisOrderNo, read from the same approval
+    # store — set only when approving this decision placed a live order
+    # against KIS's 모의투자 account. See app/routers/dashboard.py.
+    kisOrderNo: str | None = None
 
 
 class DashboardData(BaseModel):
@@ -100,6 +104,11 @@ class DashboardData(BaseModel):
     chart: list[DashboardChartPoint] = Field(min_length=1)
     holdings: list[DashboardHolding] = Field(min_length=1)
     decision: DashboardDecision
+    # True only when `holdings` just came from a live KIS 모의투자(paper
+    # trading) balance inquiry instead of the fixture list below — see
+    # app/routers/dashboard.py, app/integrations/kis.py. Everything else in
+    # `DashboardData` (summary/chart/decision) stays fixture either way.
+    holdingsConnected: bool = False
 
 
 class DashboardEnvelope(FixtureEnvelope):

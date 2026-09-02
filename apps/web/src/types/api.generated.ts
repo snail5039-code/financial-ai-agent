@@ -32,7 +32,10 @@ export interface paths {
          * Get Dashboard
          * @description Return the local dashboard fixture.
          *
-         *     Read only. No account, order, quote, disclosure, or external API is touched.
+         *     `holdings` is overlaid with a live KIS 모의투자(paper trading) balance
+         *     when `KIS_PAPER_*` is configured (see app/integrations/kis.py) — no real
+         *     money moves either way, since KIS's own paper account is virtual.
+         *     Everything else (chart, AI decision panel) stays fixture.
          *
          *     The featured decision (DEC-1042) reads its live pending/approved/rejected
          *     state from the same approval store the approvals queue writes to, so
@@ -160,7 +163,11 @@ export interface paths {
         put?: never;
         /**
          * Approve Order
-         * @description Mark a local demo order approved. No real order is created or sent anywhere.
+         * @description Approve a local demo order. When KIS 모의투자 credentials are configured
+         *     (see app/config.py), this also places a real limit order against KIS's
+         *     own paper-trading account and records its order number — that order
+         *     fills against a virtual balance KIS itself manages, so no real order is
+         *     ever created and no real money ever moves, with or without KIS configured.
          */
         post: operations["approve_order_api_approvals__decision_id__approve_post"];
         delete?: never;
@@ -180,7 +187,8 @@ export interface paths {
         put?: never;
         /**
          * Reject Order
-         * @description Mark a local demo order rejected. This only changes in-memory demo state.
+         * @description Mark a local demo order rejected. This only changes local demo state —
+         *     rejecting never places an order, on KIS or anywhere else.
          */
         post: operations["reject_order_api_approvals__decision_id__reject_post"];
         delete?: never;
@@ -939,6 +947,8 @@ export interface components {
             tone: "neutral" | "info" | "success" | "warning" | "danger";
             /** Decidedat */
             decidedAt?: string | null;
+            /** Kisorderno */
+            kisOrderNo?: string | null;
         };
         /** ApprovalsData */
         ApprovalsData: {
@@ -1410,6 +1420,11 @@ export interface components {
             /** Holdings */
             holdings: components["schemas"]["DashboardHolding"][];
             decision: components["schemas"]["DashboardDecision"];
+            /**
+             * Holdingsconnected
+             * @default false
+             */
+            holdingsConnected: boolean;
         };
         /** DashboardDecision */
         DashboardDecision: {
@@ -1451,6 +1466,8 @@ export interface components {
             decisionStatus: "pending" | "approved" | "rejected";
             /** Decidedat */
             decidedAt?: string | null;
+            /** Kisorderno */
+            kisOrderNo?: string | null;
         };
         /** DashboardEnvelope */
         DashboardEnvelope: {

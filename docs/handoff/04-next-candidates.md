@@ -58,7 +58,7 @@
 
 ## 추천
 
-`MOCKUP-020` 후보는 아직 새로 확정하지 않았다. 화면 추가가 다시 필요해질 때만 완료 화면 19개와 현재 사용자 흐름을 보고 새 후보를 정리한다. 현재 우선순위는 새 화면이 아니라 `BACKEND-002`로 생성된 `apps/api` 최소 골격과 `GET /api/health`를 유지하면서 후속 백엔드 범위를 작게 분리하는 것이다. 실제 금융 데이터·API·계좌·주문·체결·운영 DB는 계속 연결하지 않는다.
+`MOCKUP-020` 후보는 아직 새로 확정하지 않았다. 화면 추가가 다시 필요해질 때만 완료 화면 19개와 현재 사용자 흐름을 보고 새 후보를 정리한다. 현재 우선순위는 새 화면이 아니라 `BACKEND-002`로 생성된 `apps/api` 최소 골격과 `GET /api/health`를 유지하면서 후속 백엔드 범위를 작게 분리하는 것이다. 운영 DB는 계속 연결하지 않는다. 실제 금융 데이터·API·계좌·주문·체결은 원칙적으로 계속 연결하지 않되, OpenDART 공시 조회(읽기 전용)와 KIS 모의투자(가상계좌, 실제 자금 무관)는 각각 명시적 사용자 승인을 거친 좁은 예외다 — 둘 다 실제 자금이나 실전 계좌와는 무관하다.
 
 ## 다음 우선순위
 
@@ -79,3 +79,4 @@
 7. ~~`types/dashboard.ts`는 이제 352줄이다(원래 1112줄)... 더 쪼갤지는 다음에 파일이 다시 커질 때 판단한다.~~ 2026-09-02, 사용자 요청으로 쪼갰다. 화면별로 `types/<screen>.ts`(예: `policySettings.ts`, `dashboardScreen.ts`) 21개 파일로 나누고, `dashboard.ts`는 전부 `export *`로 재수출하는 37줄짜리 배럴(barrel)만 남겼다. 기존 ~150곳의 `from "../types/dashboard"` import는 전부 그대로 동작한다(껍데기만 바뀌었으니 손댈 필요 없음). `types/common.ts`(81줄)에 `Api`/`Data`/`FixtureEnvelope`/`PageKey` 등 공유 유틸리티를 모았다. `npm run typecheck`·`build` 통과, 빌드 산출물 해시가 리팩터링 전후로 완전히 동일해 런타임 동작 무변화를 확인했다.
 8. ~~`ApprovalStore`가 메모리 딕셔너리라 서버 재시작 시 승인 이력이 소실된다.~~ `FRONTEND-011`에서 SQLite로 전환했다. 결정 4건의 사실(fixture)은 그대로 두고, 실제로 바뀌는 값(`decisionStatus`/`decidedAt`)만 `apps/api/data/approvals.db`에 저장한다. 재시작해도 승인 이력이 유지되는 것을 직접 확인했다. 테스트는 여전히 `:memory:`(기본값)라 서로도, 실제 DB와도 격리된다.
 9. `FRONTEND-012`에서 기업 상세 화면의 공시를 OpenDART 실제 API에 연결했다(이 프로젝트 최초의 실제 외부 API 연결, 사용자 요청). 2026-09-01에 사용자가 `OPENDART_API_KEY`를 발급받아 `apps/api/.env`에 채우고 처음으로 라이브 호출을 확인했다. 그 과정에서 `list.json` 날짜 범위(`bgn_de`/`end_de`) 누락 버그를 발견해 고쳤다(`d511cee`, 상세는 `01-current-state.md`). 브라우저에서 실제 공시가 뜨는 것까지 확인 완료. 상세 설계·타협점(`externalConnections` 스키마 완화 포함)은 `01-current-state.md` 참고.
+10. 2026-09-02, 한국투자증권(KIS) **모의투자(paper trading)** API 연동 골격을 완성했다(이 프로젝트 최초의 "주문 실행" 경로, 사용자 요청). `app/integrations/kis.py`(토큰 발급·잔고조회·현재가·모의투자 매수/매도 주문), 대시보드 보유종목 실시간 연동, 승인 대기의 "승인" 시 실제 모의투자 주문 전송까지 배관을 전부 만들고 mock으로 검증했다(백엔드 134개 통과, `kis.py` 자체 요청 형태까지 직접 테스트). **`KIS_PAPER_APP_KEY`/`KIS_PAPER_APP_SECRET`/`KIS_PAPER_CANO`/`KIS_PAPER_ACNT_PRDT_CD` 발급은 사용자가 차후로 미뤘다**(삼성증권을 쓰고 있어서 KIS 계정이 없음) — `apps/api/.env`에 이 값들이 아직 없어서 실제 라이브 호출은 한 번도 안 해봤다. 키를 준비하면(README.md의 준비물 목록 참고) `apps/api/.env`에 채우고, 백엔드 재시작 후 대시보드 실제 잔고와 승인 시 실제 모의투자 주문 전송을 브라우저로 한 번 확인해야 한다 — OpenDART 때 `bgn_de` 날짜범위 버그처럼 mock 테스트로는 못 잡는 문제가 있을 수 있다. 상세 설계(실전 도메인/tr_id 구조적 차단, `executed`/`externalConnections` 의미 확장, KIS 주문 실패 시 승인 자체를 502로 실패시키는 이유)는 `01-current-state.md` 참고.

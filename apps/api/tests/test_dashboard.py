@@ -1,6 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.fixtures.dashboard import build_dashboard_data
+from app.integrations.kis import KisApiError
 from app.main import create_app
 
 
@@ -158,3 +160,86 @@ def test_dashboard_and_approvals_agree_on_dec_1042s_static_facts() -> None:
     assert dashboard_decision["company"] == approvals_order["company"]
     assert dashboard_decision["code"] == approvals_order["code"]
     assert dashboard_decision["expiresAt"] == approvals_order["expiresAt"]
+
+
+def _configure_kis(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.routers.dashboard.KIS_PAPER_APP_KEY", "fake-app-key")
+    monkeypatch.setattr("app.routers.dashboard.KIS_PAPER_APP_SECRET", "fake-app-secret")
+    monkeypatch.setattr("app.routers.dashboard.KIS_PAPER_CANO", "12345678")
+    monkeypatch.setattr("app.routers.dashboard.KIS_PAPER_ACNT_PRDT_CD", "01")
+
+
+def test_live_kis_holdings_replace_the_fixture_and_are_disclosed_honestly(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_get_balance(app_key: str, app_secret: str, cano: str, acnt_prdt_cd: str):
+        assert (app_key, app_secret, cano, acnt_prdt_cd) == ("fake-app-key", "fake-app-secret", "12345678", "01")
+        holdings = [
+            {
+                "pdno": "005930",
+                "prdt_name": "삼성전자",
+                "hldg_qty": "10",
+                "pchs_avg_pric": "70000",
+                "prpr": "71200",
+                "evlu_amt": "712000",
+                "evlu_pfls_amt": "12000",
+                "evlu_pfls_rt": "1.72",
+            }
+        ]
+        summary = {"tot_evlu_amt": "1000000"}
+        return holdings, summary
+
+    _configure_kis(monkeypatch)
+    monkeypatch.setattr("app.routers.dashboard.kis.get_balance", fake_get_balance)
+
+    payload = get_payload()
+
+    assert payload["externalConnections"] == 1
+    assert "한국투자증권 모의투자" in payload["disclaimer"]
+    data = payload["data"]
+    assert data["holdingsConnected"] is True
+    assert len(data["holdings"]) == 1
+    holding = data["holdings"][0]
+    assert holding["code"] == "005930"
+    assert holding["quantity"] == 10
+    assert holding["value"] == 712_000
+    assert holding["weight"] == 71.2
+
+
+def test_kis_failure_falls_back_to_the_fixture_holdings(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def failing_get_balance(app_key: str, app_secret: str, cano: str, acnt_prdt_cd: str):
+        raise KisApiError("simulated KIS outage")
+
+    _configure_kis(monkeypatch)
+    monkeypatch.setattr("app.routers.dashboard.kis.get_balance", failing_get_balance)
+
+    payload = get_payload()
+
+    assert payload["externalConnections"] == 0
+    assert payload["data"]["holdingsConnected"] is False
+    assert len(payload["data"]["holdings"]) == 6  # the original fixture list, untouched
+
+
+def test_kis_empty_balance_falls_back_to_the_fixture_holdings(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def empty_get_balance(app_key: str, app_secret: str, cano: str, acnt_prdt_cd: str):
+        return [], {"tot_evlu_amt": "0"}
+
+    _configure_kis(monkeypatch)
+    monkeypatch.setattr("app.routers.dashboard.kis.get_balance", empty_get_balance)
+
+    payload = get_payload()
+
+    assert payload["data"]["holdingsConnected"] is False
+
+
+def test_dashboard_reports_live_when_dec_1042_carries_a_kis_order_no() -> None:
+    # No KIS credentials configured here — this is about the decision panel
+    # honestly reflecting a *previously* placed live order (e.g. approved in
+    # an earlier request while KIS was configured), not about the live call
+    # itself. See test_approvals.py for the approve-time KIS call.
+    client = TestClient(create_app())
+    client.app.state.approval_store.decide("DEC-1042", "approved", kis_order_no="0000123456")
+
+    payload = client.get("/api/dashboard").json()
+
+    assert payload["externalConnections"] == 1
+    assert "한국투자증권 모의투자" in payload["disclaimer"]
+    assert payload["data"]["decision"]["kisOrderNo"] == "0000123456"
