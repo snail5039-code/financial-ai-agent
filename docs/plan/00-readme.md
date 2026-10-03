@@ -12,16 +12,16 @@
 | [06-api-spec.md](06-api-spec.md) | 서버 API, 대화 이벤트 스트림, 멈춤 메시지 형식 |
 | [07-database.md](07-database.md) | PostgreSQL ERD, 테이블, 제약조건, 자주 쓰는 SQL |
 
-화면 그림(와이어프레임)은 `wireframes/`에 있다. 고칠 때는 `wireframes/make_wireframes.py`를 수정하고 다시 실행한다 (HTML로 그린 뒤 Chrome으로 캡처).
+그림은 각 md 파일 안에 직접 들어 있다. 그림 원본만 따로 둔다.
+
+- `diagrams/*.mmd`: 다이어그램 원본 (머메이드)
+- `wireframes/make_wireframes.py`: 화면 그림(와이어프레임) 원본 (HTML로 그린 뒤 Chrome으로 캡처)
+
+그림을 고칠 때는 원본을 수정해 PNG를 만든 뒤, 그 PNG를 md 안에 다시 넣는다. PNG 파일은 저장소에 올리지 않는다.
 
 ```bash
-python docs/plan/wireframes/make_wireframes.py docs/plan/wireframes
-```
-
-나머지 그림은 `diagrams/`의 PNG 이미지다. 원본은 같은 이름의 `.mmd`(머메이드) 파일이고, 그림을 고칠 때는 `.mmd`를 수정한 뒤 PNG를 다시 만든다.
-
-```bash
-npx -p @mermaid-js/mermaid-cli mmdc -i docs/plan/diagrams/erd.mmd -o docs/plan/diagrams/erd.png -s 2 -b white
+npx -p @mermaid-js/mermaid-cli mmdc -i docs/plan/diagrams/erd.mmd -o erd.png -s 2 -b white
+python docs/plan/wireframes/make_wireframes.py <PNG를 만들 폴더>
 ```
 
 ## 다음에 만들 문서

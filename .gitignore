@@ -39,3 +39,4 @@ temp/
 %TEMP%/
 test-results/
 playwright-report/
+docs/plan/**/*.png
