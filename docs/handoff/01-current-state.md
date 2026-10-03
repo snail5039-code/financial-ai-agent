@@ -1,5 +1,7 @@
 # 현재 상태 요약
 
+> **2026-10-03 방향 전환**: 이 저장소를 자연어 투자 에이전트(KB증권 API, Flutter 앱·웹, PostgreSQL)로 확장하기로 했다. 새 기준 문서는 루트의 [`INVEST_AGENT_PLAN.md`](../../INVEST_AGENT_PLAN.md)와 [`AGENTS.md`](../../AGENTS.md)다. 아래 내용은 그 이전(목업·fixture 단계) 기록이다.
+
 기준일: 2026-09-02 KST
 
 ## 커밋 상태 (2026-09-01 갱신)
