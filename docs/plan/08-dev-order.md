@@ -78,6 +78,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 한도가 성향 기본값보다 높으면 저장하고 경고. 설문을 다시 하면 한도는 내려가기만 한다
 - 수수료율 `fee_rate_pct` 추가, 비어 있으면 미입력
 - 미룸: 로그인 시도 횟수 제한(6단계 전), 비밀번호 찾기·변경, 이메일 인증
+- **2026-10-04 보완**: 조사(증권사 준칙, 연구) 후 5문항 설문을 **퀴즈 8문항**으로 바꾸고 **일반 모드**(퀴즈 안 함: 정보만, 안정형 한도, 올리기 불가)를 추가. 19세 미만 거부, 65세 이상 표시, 유효기간 24개월, 하루 3회, 모순 답 안내. `003_quiz_modes.sql`, `DELETE /api/profile`. 정책은 가입할 때 만들어진다(설문 전 409 없음). 규칙과 근거: [09-investor-profile.md](09-investor-profile.md)
 
 ---
 
@@ -89,6 +90,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 대화 API: `POST /api/chat`, `POST /api/chat/resume` (이벤트 스트림), `GET /api/chat/pending`
 - 체크포인트 `PostgresSaver`
 - 웹 요청이면 `fetch` 대신 계좌 스냅샷 사용 (`POST/GET /api/snapshot`)
+- State에 성향 정보 `mode`(general/custom), `risk_level`, `flags`를 넣는다 ([09-investor-profile.md](09-investor-profile.md) 5장)
 
 **완료 조건**: "잔고 보여줘" → `fetch` 멈춤 → 가짜 잔고로 이어서 답. 서버를 재시작해도 멈춘 업무가 남아 있음
 
@@ -97,6 +99,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - [06-api-spec.md](06-api-spec.md): 2장 대화와 멈춤 흐름(SSE), 3장 멈춤 형식
 - [02-architecture.md](02-architecture.md): 2장 서버가 지휘하고 폰이 증권사 일을 한다, 웹에서 대화할 때
 - [01-requirements.md](01-requirements.md): FR-08 ~ FR-13, NFR-06 ~ NFR-08
+- [09-investor-profile.md](09-investor-profile.md): 2장 일반·맞춤 모드, 5장 3단계
 - 참고 코드: `virtual_bank_agent`의 `src/agents/supervisor`, `src/state.py`, `web/bank/main.py` (thread_id, Command resume)
 
 **완료 기록**: 
@@ -111,6 +114,9 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 지표 계산 함수 (`functions/`): PER, 부채비율, 증감률, 변동성, 주문 후 비중
 - 투자 AI 제안서, 검증 AI 판정 (structured output), 반박-수정 루프 최대 2번
 - 검증 AI 독립성: 제안·근거·출처 ID만 전달, 원문 다시 불러오기, 다른 프롬프트
+- **일반 모드 답변 규칙**: 판단("사세요/마세요") 없이 정보·분석만. 프롬프트와 검증 AI 검사 둘 다에
+- 표시 값 처리: `no_buy_proposals`면 매수 제안 금지, `vulnerable`이면 불리한 점 먼저, `high_interest_debt`면 빚 먼저 안내, `quiz_missed`면 개념 설명
+- 종목 위험등급(국내 주식 2등급, 투자주의·관리종목·해외·레버리지 ETF 1등급)과 성향 비교를 검증 AI `risk_fit`에
 
 **완료 조건**: "삼성전자 사도 돼?" → 출처 달린 제안서 → 독립 검증 판정. 지표 계산 테스트 통과
 
@@ -120,8 +126,9 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - [07-database.md](07-database.md): `stocks`, `proposals`, `verifications`, `disclosures`, `disclosure_chunks`, 공시 검색 SQL
 - [01-requirements.md](01-requirements.md): FR-14 ~ FR-21, NFR-09, NFR-10
 - [AGENTS.md](../../AGENTS.md): 5장 금융 정보 규칙
+- [09-investor-profile.md](09-investor-profile.md): 4장 표시 값, 5장 4단계
 - 참고 코드: `aim-ai-agent`의 RAG(06~10), reflection(17), 평가(10-rag-evaluation)
-- 정해야 할 것: 공개 시세 데이터 출처 (서버용)
+- 정해야 할 것: 공개 시세 데이터 출처 (서버용), 종목 위험등급 적용 강도 (09 문서 5장)
 
 **완료 기록**: 
 
@@ -135,6 +142,8 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 처리안 카드, 승인·거절·수정·만료(10분), `execute` 멈춤, 가격 재확인 결과 처리
 - 기록 저장 (`record` 노드 한 곳에서만), 중복 주문 방지 (`idempotency_key`)
 - 승인 대기 API, 기록 API
+- **행동 코치 규칙** (`functions/`, AI 없이 계산): 잦은 매매(7일 안 3번째), 급등 추격(`chases_hot_stocks`면 한 번 더 확인), 비중 80% 넘으면 분산 안내, 처분효과 안내
+- **성향보다 위험한 주문 확인 절차**: 일반 모드이거나 성향보다 위험한 종목을 직접 지시하면 위험을 보여주고 확인을 받은 뒤 진행, `audit_logs`에 기록
 
 **완료 조건**: "SK하이닉스 4주 사줘" → 처리안 → 승인 → `execute` 멈춤 → 가짜 체결 결과로 기록까지. 정책 위반·중복 주문 테스트 통과
 
@@ -144,6 +153,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - [06-api-spec.md](06-api-spec.md): 3장 `approval`·`execute` 형식, 4장 폰 주문 실행 과정
 - [07-database.md](07-database.md): `policy_checks`, `approvals`, `orders`, `audit_logs`, 오늘 주문 금액 SQL
 - [01-requirements.md](01-requirements.md): FR-22 ~ FR-30, FR-35, FR-36
+- [09-investor-profile.md](09-investor-profile.md): 5장 5단계 (행동 코치, 확인 절차)
 - 참고 코드: `virtual_bank_agent`의 이체 그래프 (값 뽑기 → 검사 → 처리안 → 승인 → 실행 직전 재검사)
 - 정해야 할 것: 직접 지시한 주문을 검증 AI가 반려하면 막을지, 경고 후 진행할지
 
@@ -155,13 +165,15 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 
 **할 일**
 - Flutter 설치, `apps/client` 생성
-- 로그인·회원가입·성향 설문, 홈, 대화(이벤트 스트림, 멈춤 처리), 처리안 상세, 승인 대기
-- 공통: 모의투자 배지, 금액 표시, 상승 빨강·하락 파랑, 출처·기준 시각 표시
+- 로그인·회원가입·성향 퀴즈(가입 후 "퀴즈 / 나중에"), 홈, 대화(이벤트 스트림, 멈춤 처리), 처리안 상세, 승인 대기
+- 설정: 모드(일반/맞춤), 퀴즈 다시 하기, 일반 모드로 돌아가기
+- 공통: 모의투자 배지, 일반 모드 배지, 금액 표시, 상승 빨강·하락 파랑, 출처·기준 시각 표시
 
 **완료 조건**: 앱에서 3·5단계 흐름을 가짜 증권사 데이터로 끝까지 진행
 
 **참고 문서**
 - [03-screens.md](03-screens.md): 화면 목록, 흐름, S-01 ~ S-08 와이어프레임, 공통 규칙
+- [09-investor-profile.md](09-investor-profile.md): 3장 퀴즈 문항·보기 키, 5장 6단계
 - [02-architecture.md](02-architecture.md): 4장 클라이언트 구조
 - [06-api-spec.md](06-api-spec.md): 2장 이벤트 스트림, 3장 멈춤 형식
 - 개발 환경: 이 PC에 Flutter SDK·Android SDK 아직 없음

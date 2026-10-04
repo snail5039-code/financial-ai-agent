@@ -31,7 +31,10 @@ erDiagram
     investor_profiles {
         uuid user_id PK, FK
         smallint risk_level "1 안정형 ~ 5 공격투자형"
-        jsonb answers
+        jsonb answers "퀴즈 답"
+        smallint birth_year
+        text_array flags "vulnerable 등"
+        timestamptz expires_at "24개월"
         timestamptz updated_at
     }
     policies {

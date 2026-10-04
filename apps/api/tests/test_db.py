@@ -78,7 +78,8 @@ def _order(conn, approval_id, key: str, broker: str = "kis_mock", mode: str = "m
 def test_risk_level_out_of_range_rejected(conn, risk_level: int) -> None:
     with pytest.raises(psycopg.errors.CheckViolation):
         conn.execute(
-            "INSERT INTO investor_profiles (user_id, risk_level) VALUES (%s, %s)", (_user(conn), risk_level)
+            "INSERT INTO investor_profiles (user_id, risk_level, birth_year, expires_at) VALUES (%s, %s, 1990, now())",
+            (_user(conn), risk_level),
         )
 
 

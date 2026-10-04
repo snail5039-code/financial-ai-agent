@@ -28,7 +28,7 @@ def test_db_url() -> str:
 
 @pytest.fixture(scope="session")
 def migrated(test_db_url: str) -> str:
-    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql"]
+    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql", "003_quiz_modes.sql"]
     return test_db_url
 
 
@@ -48,3 +48,15 @@ def user(client: TestClient) -> dict:
     assert signup.status_code == 201
     token = client.post("/api/auth/login", json={"email": email, "password": PASSWORD}).json()["token"]
     return {"id": signup.json()["user_id"], "email": email, "headers": {"Authorization": f"Bearer {token}"}}
+
+# 30대, 여유자금, 비상금 있음, 기다린다(3) + C(3) = 6점, 퀴즈 모두 정답 → 4단계 적극투자형
+LEVEL_4_QUIZ = {
+    "birth_year": 1995,
+    "money_use": "spare",
+    "emergency": "fund",
+    "drop_reaction": "wait",
+    "portfolio_choice": "C",
+    "hot_tip": "research",
+    "quiz_diversify": "ten_stocks",
+    "quiz_trading_cost": "frequent_earns_less",
+}

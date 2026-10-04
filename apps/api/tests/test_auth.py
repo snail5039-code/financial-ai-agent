@@ -3,7 +3,7 @@ from uuid import uuid4
 import psycopg
 import pytest
 
-from tests.conftest import PASSWORD
+from tests.conftest import LEVEL_4_QUIZ, PASSWORD
 
 
 def signup(client, **overrides):
@@ -78,7 +78,7 @@ def test_delete_me_needs_password(client, user) -> None:
 
 
 def test_delete_me_removes_all_my_data(client, user, migrated) -> None:
-    client.put("/api/profile", headers=user["headers"], json={"answers": [3, 3, 3, 3, 3]})
+    client.put("/api/profile", headers=user["headers"], json=LEVEL_4_QUIZ)
 
     response = client.request("DELETE", "/api/me", headers=user["headers"], json={"password": PASSWORD})
 

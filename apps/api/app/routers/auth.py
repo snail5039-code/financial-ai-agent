@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import Conn, audit
+from app.functions.profile import DEFAULT_POLICIES, GENERAL_MODE_LEVEL
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -116,6 +117,12 @@ def signup(body: SignupRequest, conn: Conn) -> dict:
         ).fetchone()
     except psycopg.errors.UniqueViolation:
         raise HTTPException(409, "이미 가입된 이메일이에요") from None
+    # 가입하면 일반 모드로 시작한다: 한도는 안정형 기본값
+    conn.execute(
+        "INSERT INTO policies (user_id, max_order_krw, max_daily_krw, max_weight_pct)"
+        " VALUES (%(user_id)s, %(max_order_krw)s, %(max_daily_krw)s, %(max_weight_pct)s)",
+        {"user_id": user["id"], **DEFAULT_POLICIES[GENERAL_MODE_LEVEL]},
+    )
     audit(conn, user["id"], "signup")
     conn.commit()
     return {"user_id": user["id"]}

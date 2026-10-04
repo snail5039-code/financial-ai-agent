@@ -17,7 +17,8 @@
 | | `POST /api/auth/logout` | 로그아웃 (토큰 폐기) | ✅ | ✅ |
 | | `GET /api/me` | 내 정보 | ✅ | ✅ |
 | | `DELETE /api/me` | 탈퇴 (비밀번호 다시 확인, 서버 데이터 삭제) | ✅ | ✅ |
-| 성향·정책 | `GET /api/profile` · `PUT /api/profile` | 성향 조회 · 설문 답 제출 → 단계 계산 | ✅ | ✅ |
+| 성향·정책 | `GET /api/profile` · `PUT /api/profile` | 모드·성향 조회 · 퀴즈 답 제출 → 단계 계산, 맞춤 모드 | ✅ | ✅ |
+| | `DELETE /api/profile` | 일반 모드로 돌아가기 | ✅ | ✅ |
 | | `GET /api/policy` · `PUT /api/policy` | 투자 정책 조회 · 수정 | ✅ | ✅ |
 | 계좌 | `POST /api/snapshot` | 폰이 조회한 계좌 스냅샷 올리기 | ✅ | ❌ |
 | | `GET /api/snapshot` | 최근 스냅샷 (웹 홈 화면용) | ✅ | ✅ |
@@ -149,14 +150,30 @@ DELETE /api/me
 { "password": "..." }
 → 204                                 // 비밀번호가 틀리면 403
 
-PUT /api/profile                      // 설문 문항: apps/api/app/functions/profile.py
-{ "answers": [2, 3, 1, 4, 2] }
-→ 200 { "risk_level": 2, "label": "안정추구형", "default_policy": { ... }, "policy": { ... } }
-// 처음이면 기본 한도로 정책을 만들고, 다시 하면 항목마다 지금 값과 새 기본값 중 작은 쪽으로 바꾼다
+GET /api/profile
+→ 200 { "mode": "general" }           // 퀴즈 전
+→ 200 { "mode": "custom", "risk_level": 4, "label": "적극투자형", "flags": [], "answers": { ... },
+        "expires_at": "...", "expired": false }
 
-PUT /api/policy                       // 설문 전이면 409
+PUT /api/profile                      // 퀴즈 문항과 보기 키: 09-investor-profile.md 3장
+{ "birth_year": 1995, "money_use": "spare", "emergency": "fund",
+  "drop_reaction": "wait", "portfolio_choice": "C", "hot_tip": "research",
+  "quiz_diversify": "ten_stocks", "quiz_trading_cost": "frequent_earns_less" }
+→ 200 { "mode": "custom", "risk_level": 4, "label": "적극투자형", "flags": [], "notices": [],
+        "quiz_feedback": [{ "question": "quiz_diversify", "correct": true, "explanation": "..." }, ...],
+        "expires_at": "2028-10-04T...+09:00", "policy": { ... } }
+// 19세 미만 422, 하루 3회 넘으면 429
+
+DELETE /api/profile                   // 일반 모드로. 한도는 안정형 기본값보다 높은 것만 내림
+→ 204
+
+GET /api/policy
+→ 200 { "max_order_krw": 300000, ..., "mode": "general", "default_policy": { ... }, "warnings": [] }
+// 가입할 때 안정형 기본값으로 만들어지므로 항상 있다
+
+PUT /api/policy                       // 일반 모드에서 올리려 하면 403
 { "max_order_krw": 500000, "max_daily_krw": 1000000, "max_weight_pct": 30, "fee_rate_pct": 0.015 }
-→ 200 { ..., "risk_level": 2, "default_policy": { ... },
+→ 200 { ..., "mode": "custom", "default_policy": { ... },
         "warnings": ["한 종목 최대 비중: 성향(안정추구형) 기본값보다 높아요"] }
 
 POST /api/snapshot
