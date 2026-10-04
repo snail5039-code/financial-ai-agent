@@ -1,160 +1,57 @@
-# 금융 AI 에이전트 목업
+# 자연어 투자 에이전트
 
-검증과 사용자 승인을 중심으로 설계한 금융 AI 투자 운영 대시보드 목업과 관련 기획 문서를 모아 둔 저장소입니다. 투자 판단을 만드는 역할, 근거를 독립적으로 검증하는 역할, 사용자가 최종 통제하는 승인 흐름을 분리해 표현합니다.
+말로 "SK하이닉스 4주 사줘", "삼성전자 사도 돼?"라고 하면 투자 AI가 제안하고, 검증 AI가 따로 확인하고, 사용자가 승인한 주문만 **사용자 폰에서** 증권사로 나가는 앱이다.
 
-## 주요 화면
+- 증권사 키와 계좌번호는 사용자 폰에만 저장한다. 서버는 키를 받지 않는다.
+- 기본은 모의투자다. 모든 주문은 투자 AI → 검증 AI → 사용자 승인을 거친다.
+- 자세한 내용: [INVEST_AGENT_PLAN.md](INVEST_AGENT_PLAN.md) (기획서), [AGENTS.md](AGENTS.md) (작업 규칙)
 
-- 투자 운영 대시보드: 총자산, 기간별 자산 변화, 보유 종목, AI 분석·검증·승인 대기 흐름
-- 계좌: 시뮬레이션 계좌의 자산군·통화 배분, 기간별 수익률, 입출금 영향을 제외한 수익률, 가상 입출금 이력
-- 분석 에이전트: 구조화된 투자 제안서, 근거·계산·반대 근거·무효 조건, 자료 수집 기능의 미연결 상태
-- 검증 에이전트: 재검산·기준 혼동·출처 뒷받침·위험 한도 감사와 조건부 승인·반려·사용자 판단 필요 판정
-- 실행 에이전트: 실행 등급, 실행 전 잔액·한도·중복 확인, 전 항목 실행 안 됨 상태
-- 삼성전자 기업 상세: 화면용 가격·보유 정보, 재무 지표, 긍정·반대 근거, 예시 공시 검증 인스펙터
-- 승인 대기 목록·주문 상세: 네 개의 가상 주문 비교, 상태 필터, 독립적인 반려·모의승인 상태
-- 에이전트 실행 기록·검증 비교: 결정별 처리 단계, 최초 제안과 검증 후 결과, 가상 출처 감사 정보
-- 투자 정책 설정: 위험 한도와 차단 규칙 입력, 충돌 검사, DEC-1042 가상 적용 미리보기
-- 주간 투자 리포트: 자산·손익 변화, 벤치마크 비교, 처리 기록, 주요 위험과 데이터 한계
-- 데이터 연결 상태: 공시·가격·증권사·DB 연결의 미연결 상태와 출처 품질 점검
-- 모의 거래 내역: 기간·상태 필터, 가상 제안 이력, 비용 한계와 관련 기록 인스펙터
-- 리스크 알림·차단 이벤트: 심각도·카테고리 필터, 가상 위험 원인과 사용자 확인 인스펙터
-- 알림 수신 설정: 채널·유형·심각도 기준과 화면용 테스트 알림 미리보기
-- 백테스트·전략 검증 요약: 기간·전략별 가상 지표, 월별 결과와 편향·과최적화 한계
-- 전략 비교·리밸런싱 제안: 전략별 목표 비중, 화면용 조정 제안과 승인 전 실행 경계
-- 포트폴리오 변경 전/후 비교: 승인 전 현재·변경 후 비중, 현금·위험 변화, 정책 확인 항목 비교
-- 승인 전 근거 패킷: 결정 후보별 계산·정책·비용·출처·리스크·역할 확인과 사용자 승인 경계 묶음
-- 시나리오·스트레스 테스트: 금리·반도체·환율·유동성 충격별 가상 손실과 대응 후보
-- 포트폴리오 건강: 정책·데이터·리스크·승인·전략·스트레스 항목을 묶은 운영 전 체크리스트
-- 세금·수수료 영향 점검: 승인 전 가상 주문별 수수료·세금·슬리피지·환전 비용과 순손익 비교
-- 사용자 승인 이력·결정 회고: 승인·반려·보류 당시 근거, 사용자 메모, 가상 경로 비교 확인
-- 에이전트별 역할 상태판: 제안자·검증자·정책 감시자·승인 관리자 상태와 대기·충돌 이력 확인
-- 접근성 지원: 키보드 이동, 포커스 표시, 차트 대체 설명, 선택 상태 및 라이브 영역
+## 진행 상황
 
-화면 캡처는 다음 파일에서 확인할 수 있습니다.
+[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 1단계(정리 + 서버 뼈대)까지 끝났다.
 
-- `mockup/financial-dashboard/financial-dashboard-1440x900.png`
-- `mockup/financial-dashboard/company-detail-1440x900.png`
-- `mockup/financial-dashboard/approval-queue-1440x900.png`
-- `mockup/financial-dashboard/audit-log-1440x900.png`
-- `mockup/financial-dashboard/policy-settings-1440x900.png`
-- `mockup/financial-dashboard/weekly-report-1440x900.png`
-- `mockup/financial-dashboard/data-connections-1440x900.png`
-- `mockup/financial-dashboard/trade-history-1440x900.png`
-- `mockup/financial-dashboard/risk-alerts-1440x900.png`
-- `mockup/financial-dashboard/notification-settings-1440x900.png`
-- `mockup/financial-dashboard/backtest-summary-1440x900.png`
-- `mockup/financial-dashboard/rebalance-plan-1440x900.png`
-- `mockup/financial-dashboard/portfolio-change-compare-1440x900.png`
-- `mockup/financial-dashboard/evidence-packet-1440x900.png`
-- `mockup/financial-dashboard/stress-test-1440x900.png`
-- `mockup/financial-dashboard/portfolio-health-1440x900.png`
-- `mockup/financial-dashboard/tax-fee-impact-1440x900.png`
-- `mockup/financial-dashboard/decision-review-1440x900.png`
-- `mockup/financial-dashboard/agent-role-status-1440x900.png`
+## 폴더
 
-## 로컬 실행
-
-정적 목업은 별도 패키지 설치 없이 Python 표준 라이브러리로 실행할 수 있습니다.
-
-```powershell
-python -m http.server 4173
+```
+apps/api/        서버 (Python, FastAPI, uv)
+  app/           코드
+  migrations/    DB 테이블 SQL (번호 순서대로 적용)
+  tests/         테스트 (DB invest_test 사용)
+apps/client/     앱 + 웹 (Flutter) — 6단계에서 만든다
+docs/plan/       기획 문서 (요구사항, 아키텍처, 화면, 그래프, DB 등)
+archive/         이전 단계 목업·fixture 코드와 문서 (참고용)
 ```
 
-실행 후 브라우저에서 아래 주소를 엽니다.
+## 실행
 
-```text
-http://127.0.0.1:4173/mockup/financial-dashboard/
+준비물: Docker, [uv](https://docs.astral.sh/uv/)
+
+```bash
+docker start invest-db
 ```
 
-React/Vite 23개 화면 프론트엔드 앱은 `apps/web`, FastAPI 백엔드는 `apps/api`에 있습니다. 23개 화면 전부가 백엔드 엔드포인트에서 데이터를 받고, 프론트 로컬 fixture는 쓰지 않습니다.
+처음이라면 컨테이너를 만든다 (`<비밀번호>`는 직접 정한다).
 
-승인 대기 화면의 「모의승인」·「반려」 버튼은 이 프로젝트 최초의 쓰기 경로입니다. 클릭하면 로컬 백엔드의 상태가 실제로 바뀌고, `apps/api/data/approvals.db`(SQLite)에 저장되어 페이지를 새로고침하거나 서버를 재시작해도 결정 상태가 유지됩니다. 물론 실제 주문·체결은 여전히 생성되지 않습니다.
-
-대시보드의 「현재 판단」 패널, 승인 대기, 근거 패킷 3개 화면은 삼성전자 매수 건(DEC-1042)에 대해 **같은 결정 상태를 실시간으로 공유**합니다. 셋 중 어디서 승인해도 나머지가 즉시 같은 상태를 보여줍니다. 나머지 20개 화면은 자기 안에서는 결정 ID가 서로 모순되지 않도록 대조는 끝났지만(`docs/backend/12-full-decision-id-audit.md`), 이 실시간 공유에는 아직 포함되지 않았습니다.
-
-계좌와 세 에이전트 화면은 정적 목업에 대응 파일이 없습니다. 목업 사이드바에는 메뉴만 `href="#"`로 있었고 화면이 없었기 때문에, `FINANCIAL_AI_AGENT_IDEA.md`의 역할 정의를 근거로 React에만 새로 만들었습니다. 정적 목업은 19개 기준서로 동결합니다.
-
-**백엔드를 먼저 실행합니다.** 대시보드 화면은 백엔드가 없으면 오류 안내와 재시도 버튼을 표시합니다.
-
-```powershell
-cd apps/api
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```bash
+docker run -d --name invest-db -e POSTGRES_PASSWORD=<비밀번호> -e POSTGRES_DB=invest -p 5432:5432 -v invest-pgdata:/var/lib/postgresql pgvector/pgvector:pg18
 ```
 
-이어서 별도 터미널에서 프론트엔드를 실행합니다.
+`apps/api/.env.example`을 `apps/api/.env`로 복사하고 `DATABASE_URL`을 채운 뒤:
 
-```powershell
-cd apps/web
-npm ci
-npm run dev
+```bash
+uv --directory apps/api run python -m app.migrate
 ```
 
-브라우저에서 `http://127.0.0.1:5173/`을 엽니다. 프론트는 절대 URL을 호출하지 않고 같은 출처 상대 경로 `/api/*`만 호출하며, Vite dev 서버가 이를 로컬 백엔드로 전달합니다.
-
-React 23개 화면 전부가 백엔드 `GET` 엔드포인트에 연결돼 있습니다. 프론트 `src/fixtures/` 디렉터리는 완전히 비었습니다. 전체 엔드포인트 목록은 `docs/fullstack/03-data-api-contract.md`를 참고하세요.
-
-`/api/approvals/{id}/approve`와 `/api/approvals/{id}/reject`만 `POST`이고 나머지는 전부 `GET`입니다.
-
-백엔드 테스트는 아래로 실행합니다.
-
-```powershell
-cd apps/api
-uv run pytest
+```bash
+uv --directory apps/api run uvicorn app.main:app --port 8000
 ```
 
-프론트 타입(`apps/web/src/types/dashboard.ts`)은 백엔드 OpenAPI 스키마에서 생성됩니다. 백엔드 응답 모양을 바꿨다면 다시 생성하세요(백엔드 실행 불필요).
+http://localhost:8000/api/health 가 `{"status":"ok","db":"ok"}`면 정상이다. DB에 연결되지 않으면 503과 `"db":"error"`를 돌려준다.
 
-```powershell
-cd apps/web
-npm run generate:types
+## 테스트
+
+```bash
+uv --directory apps/api run pytest
 ```
 
-프론트 e2e 테스트(Playwright)는 아래로 실행합니다. 개발용 8000/5173과 겹치지 않는 전용 포트(8010/5174)에서 매번 새 백엔드 프로세스를 띄우므로, 메모리 승인 저장소 상태가 개발 서버나 이전 테스트 실행과 섞이지 않습니다.
-
-```powershell
-cd apps/web
-npm run test:e2e
-```
-
-기업 상세 화면의 공시 목록은 [금융감독원 OpenDART](https://opendart.fss.or.kr) 공개 API에 실제로 연결할 수 있습니다(선택 사항, 읽기 전용, 계좌·금액과 무관). 키를 발급받았다면 `apps/api/.env.example`을 `apps/api/.env`로 복사하고 `OPENDART_API_KEY`를 채우세요. 키가 없으면 화면은 지금처럼 "OpenDART 미연결" 예시 공시를 그대로 보여줍니다.
-
-```powershell
-cd apps/api
-copy .env.example .env
-# .env를 열어 OPENDART_API_KEY=발급받은키 로 채운 뒤 저장
-```
-
-대시보드 보유 종목과 승인 대기의 모의승인은 [한국투자증권(KIS) Developers](https://apiportal.koreainvestment.com) **모의투자(paper trading)** API에 실제로 연결할 수 있습니다(선택 사항). 준비물:
-
-1. 한국투자증권 실계좌 → HTS/MTS에서 **모의투자 참가신청**
-2. [apiportal.koreainvestment.com](https://apiportal.koreainvestment.com/intro)에서 KIS Developers 서비스 신청 → **모의투자용** 앱키/앱시크리트 발급(실전투자용과는 다른 키)
-3. 모의투자 계좌번호를 앞 8자리(CANO)/뒤 2자리(ACNT_PRDT_CD)로 확인
-
-위 값을 `apps/api/.env`의 `KIS_PAPER_APP_KEY`/`KIS_PAPER_APP_SECRET`/`KIS_PAPER_CANO`/`KIS_PAPER_ACNT_PRDT_CD`에 채우면, 대시보드 보유 종목이 그 모의투자 계좌의 실제 잔고로 바뀌고, 승인 대기에서 "모의승인"을 누르면 그 계좌로 실제 지정가 주문이 전송됩니다. 이 계좌는 KIS 자신이 관리하는 가상계좌이므로 실제 자금은 이동하지 않습니다 — 이 앱은 실전투자 서버(`openapi.koreainvestment.com`)나 그 주문 tr_id는 코드에 아예 포함하지 않습니다. 네 값 중 하나라도 비어 있으면 화면은 지금처럼 fixture 그대로 동작합니다.
-
-이 앱들이 연결하는 실제 외부 시스템은 위 두 가지(OpenDART 공시 조회, KIS 모의투자)뿐입니다. 그 외 실제 시세, 증권사 실전 API, 실제 계좌 또는 실제 자금이 오가는 주문 시스템과는 연결하지 않습니다.
-
-## 안전 고지
-
-- 이 저장소의 가격, 재무 수치와 투자 근거는 화면 검토용 가상 예시입니다. 기업 상세 화면의 공시 "목록"만 OpenDART 키가 설정된 경우 실제 데이터이며, 그 목록의 내용(원문)은 이 앱이 검증하지 않습니다.
-- 대시보드 보유 종목은 KIS 모의투자 키가 설정된 경우 그 가상계좌의 실제 잔고입니다. 그 외 실제 시세, 실전 증권사 API, 실제 계좌와는 연결되지 않습니다.
-- 실제 공시 검증을 수행하지 않았으며 확인되지 않은 정보는 투자 판단에 사용할 수 없습니다.
-- 이 프로젝트는 투자 권유가 아니며 수익이나 손실 회피를 보장하지 않습니다.
-- 모의승인 동작은 기본적으로 브라우저 화면 상태만 변경합니다. KIS 모의투자 키가 설정된 경우에만 그 가상계좌로 실제 지정가 주문을 전송합니다 — 어느 경우든 실제 자금이나 실제 증권은 움직이지 않습니다.
-- 사용자 승인 전 금융 행동은 없으며, 승인 후에도 실전 계좌 기준의 실제 매수·매도·체결은 절대 발생하지 않습니다.
-
-## 문서 구조
-
-- `AGENTS.md`: 금융 AI 에이전트 역할·승인·검증 운영 규칙
-- `FINANCIAL_AI_AGENT_IDEA.md`: 프로젝트 개념과 에이전트 구조
-- `FINANCIAL_AI_AGENT_IMPLEMENTATION.md`: 구현 방향과 기술 검토
-- `FINANCIAL_AI_FULLSTACK_PLAN.md`: 실제 금융 API 없이 프론트엔드와 백엔드를 연결하는 풀스택 전환 계획 요약
-- `docs/fullstack/`: 풀스택 전환 세부 계획 분할 문서
-- `apps/web/`: React/Vite 23개 화면 프론트엔드 앱
-- `apps/api/`: FastAPI 로컬 fixture 백엔드 앱, 화면당 `GET` 엔드포인트 23개(+`/api/health`)와 승인·반려 `POST` 2개
-- `docs/backend/`: 백엔드 범위, 안전 경계, API 계약 분할 문서
-- `FINANCIAL_AI_SITE_MOCKUP_PLAN.md`: 최초 대시보드 목업 기획
-- `docs/handoff/`: 컨텍스트 절약용 단계별 인수 문서
-- `mockup/financial-dashboard/`: 실행 가능한 정적 HTML/CSS/JavaScript와 화면 캡처
-- 그 밖의 루트 Markdown 파일: 작업공간에서 검토한 서비스 및 제품 아이디어 문서
-
-세부 실행법과 상호작용 목록은 `mockup/financial-dashboard/README.md`를 참고하세요.
+테스트는 같은 PostgreSQL 서버에 `invest_test` DB를 새로 만들어 쓴다. 개발 DB `invest`는 건드리지 않는다.

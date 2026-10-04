@@ -39,7 +39,8 @@
 | 성향 단계는 1~5 | `CHECK (risk_level BETWEEN 1 AND 5)` |
 | 판정·상태 값은 정해진 것만 | `CHECK (verdict IN (...))` |
 | 탈퇴하면 내 데이터 삭제 | `users`를 가리키는 FK에 `ON DELETE CASCADE` |
-| 하루 주문 합계 계산 | `orders`에서 오늘·내 것만 더함 (인덱스: `user_id, created_at`) |
+| 하루 주문 합계 계산 | `orders`에서 오늘·내 것만 더함 (`orders`에 `user_id`가 없어서 인덱스는 `orders(created_at)`, `proposals(user_id, created_at)`) |
+| KIS 모의 주문은 실전일 수 없음 | `CHECK (NOT (broker = 'kis_mock' AND mode = 'real'))` |
 
 ## 4. 자주 쓰는 조회
 
@@ -69,7 +70,8 @@ LIMIT 5;
 
 ## 5. 도구
 
-- 서버에서 DB 접근: SQLAlchemy 또는 psycopg 직접 사용 (구현 시작 때 결정)
-- 테이블 변경 이력 관리: Alembic (마이그레이션)
+- 서버에서 DB 접근: **psycopg** 직접 사용 (2026-10-04 결정, ORM 없음)
+- 테이블 변경 이력 관리: `apps/api/migrations/NNN_이름.sql` 파일을 `app/migrate.py`가 이름 순서대로 적용한다. 적용한 파일은 `schema_migrations` 표에 기록한다. 이미 적용한 파일은 고치지 않고 새 파일을 추가한다
+- 실행: `uv run python -m app.migrate` (서버 시작 때 자동 적용하지 않음)
 - 벡터 검색: `pgvector` 확장 (`CREATE EXTENSION vector;`)
 - 테스트: 테스트용 DB를 따로 두고 테스트마다 비운다

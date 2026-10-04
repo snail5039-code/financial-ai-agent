@@ -71,8 +71,8 @@ apps/api/app/
 
 - **LLM은 분류·값 뽑기·제안서·검증 문장만** 맡는다. 숫자 계산과 정책 판단은 `functions/`가 한다.
 - 투자 AI와 검증 AI는 **다른 프롬프트**, 가능하면 **다른 모델 설정**을 쓴다. 검증 AI에는 투자 AI의 추론 과정을 넘기지 않는다.
-- 기존 `app/integrations/kis.py`는 서버에서 주문하던 코드라 새 구조에서는 쓰지 않는다. 폰 쪽 Dart 코드로 다시 만들 때 참고만 한다.
-- 기존 `fixtures/`, fixture 기반 라우터 22개는 새 라우터로 대체한다 (`archive/`로 옮길 후보).
+- 기존 `app/integrations/kis.py`(지금은 `archive/api-fixture/integrations/kis.py`)는 서버에서 주문하던 코드라 새 구조에서는 쓰지 않는다. 폰 쪽 Dart 코드로 다시 만들 때 참고만 한다.
+- 기존 `fixtures/`, fixture 기반 라우터 22개는 `archive/api-fixture/`로 옮겼다 (2026-10-04).
 
 ## 4. 클라이언트 구조 (`apps/client`, Flutter)
 
@@ -145,10 +145,10 @@ financial-ai-agent/
 ├── apps/api/        서버 (Python, uv)
 ├── apps/client/     앱 + 웹 (Flutter)   ← 새로 만듦
 ├── docs/plan/       기획 문서 (이 문서들)
-└── archive/         기존 목업·fixture 화면 (옮길 경우)
+└── archive/         기존 목업·fixture 화면과 이전 문서
 ```
 
 
 - PostgreSQL은 로컬에 Docker로 띄우는 것을 추천한다. 테스트는 테스트용 DB를 따로 쓴다.
 - 서버 배포 위치(클라우드)는 MVP가 로컬에서 돌아간 뒤에 정한다.
-- 2026-10-03 확인: 이 PC에는 **Flutter SDK, Docker, PostgreSQL이 아직 설치돼 있지 않다** (Android SDK도 없음). 구현 시작 전에 설치가 필요하다. Docker 대신 PostgreSQL을 직접 설치해도 된다.
+- 2026-10-04: PostgreSQL은 Docker 컨테이너 `invest-db` (`pgvector/pgvector:pg18`)로 띄운다. Flutter SDK, Android SDK는 아직 없다 (6단계 전에 설치).

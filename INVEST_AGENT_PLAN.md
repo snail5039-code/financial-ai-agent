@@ -138,7 +138,7 @@
 | 서버 | FastAPI + LangGraph + Gemini | 지금 `apps/api` 위에 만든다 |
 | DB | **PostgreSQL** | 8장 참고 |
 | 앱 + 웹 | **Flutter** (Dart) 한 코드 | 새로 `apps/client`. 앱은 iOS·Android, 웹은 Flutter Web. 키는 앱에서만 `flutter_secure_storage`에. 나중에 같은 코드로 PC 앱 가능 |
-| 기존 웹 | `apps/web` (Vite React) | Flutter Web으로 대체. `archive/`로 옮길 후보. Next.js도 쓰지 않는다 (공개 배포 때 소개 페이지만 필요하면 정적 사이트로 따로) |
+| 기존 웹 | `apps/web` (Vite React) | Flutter Web으로 대체. `archive/web/`으로 옮김 (2026-10-04). Next.js도 쓰지 않는다 (공개 배포 때 소개 페이지만 필요하면 정적 사이트로 따로) |
 | 증권사 | KB증권 Open API (조회) + KIS 모의투자 (주문 검증) | `BrokerAdapter`로 분리. 9장 참고 |
 | 공시 | OpenDART | 연동 코드 있음 |
 | 뉴스 | 미정 (네이버 검색 API 등) | 이용 조건 확인 필요 |
@@ -215,6 +215,7 @@
 - DB는 PostgreSQL (+ pgvector)
 - 성향 분석: 설문(MVP) → 행동 프로필(2단계) → 공용 모델 파인튜닝(5단계). 성향은 막는 쪽으로만 쓴다
 - 자동매매: 모의에서 먼저, 실전 방식은 4단계에서 결정 (d안)
+- 기존 목업·fixture 코드와 이전 문서는 `archive/`로 옮김 (삭제 안 함)
 
 **아직 정할 것**
 1. 내 종목 정보를 서버에 얼마나 줄지
@@ -224,7 +225,7 @@
 3. 검증 AI 탐지율 목표치
 4. 브리핑 시간, 뉴스 출처 (2단계 전에)
 5. 실전 전환 조건 (4단계 전에)
-6. 기존 목업·fixture 화면 23개와 `apps/web` 정리 방법 (`archive/`로 옮기기 추천)
+6. ~~기존 목업·fixture 화면 23개와 `apps/web` 정리 방법~~ → `archive/`로 옮김 (2026-10-04, 1단계)
 7. 로그인 방식 (이메일·비밀번호 / 소셜 로그인)
 
 ## 11. 하지 않는 것

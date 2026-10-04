@@ -17,7 +17,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 
 | 단계 | 내용 | 필요한 키 | 상태 |
 |---|---|---|---|
-| 1 | 정리 + 서버 뼈대 | 없음 | ⬜ |
+| 1 | 정리 + 서버 뼈대 | 없음 | ✅ |
 | 2 | 로그인 · 성향 설문 · 투자 정책 API | 없음 | ⬜ |
 | 3 | LangGraph 뼈대 · 조회 | Gemini | ⬜ |
 | 4 | 투자 AI + 검증 AI | Gemini, OpenDART | ⬜ |
@@ -34,11 +34,11 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 기존 목업·fixture 코드와 이전 단계 문서를 `archive/`로 옮긴다 (삭제 아님)
 - `README.md`를 새 방향으로 다시 쓴다
 - `apps/api`에 PostgreSQL 연결 (`psycopg`)
-- `migrations/*.sql` 파일과 순서대로 적용하는 실행기로 테이블 14개 생성
+- `migrations/*.sql` 파일과 순서대로 적용하는 실행기로 테이블 15개 생성
 - `/api/health`가 DB 연결 상태도 알려준다
 - 테스트는 별도 DB `invest_test`에서
 
-**완료 조건**: 서버가 DB에 연결돼 뜨고, 테이블 14개가 생기고, 테스트 통과
+**완료 조건**: 서버가 DB에 연결돼 뜨고, 테이블 15개가 생기고, 테스트 통과
 
 **참고 문서**
 - [02-architecture.md](02-architecture.md): 3장 서버 구조, 7장 개발 환경·저장소
@@ -46,7 +46,12 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - [INVEST_AGENT_PLAN.md](../../INVEST_AGENT_PLAN.md): 10장 아직 정할 것 6번 (기존 화면 정리)
 - 개발 환경: PostgreSQL은 Docker 컨테이너 `invest-db` (`pgvector/pgvector:pg18`), 접속 정보는 `apps/api/.env`
 
-**완료 기록**: 
+**완료 기록**: 2026-10-04 · 커밋 `f627bd3`(archive 이동), 그다음 커밋(서버 뼈대)
+- 옮긴 곳: `archive/mockup`, `archive/web`, `archive/api-fixture`, `archive/docs`, `archive/ideas`
+- DB 접근은 psycopg, 마이그레이션은 SQL 파일 + `app/migrate.py` ([07-database.md](07-database.md) 5장)
+- 테이블은 ERD대로 15개 (처음 적은 14개는 잘못 센 것)
+- 서버의 `.env.example`에서 KIS 키 항목을 지웠다 (서버는 증권사 키를 받지 않음)
+- 임베딩 크기와 벡터 인덱스는 4단계에서 정한다
 
 ---
 

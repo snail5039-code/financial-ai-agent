@@ -1,7 +1,7 @@
 [project]
 name = "financial-ai-agent-api"
 version = "0.1.0"
-description = "Local fixture FastAPI API for the financial AI agent mockup."
+description = "자연어 투자 에이전트 서버 (FastAPI + PostgreSQL)."
 readme = "../../README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
   "uvicorn[standard]>=0.35.0",
   "httpx>=0.28.0",
   "python-dotenv>=1.0.0",
+  "psycopg[binary]>=3.3.6",
 ]
 
 [dependency-groups]
