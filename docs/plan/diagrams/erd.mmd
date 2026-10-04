@@ -1,5 +1,6 @@
 erDiagram
     users ||--|| investor_profiles : "성향"
+    users ||--o{ sessions : "로그인"
     users ||--|| policies : "정책"
     users ||--o{ account_snapshots : "스냅샷"
     users ||--o{ threads : "대화"
@@ -18,7 +19,14 @@ erDiagram
         uuid id PK
         text email UK
         text password_hash
+        timestamptz terms_agreed_at
         timestamptz created_at
+    }
+    sessions {
+        text token_hash PK "sha256"
+        uuid user_id FK
+        timestamptz created_at
+        timestamptz expires_at
     }
     investor_profiles {
         uuid user_id PK, FK
@@ -31,6 +39,7 @@ erDiagram
         bigint max_order_krw
         bigint max_daily_krw
         numeric max_weight_pct
+        numeric fee_rate_pct "수수료율 %, 비어 있으면 미입력"
         timestamptz updated_at
     }
     account_snapshots {

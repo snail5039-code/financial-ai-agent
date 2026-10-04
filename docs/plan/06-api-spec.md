@@ -13,9 +13,10 @@
 | 분류 | 메서드 · 경로 | 설명 | 앱 | 웹 |
 |---|---|---|---|---|
 | 계정 | `POST /api/auth/signup` | 회원가입 | ✅ | ✅ |
-| | `POST /api/auth/login` | 로그인 → 토큰 | ✅ | ✅ |
+| | `POST /api/auth/login` | 로그인 → 토큰 (14일 유효) | ✅ | ✅ |
+| | `POST /api/auth/logout` | 로그아웃 (토큰 폐기) | ✅ | ✅ |
 | | `GET /api/me` | 내 정보 | ✅ | ✅ |
-| | `DELETE /api/me` | 탈퇴 (서버 데이터 삭제) | ✅ | ✅ |
+| | `DELETE /api/me` | 탈퇴 (비밀번호 다시 확인, 서버 데이터 삭제) | ✅ | ✅ |
 | 성향·정책 | `GET /api/profile` · `PUT /api/profile` | 성향 조회 · 설문 답 제출 → 단계 계산 | ✅ | ✅ |
 | | `GET /api/policy` · `PUT /api/policy` | 투자 정책 조회 · 수정 | ✅ | ✅ |
 | 계좌 | `POST /api/snapshot` | 폰이 조회한 계좌 스냅샷 올리기 | ✅ | ❌ |
@@ -136,16 +137,27 @@ POST /api/chat/resume
 
 ```jsonc
 POST /api/auth/signup
+{ "email": "a@b.com", "password": "8~128자", "agreed_terms": true }
+→ 201 { "user_id": "..." }            // 이미 있는 이메일이면 409
+
+POST /api/auth/login
 { "email": "a@b.com", "password": "..." }
-→ 201 { "user_id": "..." }
+→ 200 { "token": "...", "expires_at": "2026-10-18T18:04:01+09:00" }
+// 틀리면 이메일·비밀번호 중 무엇이 틀렸는지 말하지 않고 401
 
-PUT /api/profile
+DELETE /api/me
+{ "password": "..." }
+→ 204                                 // 비밀번호가 틀리면 403
+
+PUT /api/profile                      // 설문 문항: apps/api/app/functions/profile.py
 { "answers": [2, 3, 1, 4, 2] }
-→ 200 { "risk_level": 3, "label": "위험중립형", "default_policy": { ... } }
+→ 200 { "risk_level": 2, "label": "안정추구형", "default_policy": { ... }, "policy": { ... } }
+// 처음이면 기본 한도로 정책을 만들고, 다시 하면 항목마다 지금 값과 새 기본값 중 작은 쪽으로 바꾼다
 
-PUT /api/policy
-{ "max_order_krw": 500000, "max_daily_krw": 1000000, "max_weight_pct": 30 }
-→ 200 { ..., "warnings": ["성향 기본값보다 높은 한도예요"] }
+PUT /api/policy                       // 설문 전이면 409
+{ "max_order_krw": 500000, "max_daily_krw": 1000000, "max_weight_pct": 30, "fee_rate_pct": 0.015 }
+→ 200 { ..., "risk_level": 2, "default_policy": { ... },
+        "warnings": ["한 종목 최대 비중: 성향(안정추구형) 기본값보다 높아요"] }
 
 POST /api/snapshot
 { "cash_krw": 1500000, "holdings": [...], "fetched_at": "..." }

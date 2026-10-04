@@ -8,14 +8,8 @@ from app.migrate import migrate
 TABLES = {
     "users", "investor_profiles", "policies", "account_snapshots", "threads", "messages",
     "stocks", "proposals", "verifications", "policy_checks", "approvals", "orders",
-    "audit_logs", "disclosures", "disclosure_chunks",
+    "audit_logs", "disclosures", "disclosure_chunks", "sessions",
 }
-
-
-@pytest.fixture(scope="session")
-def migrated(test_db_url: str) -> str:
-    assert migrate(test_db_url) == ["001_init.sql"]
-    return test_db_url
 
 
 @pytest.fixture
@@ -26,7 +20,7 @@ def conn(migrated: str):
         c.rollback()
 
 
-def test_creates_15_tables(conn) -> None:
+def test_creates_16_tables(conn) -> None:
     rows = conn.execute(
         "SELECT table_name FROM information_schema.tables"
         " WHERE table_schema = 'public' AND table_name <> 'schema_migrations'"
@@ -53,7 +47,8 @@ def test_health_503_when_db_down() -> None:
 
 def _user(conn) -> str:
     return conn.execute(
-        "INSERT INTO users (email, password_hash) VALUES (gen_random_uuid() || '@t.kr', 'h') RETURNING id"
+        "INSERT INTO users (email, password_hash, terms_agreed_at)"
+        " VALUES (gen_random_uuid() || '@t.kr', 'h', now()) RETURNING id"
     ).fetchone()[0]
 
 

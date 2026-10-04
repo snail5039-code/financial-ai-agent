@@ -15,9 +15,10 @@
 
 | 테이블 | 무엇을 | 언제 쓰나 |
 |---|---|---|
-| `users` | 회원 | 가입 시 |
+| `users` | 회원, 이용 안내 동의 시각 | 가입 시 |
+| `sessions` | 로그인 토큰의 해시와 만료 시각 (토큰 원문은 저장 안 함) | 로그인·로그아웃 |
 | `investor_profiles` | 성향 단계, 설문 답 | 설문 제출 시 |
-| `policies` | 1회·1일 한도, 종목 비중 | 성향 결정 시 기본값, 설정에서 수정 |
+| `policies` | 1회·1일 한도, 종목 비중, 수수료율 | 성향 결정 시 기본값, 설정에서 수정 |
 | `account_snapshots` | 폰이 올린 계좌 요약 (계좌번호 없음) | 앱을 열 때, 주문 후. 최근 1개만 써도 되지만 기록용으로 쌓는다 |
 | `threads`, `messages` | 대화 | 대화할 때 |
 | `stocks` | 종목 목록, 분석 대상 여부 | 처음에 한 번 채움 |
@@ -36,6 +37,8 @@
 | 같은 주문이 두 번 저장되지 않음 | `orders.idempotency_key` UNIQUE |
 | 금액은 0보다 큼 | `CHECK (max_order_krw > 0)` 등 |
 | 비중은 0~100 | `CHECK (max_weight_pct BETWEEN 0 AND 100)` |
+| 1일 한도 ≥ 1회 한도 | `CHECK (max_daily_krw >= max_order_krw)` |
+| 수수료율은 0~1% | `CHECK (fee_rate_pct BETWEEN 0 AND 1)` |
 | 성향 단계는 1~5 | `CHECK (risk_level BETWEEN 1 AND 5)` |
 | 판정·상태 값은 정해진 것만 | `CHECK (verdict IN (...))` |
 | 탈퇴하면 내 데이터 삭제 | `users`를 가리키는 FK에 `ON DELETE CASCADE` |

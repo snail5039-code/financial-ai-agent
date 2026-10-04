@@ -8,7 +8,7 @@
 
 ## 진행 상황
 
-[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 1단계(정리 + 서버 뼈대)까지 끝났다.
+[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 2단계(로그인 · 성향 설문 · 투자 정책 API)까지 끝났다.
 
 ## 폴더
 
