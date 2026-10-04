@@ -85,5 +85,6 @@
 ## 8. 참고 문서
 
 - [INVEST_AGENT_PLAN.md](INVEST_AGENT_PLAN.md): 현재 기획서
+- [docs/plan/08-dev-order.md](docs/plan/08-dev-order.md): 개발 순서와 진행 체크. 단계를 시작할 때 그 단계의 참고 문서를 먼저 읽는다
 - [FINANCIAL_AI_AGENT_IDEA.md](FINANCIAL_AI_AGENT_IDEA.md): 처음 기획 (투자·검증·실행 에이전트 원본 설계)
 - `docs/handoff/`, `HANDOFF.md`: 이전 단계(목업·fixture 화면) 기록. 새 방향과 다른 내용이 있으면 이 문서와 기획서가 우선한다.

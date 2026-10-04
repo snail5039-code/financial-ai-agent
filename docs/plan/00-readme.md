@@ -11,6 +11,7 @@
 | [05-schemas.md](05-schemas.md) | 투자 AI 제안서, 검증 AI 판정, 처리안, 주문 요청·결과 형식 |
 | [06-api-spec.md](06-api-spec.md) | 서버 API, 대화 이벤트 스트림, 멈춤 메시지 형식 |
 | [07-database.md](07-database.md) | PostgreSQL ERD, 테이블, 제약조건, 자주 쓰는 SQL |
+| [08-dev-order.md](08-dev-order.md) | **개발 순서와 진행 체크**. 단계마다 그때 볼 참고 문서 링크 |
 
 그림은 각 md 파일 안에 직접 들어 있다. 그림 원본만 따로 둔다.
 
@@ -27,5 +28,4 @@ python docs/plan/wireframes/make_wireframes.py <PNG를 만들 폴더>
 ## 다음에 만들 문서
 
 - 테스트·평가 계획 (데모 시나리오, Golden Set, 검증 AI 오류 주입 세트)
-- 일정 (주 단위)
 - 보안 위협 정리 (프롬프트 인젝션 등), 예외 상황 정의, 데이터 출처 확정, 성향 설문 문항, 개발 환경 설치 안내
