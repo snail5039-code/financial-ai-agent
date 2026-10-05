@@ -107,9 +107,8 @@ virtual_bank_agent처럼 **1단 supervisor → 2단 업무 그래프 → 공용 
 
 | 노드 | LLM | 하는 일 |
 |---|---|---|
-| `rewrite` | ✅ | 최근 대화로 "그거"를 실제 이름으로 바꿈 |
-| `classify` | ✅ | 요청 종류 분류 |
-| `extract_query`, `extract_order` | ✅ | 값 뽑기 (structured output) |
+| `understand` | ✅ | **한 번의 호출로** 최근 대화로 "그거"를 실제 이름으로 바꾸고(rewrite), 요청 종류를 분류하고(classify), 조회 대상·종목을 뽑음. 따로 부르면 느려서 합침 (2026-10-05, 3단계) |
+| `extract_order` | ✅ | 주문 값 뽑기 (structured output, 5단계) |
 | `check` | ❌ | 빠진 값, 후보, 불가능 여부 판단 |
 | `fetch` | ❌ | interrupt로 폰에 조회 부탁 |
 | `gather` | ❌ (검색만) | 공시 RAG 검색, 지표 계산 |

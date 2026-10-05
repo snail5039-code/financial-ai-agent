@@ -103,13 +103,13 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 참고 코드: `virtual_bank_agent`의 `src/agents/supervisor`, `src/state.py`, `web/bank/main.py` (thread_id, Command resume)
 
 **완료 기록**: 2026-10-05 · 3단계 커밋
-- 그래프: rewrite → classify → 조회 그래프(extract_query → find_stock → get_market(fetch 또는 스냅샷) → make_answer / read_orders). 분석·주문·결과는 "준비 중" 안내
-- LLM(Gemini `gemini-3.6-flash`)은 rewrite·classify·extract_query만. 답 문장·금액·기준 시각은 코드가 만든다
+- 그래프: understand → 조회 그래프(find_stock → get_market(fetch 또는 스냅샷) → make_answer / read_orders). 분석·주문·결과는 "준비 중" 안내
+- LLM(Gemini `gemini-3.6-flash`)은 understand(요청 이해) 한 곳만. 답 문장·금액·기준 시각은 코드가 만든다
 - 멈춤 답은 그래프에 넣기 전에 검사: 지금 멈춘 `interrupt_id`만(409), 형식 엄격·계좌번호 칸 거부(422), fetch는 앱만(403). 폰 조회 실패는 가짜 값 없이 실패 안내
 - 체크포인트 `PostgresSaver` (테이블은 LangGraph가 `checkpoint*`로 직접 만듦). DB 주소는 State가 아닌 실행 Context로 넘겨 체크포인트에 남지 않게 함
 - 같은 대화에 새 메시지가 오면 멈춘 업무는 버리고 새로 시작한다
 - 테스트 110개 (가짜 LLM, 비용 0) + 실제 Gemini 확인 14개 (`uv run pytest -m gemini`, 기본 제외). 실제 서버를 껐다 켜도 멈춘 업무가 남고 이어서 진행되는 것 확인
-- **미충족**: 단순 조회 3초(NFR-12). 실제 측정 잔고 6.8초(LLM 2번), "그거" 풀기 포함 9.7초(3번), 한 번에 약 2~3초. 개선 후보: classify와 extract_query를 한 번의 호출로 합치기, rewrite는 가리키는 말("그거" 등)이 있을 때만 부르기, 분류에 더 가벼운 모델(flash-lite)
+- **속도 개선 (같은 날)**: 처음엔 단순 조회 6.8~9.7초로 3초 목표(NFR-12) 미달. rewrite·classify·extract_query를 `understand` 한 번의 호출로 합치고 Gemini 생각 단계를 `thinking_level=minimal`로 낮춤 → 실제 서버 1.4~1.8초 (서버 시작 직후 첫 요청 2.8초). 측정: 3.6-flash 기본 2.16초, minimal 1.38초, 3.5-flash-lite 1.06초, 3.1-flash-lite 0.91초 (문장 6개 모두 정답). 모델은 3.6-flash 유지
 - 종목 목록(`stocks`)은 4단계에서 채우므로, 지금 실제 서버의 "삼성전자 얼마야?"는 "종목을 찾지 못했어요"로 답한다 (테스트는 테스트용 종목으로 확인)
 
 ---

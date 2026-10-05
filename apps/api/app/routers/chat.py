@@ -33,9 +33,7 @@ logger = logging.getLogger(__name__)
 HISTORY_TURNS = 5
 PENDING_THREADS_LIMIT = 20
 PROGRESS_LABELS = {
-    "rewrite": "요청 이해 중",
-    "classify": "요청 분류 중",
-    "extract_query": "조회 내용 확인 중",
+    "understand": "요청 이해 중",
     "find_stock": "종목 찾는 중",
     "get_market": "계좌·시세 확인 중",
     "read_orders": "주문 내역 확인 중",
@@ -67,7 +65,7 @@ def own_thread(conn: psycopg.Connection, user_id: UUID, thread_id: UUID) -> None
 
 
 def recent_history(conn: psycopg.Connection, thread_id: UUID) -> list[dict]:
-    """최근 대화 5턴 [{request, answer}] (오래된 것부터). rewrite가 "그거"를 풀 때 본다."""
+    """최근 대화 5턴 [{request, answer}] (오래된 것부터). understand가 "그거"를 풀 때 본다."""
     rows = conn.execute(
         "SELECT role, text FROM messages WHERE thread_id = %s ORDER BY created_at DESC LIMIT %s",
         (thread_id, HISTORY_TURNS * 2),

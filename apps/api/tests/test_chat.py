@@ -16,38 +16,33 @@ from app.main import create_app
 
 # ---------- 가짜 LLM ----------
 
-def fake_classify(query: str) -> str:
+def fake_understand(query: str, history: list) -> llm.Understood:
+    """단어 규칙으로 흉내 낸 요청 이해."""
     if "사도 돼" in query:
-        return "analysis"
+        return llm.Understood(query=query, intent="analysis")
     if "사줘" in query or "팔아" in query:
-        return "order"
+        return llm.Understood(query=query, intent="order")
     if "체결" in query:
-        return "result"
-    if any(word in query for word in ("잔고", "얼마", "내역", "시세")):
-        return "query"
-    return "other"
-
-
-def fake_extract(query: str) -> llm.QueryTarget:
+        return llm.Understood(query=query, intent="result")
     if "잔고" in query:
-        return llm.QueryTarget(kind="balance")
+        return llm.Understood(query=query, intent="query", query_kind="balance")
     if "내역" in query:
-        return llm.QueryTarget(kind="orders")
-    name = query.split(" 얼마")[0].strip() if " 얼마" in query else None
-    return llm.QueryTarget(kind="price", stock_name=name)
+        return llm.Understood(query=query, intent="query", query_kind="orders")
+    if "얼마" in query or "시세" in query:
+        name = query.split(" 얼마")[0].strip() if " 얼마" in query else None
+        return llm.Understood(query=query, intent="query", query_kind="price", stock_name=name)
+    return llm.Understood(query=query, intent="other")
 
 
 @pytest.fixture(autouse=True)
 def fake_llm(monkeypatch):
-    calls = {"rewrite": []}
+    calls = []
 
-    def fake_rewrite(query: str, history: list) -> str:
-        calls["rewrite"].append(history)
-        return query
+    def recording_understand(query: str, history: list) -> llm.Understood:
+        calls.append(history)
+        return fake_understand(query, history)
 
-    monkeypatch.setattr(llm, "classify_intent", fake_classify)
-    monkeypatch.setattr(llm, "extract_query", fake_extract)
-    monkeypatch.setattr(llm, "rewrite_query", fake_rewrite)
+    monkeypatch.setattr(llm, "understand", recording_understand)
     return calls
 
 
@@ -267,6 +262,11 @@ def test_not_ready_intents(client, user, text: str) -> None:
     assert first(chat(client, user, text), "message")["text"] == NOT_READY_MESSAGE
 
 
+def test_query_without_kind_gets_guide(client, user, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", lambda query, history: llm.Understood(query=query, intent="query"))
+    assert "이렇게 말해 보세요" in first(chat(client, user, "보여줘"), "message")["text"]
+
+
 def test_new_message_replaces_pending_task(client, user) -> None:
     events = chat(client, user, "잔고 보여줘")
     thread_id = first(events, "done")["thread_id"]
@@ -277,17 +277,17 @@ def test_new_message_replaces_pending_task(client, user) -> None:
     assert resume(client, user, events, {"error": "x"}).status_code == 409  # 버려진 멈춤
 
 
-def test_history_is_passed_to_rewrite(client, user, fake_llm) -> None:
+def test_history_is_passed_to_understand(client, user, fake_llm) -> None:
     events = chat(client, user, "오늘 주문 내역 보여줘")
     chat(client, user, "그거 다시", thread_id=first(events, "done")["thread_id"])
-    assert fake_llm["rewrite"][-1] == [{"request": "오늘 주문 내역 보여줘", "answer": "오늘 주문 내역이 없어요."}]
+    assert fake_llm[-1] == [{"request": "오늘 주문 내역 보여줘", "answer": "오늘 주문 내역이 없어요."}]
 
 
 def test_llm_failure_is_reported(client, user, monkeypatch) -> None:
-    def broken(query):
+    def broken(query, history):
         raise llm.LLMUnavailable("quota")
 
-    monkeypatch.setattr(llm, "classify_intent", broken)
+    monkeypatch.setattr(llm, "understand", broken)
     events = chat(client, user, "잔고 보여줘")
     assert "AI 응답을 받지 못했어요" in first(events, "error")["detail"]
     assert [e for e, _ in events][-1] == "done"

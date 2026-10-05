@@ -1,8 +1,9 @@
 """조회 그래프: 잔고 · 현재가 · 오늘 주문 내역 (docs/plan/04-graph-design.md 3장).
 
-    extract_query ─┬─ price   → find_stock → get_market → make_answer
-                   ├─ balance →              get_market → make_answer
-                   └─ orders  → read_orders
+    (understand가 뽑은 query_kind로 시작)
+    ┬─ price   → find_stock → get_market → make_answer
+    ├─ balance →              get_market → make_answer
+    └─ orders  → read_orders
 
 - 잔고·현재가는 서버가 직접 볼 수 없다 (증권사 키가 폰에만 있음). 앱이면 fetch로 멈춰 폰에 부탁하고,
   웹이면 폰이 올려 둔 계좌 스냅샷을 쓴다. 웹은 현재가를 볼 수 없다 (서버 시세 출처는 4단계에서 정함).
@@ -15,7 +16,6 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
-from app.agents import llm
 from app.agents.interrupts import pause
 from app.agents.state import Context, InvestState
 from app.clock import KST
@@ -89,11 +89,6 @@ def latest_snapshot(conn, user_id: str) -> dict | None:
 
 
 # ---------- 노드 ----------
-
-def extract_query_node(state: InvestState) -> dict:
-    target = llm.extract_query(state["query"])
-    return {"query_kind": target.kind, "stock_name": target.stock_name}
-
 
 def find_stock_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     """종목 이름 → 코드. 이름이 없으면 묻고, 후보가 여럿이면 고르게 한다 (FR-11)."""
@@ -178,14 +173,12 @@ def end_if_answered(next_node: str):
 
 def build_query_graph():
     builder = StateGraph(InvestState, context_schema=Context)
-    builder.add_node("extract_query", extract_query_node)
     builder.add_node("find_stock", find_stock_node)
     builder.add_node("get_market", get_market_node)
     builder.add_node("make_answer", make_answer_node)
     builder.add_node("read_orders", read_orders_node)
 
-    builder.add_edge(START, "extract_query")
-    builder.add_conditional_edges("extract_query", route_by_kind, ["find_stock", "get_market", "read_orders"])
+    builder.add_conditional_edges(START, route_by_kind, ["find_stock", "get_market", "read_orders"])
     builder.add_conditional_edges("find_stock", end_if_answered("get_market"), ["get_market", END])
     builder.add_conditional_edges("get_market", end_if_answered("make_answer"), ["make_answer", END])
     builder.add_edge("make_answer", END)
