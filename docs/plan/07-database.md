@@ -28,7 +28,9 @@
 | `approvals` | 승인 요청과 결과 | 처리안이 나올 때 |
 | `orders` | 폰이 보낸 주문 결과 | 실행 후 |
 | `audit_logs` | 모든 중요한 일의 기록 | 매 단계 |
-| `disclosures`, `disclosure_chunks` | 공시 원문과 검색용 조각 | 공시 수집 시 |
+| `disclosures`, `disclosure_chunks` | 공시 목록과 정기보고서 본문 검색용 조각 (`section`: 어느 단원인지, `embedding`: gemini-embedding-2 768차원, HNSW 인덱스) | 수집 명령 `python -m app.collect` |
+| `stock_prices` | 일별 종가·시가총액·상장주식수 (금융위원회_주식시세정보, 하루 늦은 값) | 수집 명령 |
+| `financials` | 주요 재무 계정 (OpenDART 단일회사 주요계정, 연결·별도, 출처 공시 접수번호) | 수집 명령 |
 
 ## 3. 지켜야 할 규칙 (제약조건)
 

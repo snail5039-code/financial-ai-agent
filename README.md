@@ -46,6 +46,12 @@ uv --directory apps/api run python -m app.migrate
 uv --directory apps/api run uvicorn app.main:app --port 8000
 ```
 
+분석용 데이터(시세·재무·공시) 수집 (`.env`에 `OPENDART_API_KEY`, `DATA_GO_KR_API_KEY`, `GEMINI_API_KEY` 필요):
+
+```bash
+uv --directory apps/api run python -m app.collect
+```
+
 http://localhost:8000/api/health 가 `{"status":"ok","db":"ok"}`면 정상이다. DB에 연결되지 않으면 503과 `"db":"error"`를 돌려준다.
 
 ## 테스트

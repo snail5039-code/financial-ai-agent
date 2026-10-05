@@ -8,7 +8,7 @@ from functools import cache
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from pydantic import BaseModel, Field
 
 from app import config
@@ -36,6 +36,34 @@ def ask[T: BaseModel](schema: type[T], instructions: str, text: str, thinking_le
         )
     except LLMUnavailable:
         raise
+    except Exception as error:
+        raise LLMUnavailable(str(error)) from error
+
+
+# ---------- 공시 검색용 임베딩 ----------
+# 768차원: DB 칸(vector(768))과 같아야 한다. Gemini 임베딩이 정해 둔 줄임 크기 중 하나
+
+EMBEDDING_DIMENSIONS = 768
+
+
+@cache
+def embedder() -> GoogleGenerativeAIEmbeddings:
+    if not config.GEMINI_API_KEY:
+        raise LLMUnavailable("GEMINI_API_KEY가 비어 있습니다 (apps/api/.env)")
+    return GoogleGenerativeAIEmbeddings(model=config.GEMINI_EMBEDDING_MODEL, google_api_key=config.GEMINI_API_KEY,
+                                        output_dimensionality=EMBEDDING_DIMENSIONS)
+
+
+def embed_documents(texts: list[str]) -> list[list[float]]:
+    try:
+        return embedder().embed_documents(texts, task_type="RETRIEVAL_DOCUMENT")
+    except Exception as error:
+        raise LLMUnavailable(str(error)) from error
+
+
+def embed_query(text: str) -> list[float]:
+    try:
+        return embedder().embed_query(text, task_type="RETRIEVAL_QUERY")
     except Exception as error:
         raise LLMUnavailable(str(error)) from error
 

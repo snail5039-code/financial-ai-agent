@@ -1,116 +1,88 @@
-"""Thin client for the 금융감독원 OpenDART public disclosure API.
+"""금융감독원 OpenDART: 공시 목록, 주요 재무 계정, 공시 원문 (읽기 전용 공개 데이터).
 
-Only the two calls Company Detail needs: mapping a stock code to OpenDART's
-own 8-digit corp_code (`corpCode.xml`, downloaded once and cached to disk —
-the mapping is large and essentially static), then listing that company's
-recent disclosures (`list.json`).
-
-This is the only module in `apps/api` that makes a real outbound network
-call. Everything else in this app is local-only by design (see AGENTS.md) —
-keep it that way: no other integration belongs here without the same
-"read-only, publicly available, no account/money involved" property OpenDART
-has.
+https://opendart.fss.or.kr/guide/main.do
 """
 
+import html
 import io
+import re
 import xml.etree.ElementTree as ET
 import zipfile
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
 
-from app.clock import KST
-
-OPENDART_BASE_URL = "https://opendart.fss.or.kr/api"
+BASE_URL = "https://opendart.fss.or.kr/api"
 CORP_CODE_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "opendart_corp_codes.xml"
-REQUEST_TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = 60
+# OpenDART 자체 상태 코드: "000" 정상, "013" 조회 결과 없음(오류 아님)
+STATUS_OK, STATUS_NO_DATA = "000", "013"
 
-# OpenDART's own status codes (payload["status"]). "000" is success; "013" is
-# a normal empty result ("조회된 데이타가 없습니다"), not an error. Anything
-# else (auth failure, rate limit, bad params, ...) is a real error.
-STATUS_OK = "000"
-STATUS_NO_DATA = "013"
+REPORT_CODES = {"11013": "1분기", "11012": "반기", "11014": "3분기", "11011": "사업"}
 
 
 class OpenDartError(Exception):
-    """Any non-success response from OpenDART, or a corp_code we can't find."""
+    pass
 
 
-async def _download_corp_codes(api_key: str) -> bytes:
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = await client.get(f"{OPENDART_BASE_URL}/corpCode.xml", params={"crtfc_key": api_key})
-        response.raise_for_status()
-        return response.content
+def disclosure_url(rcept_no: str) -> str:
+    return f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}"
 
 
-async def _ensure_corp_code_cache(api_key: str) -> Path:
-    """`corpCode.xml` is a zip of every listed company's stock_code<->corp_code
-    mapping. It changes rarely, so once downloaded it's cached indefinitely —
-    delete the file to force a refresh."""
-    if CORP_CODE_CACHE_PATH.exists():
-        return CORP_CODE_CACHE_PATH
-
-    raw_zip = await _download_corp_codes(api_key)
-    try:
-        with zipfile.ZipFile(io.BytesIO(raw_zip)) as archive:
-            xml_bytes = archive.read("CORPCODE.xml")
-    except zipfile.BadZipFile as exc:
-        # A bad/expired key makes corpCode.xml return an XML error body
-        # instead of a zip file — surface that instead of a confusing
-        # "not a zip file" trace.
-        raise OpenDartError(f"OpenDART corpCode.xml did not return a zip file: {raw_zip[:200]!r}") from exc
-
-    CORP_CODE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CORP_CODE_CACHE_PATH.write_bytes(xml_bytes)
-    return CORP_CODE_CACHE_PATH
-
-
-async def get_corp_code(stock_code: str, api_key: str) -> str:
-    path = await _ensure_corp_code_cache(api_key)
-    for _, elem in ET.iterparse(path):
-        if elem.tag != "list":
-            continue
-        if (elem.findtext("stock_code") or "").strip() == stock_code:
-            corp_code = elem.findtext("corp_code")
-            elem.clear()
-            if corp_code:
-                return corp_code
-        elem.clear()
-    raise OpenDartError(f"stock_code {stock_code!r} not found in OpenDART's corp code list")
-
-
-async def fetch_recent_disclosures(stock_code: str, api_key: str, count: int = 5) -> list[dict]:
-    """Returns up to `count` of the company's most recent disclosures, most
-    recent first — each a dict with (at least) report_nm, rcept_no, rcept_dt,
-    flr_nm, as OpenDART's `list.json` returns them."""
-    corp_code = await get_corp_code(stock_code, api_key)
-
-    # list.json defaults to an empty window when bgn_de/end_de are omitted
-    # (it returns status "013" — no data — rather than "all time"), so a
-    # one-year lookback is required to actually get results.
-    end_de = datetime.now(KST).date()
-    bgn_de = end_de - timedelta(days=365)
-
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = await client.get(
-            f"{OPENDART_BASE_URL}/list.json",
-            params={
-                "crtfc_key": api_key,
-                "corp_code": corp_code,
-                "bgn_de": bgn_de.strftime("%Y%m%d"),
-                "end_de": end_de.strftime("%Y%m%d"),
-                "page_no": 1,
-                "page_count": count,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-
-    status = payload.get("status")
-    if status == STATUS_NO_DATA:
+def get_json(path: str, api_key: str, **params) -> list[dict]:
+    payload = httpx.get(f"{BASE_URL}/{path}", params={"crtfc_key": api_key, **params}, timeout=TIMEOUT_SECONDS).json()
+    if payload.get("status") == STATUS_NO_DATA:
         return []
-    if status != STATUS_OK:
-        raise OpenDartError(f"OpenDART list.json returned status {status}: {payload.get('message')}")
-
+    if payload.get("status") != STATUS_OK:
+        raise OpenDartError(f"{path}: {payload.get('status')} {payload.get('message')}")
     return payload.get("list", [])
+
+
+def corp_codes(api_key: str) -> dict[str, str]:
+    """종목 코드 → OpenDART 회사 코드. 목록 파일은 거의 안 바뀌어서 한 번 받아 저장해 둔다 (지우면 다시 받음)."""
+    if not CORP_CODE_CACHE_PATH.exists():
+        raw = httpx.get(f"{BASE_URL}/corpCode.xml", params={"crtfc_key": api_key}, timeout=TIMEOUT_SECONDS).content
+        try:
+            xml_bytes = zipfile.ZipFile(io.BytesIO(raw)).read("CORPCODE.xml")
+        except zipfile.BadZipFile as error:  # 키가 틀리면 zip 대신 오류 XML이 온다
+            raise OpenDartError(f"corpCode.xml이 zip이 아님: {raw[:200]!r}") from error
+        CORP_CODE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CORP_CODE_CACHE_PATH.write_bytes(xml_bytes)
+    root = ET.parse(CORP_CODE_CACHE_PATH).getroot()
+    return {
+        item.findtext("stock_code").strip(): item.findtext("corp_code")
+        for item in root.iter("list") if (item.findtext("stock_code") or "").strip()
+    }
+
+
+def disclosures(corp_code: str, api_key: str, begin: str, end: str, kind: str | None = None) -> list[dict]:
+    """공시 목록 (최신부터, 최대 100건). kind="A"면 정기공시(사업·반기·분기보고서)만. 날짜는 YYYYMMDD."""
+    params = {"corp_code": corp_code, "bgn_de": begin, "end_de": end, "page_count": 100}
+    return get_json("list.json", api_key, **params, **({"pblntf_ty": kind} if kind else {}))
+
+
+def major_accounts(corp_code: str, year: int, reprt_code: str, api_key: str) -> list[dict]:
+    """단일회사 주요 계정 (매출액, 영업이익, 당기순이익, 부채총계, 자본총계 등, 연결·별도)."""
+    return get_json("fnlttSinglAcnt.json", api_key, corp_code=corp_code, bsns_year=str(year), reprt_code=reprt_code)
+
+
+def document_sections(rcept_no: str, api_key: str, wanted: tuple[str, ...]) -> list[tuple[str, str]]:
+    """공시 원문에서 제목에 wanted 글자가 들어간 큰 단원만 꺼내 (제목, 본문 글자)로 돌려준다."""
+    raw = httpx.get(f"{BASE_URL}/document.xml", params={"crtfc_key": api_key, "rcept_no": rcept_no},
+                    timeout=TIMEOUT_SECONDS).content
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as error:
+        raise OpenDartError(f"document.xml이 zip이 아님: {raw[:200]!r}") from error
+    document = archive.read(archive.namelist()[0]).decode("utf-8", "replace")
+    return [(title, text) for title, text in sections_of(document) if any(word in title for word in wanted)]
+
+
+def sections_of(document: str) -> list[tuple[str, str]]:
+    """<SECTION-1> 단원마다 (제목, 태그를 지운 본문)."""
+    result = []
+    for block in re.findall(r"<SECTION-1[^>]*>(.*?)</SECTION-1>", document, re.DOTALL):
+        title = re.search(r"<TITLE[^>]*>(.*?)</TITLE>", block, re.DOTALL)
+        text = html.unescape(re.sub(r"<[^>]+>", " ", block))
+        result.append((title.group(1).strip() if title else "", re.sub(r"\s+", " ", text).strip()))
+    return result

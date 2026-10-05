@@ -17,3 +17,7 @@ OPENDART_API_KEY = os.environ.get("OPENDART_API_KEY", "").strip() or None
 # Gemini (3단계부터). 모델은 .env에서 바꿀 수 있다
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip() or None
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.6-flash"
+GEMINI_EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "").strip() or "gemini-embedding-2"
+
+# 공공데이터포털 금융위원회_주식시세정보 (4단계): 일별 종가와 시가총액
+DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY", "").strip() or None
