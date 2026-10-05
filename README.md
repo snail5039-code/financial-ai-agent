@@ -8,7 +8,7 @@
 
 ## 진행 상황
 
-[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 3단계(LangGraph 뼈대 · 조회)까지 끝났다.
+[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 4단계(투자 AI + 검증 AI) 진행 중이다. 분석 그래프는 동작하고, 30종목 시세 수집이 남았다.
 
 ## 폴더
 

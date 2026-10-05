@@ -2,7 +2,7 @@
 
 체크포인트(PostgresSaver)가 thread_id마다 State를 저장하므로 턴이 바뀌어도 값이 남는다.
 그래서 새 요청을 시작할 때 new_request()로 이번 업무 칸을 비운다.
-지금은 3단계(조회)에 필요한 칸만 있다. 분석·주문 칸은 4·5단계에서 더한다.
+지금은 조회(3단계)·분석(4단계)에 필요한 칸만 있다. 주문 칸은 5단계에서 더한다.
 """
 
 from dataclasses import dataclass
@@ -38,6 +38,15 @@ class InvestState(TypedDict, total=False):
     snapshot: dict | None    # 계좌: cash_krw, holdings, fetched_at, source(app / server)
     prices: list | None      # [{stock_code, price, as_of}]
 
+    # 분석 (4단계, docs/plan/05-schemas.md)
+    sources: dict            # 출처 ID → {kind, title, url, as_of, content}
+    metrics: list            # 코드가 계산한 지표 [{metric_id, value, unit, formula, inputs}]
+    risk_grade: int          # 종목 위험등급 (1 매우 높음 ~ 6)
+    allowed_actions: list    # 성향 규칙상 투자 AI가 낼 수 있는 행동
+    proposal: dict | None    # 투자 AI 제안서 (최신)
+    verifications: list      # 검증 AI 판정, 반박-수정마다 하나
+    revision_round: int      # 검증을 몇 번 했는지 (반박-수정 최대 2번)
+
 
 def new_request(query: str, history: list, profile: dict) -> dict:
     """새 요청의 시작값. 지난 업무의 값이 섞이지 않게 비운다. 대화 ID·사용자 정보는 호출하는 쪽이 넣는다."""
@@ -45,4 +54,6 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "query": query, "history": history, "intent": None, "answer": None,
         "mode": profile["mode"], "risk_level": profile.get("risk_level"), "flags": profile.get("flags", []),
         "query_kind": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
+        "sources": {}, "metrics": [], "risk_grade": None, "allowed_actions": [], "proposal": None,
+        "verifications": [], "revision_round": 0,
     }

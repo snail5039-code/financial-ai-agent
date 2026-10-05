@@ -140,6 +140,9 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 
 **완료 기록**: 진행 중
 - 4-1 데이터 (2026-10-05): `004_market_data.sql`(stock_prices, financials, 임베딩 768차원 + HNSW), 수집 명령 `python -m app.collect`, 지표 계산 `functions/metrics.py`(PER·PBR·부채비율·전년 대비·20일 변동성·주문 후 비중, 테스트), 본문 조각 `functions/text.py`. OpenDART로 삼성전자 실제 수집 확인(재무 180줄, 공시 100건, 반기보고서 본문 60조각, 검색 동작). **공공데이터포털 키는 "등록되지 않은 서비스키"라 시세·30종목 선정은 아직 실제로 못 돌림** (테스트는 가짜 응답으로 확인)
+- 4-2 분석 그래프 (2026-10-05): `agents/analysis.py` find_stock → check_target(대상·하루 20회) → get_account(앱 fetch: 잔고+현재가 / 웹: 스냅샷) → gather(출처 ID: `dart:`, `dart:#조각`, `fin:`, `price:`, `quote:`, `snapshot`, 지표 계산) → invest_agent → verify_agent(코드 검사 먼저 → 인용한 출처만 DB에서 다시 읽고 지표 다시 계산 → 검증 AI) → 반려면 최대 2번 수정 → record(`proposals`, `verifications`). 성향 규칙(`functions/suitability.py`)은 코드가 지킨다: 허용 밖 행동은 '관찰'로. `005_analysis.sql`(metrics, conditions, disagreements 칸)
+- 실제 Gemini 확인: 삼성전자 분석 13.5초(요청→fetch 3.1초, 이후 10.4초), 출처 달린 제안서와 승인 판정. 근거의 "메모리 평균 판매가격 약 220% 상승"을 원문에서 확인. 영업이익 증가율을 일부러 틀리게(33.23%→50%) 넣은 제안서를 검증 AI가 반려하고 정확한 값을 지적
+- 남은 것: 공공데이터포털 키 등록 후 30종목 전체 수집(`python -m app.collect`)과 PER·PBR·변동성이 들어간 분석 확인. 투자주의·관리종목(1등급) 데이터는 없어 모두 2등급으로 본다
 
 ---
 

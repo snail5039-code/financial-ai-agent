@@ -12,6 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from pydantic import BaseModel, Field
 
 from app import config
+from app.agents.schemas import ProposalDraft, VerificationDraft
 
 
 class LLMUnavailable(Exception):
@@ -100,3 +101,43 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 def understand(query: str, history: list) -> Understood:
     lines = [f"사용자: {turn['request']}\n답: {turn['answer']}" for turn in history] or ["(없음)"]
     return ask(Understood, UNDERSTAND_PROMPT.format(history="\n".join(lines)), query)
+
+
+# ---------- 투자 AI · 검증 AI (4단계) ----------
+# 두 AI는 서로 다른 지시문을 쓰고, 검증 AI는 투자 AI의 입력·지시문을 보지 않는다 (FR-17).
+# 무엇을 넘길지는 agents/analysis.py가 정한다. 여기는 부르기만 한다.
+
+INVEST_PROMPT = """너는 한국 주식 앱의 투자 AI다. 주어진 자료만 써서 이 종목에 대한 제안서를 쓴다.
+
+규칙
+- 행동(action)은 [허용 행동] 중에서만 고른다.
+- 모든 사실(fact)·계산(calc) 근거에는 [자료]의 출처 ID를 단다. 계산 근거에는 [지표]의 지표 ID도 단다.
+- 숫자는 [지표]와 [자료]에 있는 값만 쓴다. 직접 계산하거나 지어내지 않는다. 없는 정보는 "미확인"이라고 쓴다.
+- 사실, 계산, 추론, 의견을 구분한다. "무조건 오른다", "위험 없다" 같은 표현을 쓰지 않는다.
+- 반대 근거와 위험(손실 가능성, 수수료·세금 포함)을 반드시 쓴다.
+- 검증 AI의 반박이 있으면 그 점을 고쳐서 다시 쓴다.
+- [사용자] 안내를 따른다 (예: 고령이면 불리한 점을 먼저, 고금리 빚이 있으면 빚 상환 안내)."""
+
+VERIFY_PROMPT = """너는 한국 주식 앱의 검증 AI다. 투자 AI가 쓴 제안서를 믿지 말고 원문으로 다시 확인한다.
+
+반드시 확인할 것 (checks에 하나씩 남긴다)
+1. 사실·계산 근거마다 출처가 있고, [원문]이 그 문장을 실제로 뒷받침하는가 (target: claim:번호)
+2. 근거에 쓴 숫자가 [다시 계산한 지표]와 같은가
+3. 자료가 오래되지 않았는가 (target: freshness)
+4. 사실·추론·의견을 섞지 않았는가, 지나친 확신은 없는가
+5. 반대 근거와 위험을 빠뜨리지 않았는가 (target: counter_arguments)
+6. [사용자] 성향과 맞는가 (target: risk_fit)
+[코드 검사]에 fail이 있으면 승인하지 않는다.
+
+판정
+- approve: 문제 없음 / conditional: 조건을 지키면 괜찮음 (conditions에 조건) / reject: 고쳐야 함 (challenges에 반박)
+- user_judgement: 자료가 부족하거나 서로 맞지 않아 AI가 판단하기 어려움
+투자 AI와 생각이 다른 점은 disagreements에 쓴다. 사용자에게 그대로 보여준다."""
+
+
+def write_proposal(context: str) -> ProposalDraft:
+    return ask(ProposalDraft, INVEST_PROMPT, context, thinking_level="low")
+
+
+def verify_proposal(context: str) -> VerificationDraft:
+    return ask(VerificationDraft, VERIFY_PROMPT, context, thinking_level="low")

@@ -37,6 +37,12 @@ PROGRESS_LABELS = {
     "find_stock": "종목 찾는 중",
     "get_market": "계좌·시세 확인 중",
     "read_orders": "주문 내역 확인 중",
+    "check_target": "분석 대상인지 확인 중",
+    "get_account": "계좌·현재가 확인 중",
+    "gather": "공시·재무 자료 모으는 중",
+    "invest_agent": "투자 AI 분석 중",
+    "verify_agent": "검증 AI 확인 중",
+    "record": "기록 저장 중",
 }
 
 

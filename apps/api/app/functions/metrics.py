@@ -37,7 +37,7 @@ def per(market_cap: int, net_income: int, inputs: list[str]) -> dict:
 
 
 def pbr(market_cap: int, equity: int, inputs: list[str]) -> dict:
-    formula = "시가총액 ÷ 자본총계 (최근 정기보고서, 연결)"
+    formula = "시가총액 ÷ 자본총계 (최근 사업보고서, 연결)"
     if equity <= 0:
         return metric("pbr", None, "배", formula, inputs, "자본이 0 이하라 계산할 수 없음")
     return metric("pbr", Decimal(market_cap) / Decimal(equity), "배", formula, inputs)

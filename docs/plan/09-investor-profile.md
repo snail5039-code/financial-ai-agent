@@ -123,7 +123,7 @@ C 하나라도 틀림 → 단계 − 1 (최소 1)
 ### 3단계 (LangGraph 뼈대) — 완료 (2026-10-05)
 - 공유 State에 `mode`(general/custom), `risk_level`, `flags`를 넣는다. 대화 시작 때 `GET /api/profile`과 같은 방식으로 읽는다
 
-### 4단계 (투자 AI + 검증 AI)
+### 4단계 (투자 AI + 검증 AI) — 구현 (2026-10-05)
 - **일반 모드 답변 규칙**: 투자 AI는 판단("사세요/마세요/매수 추천") 없이 사실·지표·장단점·위험만 쓴다. 제안서 `action`은 `watch`만 쓰거나 판단 칸을 비운다. 프롬프트와 검증 AI 검사 항목 둘 다에 넣는다
 - `no_buy_proposals`, `vulnerable`, `high_interest_debt`, `quiz_missed` 처리 (4장 표)
 - **종목 위험등급**: 국내 주식 2등급, 투자주의·경고·관리종목·해외·레버리지/인버스 ETF·ETN 1등급 (토스 준칙 별지 제4호). 검증 AI의 `risk_fit`에서 성향과 비교한다
