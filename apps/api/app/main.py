@@ -1,17 +1,37 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from app import config
+from app.agents.graph import build_graph
 from app.db import connect
-from app.routers import auth, policy
+from app.routers import auth, chat, policy, snapshot
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 대화 그래프의 체크포인트(멈춘 업무 포함)를 PostgreSQL에 저장한다. 서버를 재시작해도 남는다 (NFR-06).
+    # 체크포인트 테이블은 PostgresSaver.setup()이 직접 만든다 (migrations/에 없음).
+    with ConnectionPool(
+        app.state.database_url, min_size=1, max_size=5,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+    ) as pool:
+        checkpointer = PostgresSaver(pool)
+        checkpointer.setup()
+        app.state.graph = build_graph(checkpointer)
+        yield
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
-    app = FastAPI(title="invest-agent-api")
+    app = FastAPI(title="invest-agent-api", lifespan=lifespan)
     app.state.database_url = database_url or config.DATABASE_URL
-    app.include_router(auth.router)
-    app.include_router(policy.router)
+    for module in (auth, policy, chat, snapshot):
+        app.include_router(module.router)
 
     @app.exception_handler(RequestValidationError)
     def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:

@@ -120,7 +120,7 @@ C 하나라도 틀림 → 단계 − 1 (최소 1)
 
 ## 5. 단계별 할 일 (08-dev-order.md에도 적어 둠)
 
-### 3단계 (LangGraph 뼈대)
+### 3단계 (LangGraph 뼈대) — 완료 (2026-10-05)
 - 공유 State에 `mode`(general/custom), `risk_level`, `flags`를 넣는다. 대화 시작 때 `GET /api/profile`과 같은 방식으로 읽는다
 
 ### 4단계 (투자 AI + 검증 AI)

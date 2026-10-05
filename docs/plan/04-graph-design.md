@@ -86,6 +86,8 @@ virtual_bank_agent처럼 **1단 supervisor → 2단 업무 그래프 → 공용 
 
 - 새 요청이 시작되면 `new_request()`로 이번 업무 칸을 비운다. `profile`, `policy`, `history`는 남긴다.
 - 체크포인트는 `PostgresSaver`에 `thread_id` 단위로 저장한다.
+- DB 주소처럼 체크포인트에 남으면 안 되는 실행 정보는 State가 아니라 LangGraph 실행 Context(`app/agents/state.py`의 `Context`)로 넘긴다.
+- 구현은 필요한 칸만 단계별로 더한다. 3단계 State: 공통 칸, 성향(`mode`, `risk_level`, `flags`), 조회 칸(`query_kind`, `stock_name`, `stock_code`, `snapshot`, `prices`).
 
 ## 8. 분기 조건 한눈에 보기
 

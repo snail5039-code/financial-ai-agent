@@ -24,6 +24,7 @@ def test_creates_16_tables(conn) -> None:
     rows = conn.execute(
         "SELECT table_name FROM information_schema.tables"
         " WHERE table_schema = 'public' AND table_name <> 'schema_migrations'"
+        " AND table_name NOT LIKE 'checkpoint%'"  # LangGraph PostgresSaver가 직접 만드는 테이블
     ).fetchall()
     assert {r[0] for r in rows} == TABLES
 

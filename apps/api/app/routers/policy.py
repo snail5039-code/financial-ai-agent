@@ -70,6 +70,14 @@ def save_limits(conn: psycopg.Connection, user_id: UUID, limits: dict) -> None:
     )
 
 
+def profile_summary(conn: psycopg.Connection, user_id: UUID) -> dict:
+    """대화 그래프에 넘길 성향 요약. 퀴즈 결과가 없거나 24개월이 지났으면 일반 모드."""
+    row = conn.execute(
+        "SELECT risk_level, flags FROM investor_profiles WHERE user_id = %s AND expires_at > now()", (user_id,)
+    ).fetchone()
+    return {"mode": "custom", **row} if row else {"mode": "general", "risk_level": None, "flags": []}
+
+
 # ---------- 응답 만들기 ----------
 
 def mode_and_level(row: dict) -> tuple[str, int]:

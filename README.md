@@ -8,7 +8,7 @@
 
 ## 진행 상황
 
-[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 2단계(로그인 · 성향 설문 · 투자 정책 API)까지 끝났다.
+[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 3단계(LangGraph 뼈대 · 조회)까지 끝났다.
 
 ## 폴더
 
@@ -24,7 +24,7 @@ archive/         이전 단계 목업·fixture 코드와 문서 (참고용)
 
 ## 실행
 
-준비물: Docker, [uv](https://docs.astral.sh/uv/)
+준비물: Docker Desktop(켜져 있어야 함), [uv](https://docs.astral.sh/uv/)
 
 ```bash
 docker start invest-db
@@ -54,4 +54,10 @@ http://localhost:8000/api/health 가 `{"status":"ok","db":"ok"}`면 정상이다
 uv --directory apps/api run pytest
 ```
 
-테스트는 같은 PostgreSQL 서버에 `invest_test` DB를 새로 만들어 쓴다. 개발 DB `invest`는 건드리지 않는다.
+테스트는 같은 PostgreSQL 서버에 `invest_test` DB를 새로 만들어 쓴다. 개발 DB `invest`는 건드리지 않는다. 기본 테스트는 Gemini를 부르지 않는다(가짜로 바꿔 끼움).
+
+실제 Gemini로 분류가 맞는지 보려면 (`.env`에 `GEMINI_API_KEY` 필요, 비용 발생):
+
+```bash
+uv --directory apps/api run pytest -m gemini
+```

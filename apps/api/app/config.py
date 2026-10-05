@@ -13,3 +13,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 # OpenDART 공시 API 키 (4단계에서 사용)
 OPENDART_API_KEY = os.environ.get("OPENDART_API_KEY", "").strip() or None
+
+# Gemini (3단계부터). 모델은 .env에서 바꿀 수 있다
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip() or None
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.6-flash"

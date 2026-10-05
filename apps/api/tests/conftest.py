@@ -20,7 +20,7 @@ def test_db_url() -> str:
         pytest.skip("DATABASE_URL이 없습니다 (apps/api/.env)")
     params = conninfo_to_dict(config.DATABASE_URL)
     admin_url = make_conninfo(**{**params, "dbname": "postgres"})
-    with psycopg.connect(admin_url, autocommit=True) as conn:
+    with psycopg.connect(admin_url, autocommit=True, connect_timeout=3) as conn:
         conn.execute(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)")
         conn.execute(f"CREATE DATABASE {TEST_DB}")
     return make_conninfo(**{**params, "dbname": TEST_DB})
@@ -32,9 +32,11 @@ def migrated(test_db_url: str) -> str:
     return test_db_url
 
 
-@pytest.fixture
-def client(migrated: str) -> TestClient:
-    return TestClient(create_app(migrated))
+@pytest.fixture(scope="session")
+def client(migrated: str):
+    # with: 서버 시작·종료(lifespan)를 실행해서 대화 그래프와 체크포인트 연결을 만들고 닫는다
+    with TestClient(create_app(migrated)) as test_client:
+        yield test_client
 
 
 PASSWORD = "correct-horse-1"
@@ -48,6 +50,7 @@ def user(client: TestClient) -> dict:
     assert signup.status_code == 201
     token = client.post("/api/auth/login", json={"email": email, "password": PASSWORD}).json()["token"]
     return {"id": signup.json()["user_id"], "email": email, "headers": {"Authorization": f"Bearer {token}"}}
+
 
 # 30대, 여유자금, 비상금 있음, 기다린다(3) + C(3) = 6점, 퀴즈 모두 정답 → 4단계 적극투자형
 LEVEL_4_QUIZ = {
