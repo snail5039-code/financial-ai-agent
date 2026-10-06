@@ -8,7 +8,7 @@
 
 ## 진행 상황
 
-[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 5단계(주문 그래프)까지 끝났다. 다음은 6단계(Flutter 앱)다.
+[docs/plan/PROGRESS.md](docs/plan/PROGRESS.md)에 지금 상태와 이어서 하는 법이, [docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 5단계(주문 그래프)까지 끝났다. 다음은 6단계(Flutter 앱)다.
 
 ## 폴더
 

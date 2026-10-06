@@ -11,6 +11,7 @@
 | [05-schemas.md](05-schemas.md) | 투자 AI 제안서, 검증 AI 판정, 처리안, 주문 요청·결과 형식 |
 | [06-api-spec.md](06-api-spec.md) | 서버 API, 대화 이벤트 스트림, 멈춤 메시지 형식 |
 | [07-database.md](07-database.md) | PostgreSQL ERD, 테이블, 제약조건, 자주 쓰는 SQL |
+| [PROGRESS.md](PROGRESS.md) | **지금 진행 상황, 실행 방법, 주요 결정, 남은 일 (새 세션은 여기부터)** |
 | [08-dev-order.md](08-dev-order.md) | **개발 순서와 진행 체크**. 단계마다 그때 볼 참고 문서 링크 |
 | [10-coverage-expansion.md](10-coverage-expansion.md) | 분석 대상 30종목을 넓힐 때 바꿔야 할 것 (호출 한도, 수집 방식, 코스닥·ETF, 위험등급) |
 | [09-investor-profile.md](09-investor-profile.md) | 투자성향 퀴즈, 일반·맞춤 모드, 행동 코치, 조사 근거와 단계별 할 일 |
