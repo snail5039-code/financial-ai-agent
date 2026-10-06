@@ -8,7 +8,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../api/api.dart';
-import '../../broker/fake_broker.dart';
+import '../../broker/broker.dart';
 
 class ChatItem {
   ChatItem(this.role, this.text, {this.interrupt});
@@ -56,7 +56,6 @@ class Conversation extends ChangeNotifier {
   Future<void> _run(Stream<SseEvent> events) async {
     busy = true;
     notifyListeners();
-    Map<String, dynamic>? autoAnswer; // fetch·execute는 스트림이 끝난 뒤 앱이 바로 답한다
     try {
       await for (final e in events) {
         switch (e.event) {
@@ -69,7 +68,7 @@ class Conversation extends ChangeNotifier {
           case 'done':
             threadId = e.data['thread_id'] as String;
           case 'interrupt':
-            autoAnswer = _onInterrupt(e.data);
+            _onInterrupt(e.data);
         }
         notifyListeners();
       }
@@ -79,34 +78,36 @@ class Conversation extends ChangeNotifier {
     progress = null;
     busy = false;
     notifyListeners();
-    if (autoAnswer != null) await answer(autoAnswer);
+    // fetch·execute는 스트림이 끝난 뒤 앱이 증권사에 다녀와서 바로 답한다
+    final kind = waiting?['kind'];
+    if (kind == 'fetch') await answer(await answerFetch(currentBroker.value, waiting!['needs'] as List));
+    if (kind == 'execute' && !kIsWeb) await executeWaiting();
   }
 
-  Map<String, dynamic>? _onInterrupt(Map<String, dynamic> data) {
+  void _onInterrupt(Map<String, dynamic> data) {
     final kind = data['kind'];
     waiting = data;
+    final brokerName = currentBroker.value?.name ?? '증권사';
     if (kind == 'fetch') {
-      items.add(ChatItem('info', '$fakeBrokerName에서 잔고·시세 확인 중…'));
-      return broker.answerFetch(data['needs'] as List);
-    }
-    if (kind == 'execute') {
+      items.add(ChatItem('info', '$brokerName에서 잔고·시세 확인 중…'));
+    } else if (kind == 'execute') {
       if (kIsWeb) {
         items.add(ChatItem('info', '승인했어요. 주문 실행은 폰 앱에서 해 주세요.'));
         waiting = null;
-        return null;
+      } else {
+        final steps = currentBroker.value?.isFake ?? true ? '가격 재확인 → 주문' : '가격 재확인 → 폰 잠금 확인 → 주문';
+        items.add(ChatItem('info', '$brokerName에 주문하는 중… ($steps)'));
       }
-      return executeWaiting(run: false);
+    } else {
+      items.add(ChatItem('assistant', data['text'] as String, interrupt: data));
     }
-    items.add(ChatItem('assistant', data['text'] as String, interrupt: data));
-    return null;
   }
 
-  /// execute 멈춤: 가격 재확인 → 주문 → 결과. 승인 대기의 "실행 필요"에서도 부른다
-  Map<String, dynamic> executeWaiting({bool run = true}) {
-    items.add(ChatItem('info', '$fakeBrokerName에 주문하는 중…'));
-    final payload = {'result': broker.execute(waiting!['request'] as Map<String, dynamic>)};
-    if (run) answer(payload);
-    return payload;
+  /// execute 멈춤: 가격 재확인 → 폰 잠금 확인 → 주문 → 결과. 승인 대기의 "실행 필요"에서도 부른다
+  Future<void> executeWaiting() async {
+    final request = waiting!['request'] as Map<String, dynamic>;
+    final result = await executeOrder(currentBroker.value, request, unlock: phoneUnlock, journal: orderJournal);
+    await answer({'result': result});
   }
 
   /// 처리안 카드가 아직 답을 기다리는지 (이미 답한 카드의 버튼은 끈다)

@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 증권사 API 접속 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 주문 전 폰 잠금(생체인증·PIN) 확인 -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
         android:label="투자 에이전트"
         android:name="${applicationName}"

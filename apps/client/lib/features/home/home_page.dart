@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/api.dart';
-import '../../broker/fake_broker.dart';
+import '../../broker/broker.dart';
+import '../settings/broker_page.dart';
 import '../../common/common.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,7 +19,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  Future<(Map<String, dynamic>, int)>? _data;
+  Future<(Map<String, dynamic>?, int)>? _data;
   final _input = TextEditingController();
 
   @override
@@ -33,13 +34,18 @@ class _HomePageState extends State<HomePage> {
     if (widget.active && !old.active) setState(() => _data = _load());
   }
 
-  Future<(Map<String, dynamic>, int)> _load() async {
-    Map<String, dynamic> balance;
+  Future<(Map<String, dynamic>?, int)> _load() async {
+    Map<String, dynamic>? balance;
+    final broker = currentBroker.value;
     if (kIsWeb) {
       balance = await api.get('/api/snapshot') as Map<String, dynamic>;
-    } else {
-      balance = broker.balance();
-      await api.post('/api/snapshot', balance);
+    } else if (broker != null) {
+      try {
+        balance = await broker.balance();
+      } catch (error) {
+        throw ApiError(0, '지금 ${broker.name}에 연결할 수 없어요 ($error)');
+      }
+      await api.post('/api/snapshot', balance); // 웹에서 볼 수 있게 계좌번호 없이 올린다
     }
     final waiting = await api.get('/api/approvals?status=needs_approval') as List;
     return (balance, waiting.length);
@@ -62,13 +68,28 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
-  Widget _body(Map<String, dynamic> balance, int waitingCount) {
+  Widget _body(Map<String, dynamic>? balance, int waitingCount) {
+    if (balance == null) {
+      // 증권사 연결 전 (앱만)
+      return ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('증권사를 연결하면 잔고를 볼 수 있어요'),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BrokerPage()));
+            setState(() => _data = _load());
+          },
+          child: const Text('증권사 연결'),
+        ),
+      ]);
+    }
+    final broker = currentBroker.value;
     final holdings = (balance['holdings'] as List).cast<Map<String, dynamic>>();
     final cash = balance['cash_krw'] as int;
-    int priceOf(Map<String, dynamic> h) => broker.priceOf(h['stock_code'] as String) ?? h['avg_price'] as int;
+    int priceOf(Map<String, dynamic> h) => broker?.lastPrices[h['stock_code']] ?? h['avg_price'] as int;
     final total = cash + holdings.fold<int>(0, (sum, h) => sum + priceOf(h) * (h['qty'] as int));
     final source = kIsWeb ? '폰 동기화 ${hhmm(balance['fetched_at'] as String)} 기준'
-        : '$fakeBrokerName(가짜 데이터) · ${hhmm(balance['fetched_at'] as String)} 기준';
+        : '${broker!.name}${broker.isFake ? '(가짜 데이터)' : ''} · ${hhmm(balance['fetched_at'] as String)} 기준';
 
     return ListView(padding: const EdgeInsets.all(16), children: [
       Card(

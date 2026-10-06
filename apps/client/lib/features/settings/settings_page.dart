@@ -6,6 +6,9 @@ import '../../api/api.dart';
 import '../../common/common.dart';
 import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
+import 'broker_page.dart';
+import '../../broker/broker.dart';
+import 'package:flutter/foundation.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -123,9 +126,17 @@ class _SettingsPageState extends State<SettingsPage> {
               const Divider(height: 32),
               _policySection(policy),
               const Divider(height: 32),
-              const Text('증권사 연결', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Text('지금은 가짜 증권사 데이터를 써요. 연결은 다음 단계에서 만들어요.'),
-              const SizedBox(height: 8),
+              if (!kIsWeb)
+                ValueListenableBuilder(
+                  valueListenable: currentBroker,
+                  builder: (context, broker, _) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('증권사 연결', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(broker == null ? '연결 안 됨' : '${broker.name}${broker.isFake ? ' (가짜 데이터)' : ''}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BrokerPage())),
+                  ),
+                ),
               const Text('투자 모드: 모의투자 (MVP에서는 바꿀 수 없어요)'),
               const Divider(height: 32),
               OutlinedButton(onPressed: _logout, child: const Text('로그아웃')),

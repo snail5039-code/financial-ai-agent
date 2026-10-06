@@ -1,5 +1,7 @@
-// 6단계용 가짜 증권사. 서버의 fetch(잔고·현재가)와 execute(주문) 멈춤에 답한다.
-// 7단계에서 KIS 모의투자 어댑터로 바꾼다. 화면에는 항상 "가짜 데이터"로 표시한다.
+import 'broker.dart';
+
+// 개발용 가짜 증권사. 키 없이 앱 흐름을 확인할 때 쓴다 (디버그 빌드에서만 고를 수 있다).
+// 화면에는 항상 "가짜 데이터"로 표시한다. 가격 재확인·중복 방지는 broker.dart의 executeOrder가 한다.
 // 가격은 2026-10-01 실제 종가(금융위원회_주식시세정보)를 고정값으로 쓴다. 실시간 가격이 아니다.
 
 const fakeBrokerName = '가짜 증권사';
@@ -37,89 +39,61 @@ const _prices = <String, (String, int)>{
   '402340': ('SK스퀘어', 1155000),
 };
 
-String _nowIso() => DateTime.now().toUtc().toIso8601String();
-
-class FakeBroker {
+class FakeBroker implements Broker {
   int cash = 1500000;
-  // 종목코드 → 수량·평균 매입가
+  // 종목코드 → 수량·평균 매입가. 앱을 다시 켜면 처음 값으로 돌아간다
   final holdings = <String, ({int qty, int avgPrice})>{'005930': (qty: 3, avgPrice: 240000)};
-  // 같은 주문(idempotency_key)을 두 번 실행하지 않게 결과를 기억한다
-  final _results = <String, Map<String, dynamic>>{};
+  final _orders = <BrokerOrder>[];
+
+  @override
+  String get name => fakeBrokerName;
+  @override
+  bool get isFake => true;
 
   String nameOf(String code) => _prices[code]?.$1 ?? code;
   int? priceOf(String code) => _prices[code]?.$2;
 
-  /// 서버로 보내는 잔고 형식 (계좌번호 없음)
-  Map<String, dynamic> balance() => {
+  @override
+  Map<String, int> get lastPrices => {for (final code in holdings.keys) code: priceOf(code) ?? 0};
+
+  @override
+  Future<Map<String, dynamic>> balance() async => {
         'cash_krw': cash,
         'holdings': [
           for (final e in holdings.entries)
             {'stock_code': e.key, 'stock_name': nameOf(e.key), 'qty': e.value.qty, 'avg_price': e.value.avgPrice},
         ],
-        'fetched_at': _nowIso(),
+        'fetched_at': nowIso(),
       };
 
-  /// fetch 멈춤의 답. 하나라도 조회 못 하면 가짜 값 없이 실패로 답한다
-  Map<String, dynamic> answerFetch(List<dynamic> needs) {
-    final answer = <String, dynamic>{};
-    for (final need in needs.cast<Map<String, dynamic>>()) {
-      if (need['type'] == 'balance') answer['balance'] = balance();
-      if (need['type'] == 'price') {
-        final code = need['stock_code'] as String;
-        final price = priceOf(code);
-        if (price == null) return {'error': '$fakeBrokerName에 없는 종목이에요 ($code)'};
-        (answer['prices'] ??= <Map<String, dynamic>>[]).add({'stock_code': code, 'price': price, 'as_of': _nowIso()});
-      }
-    }
-    return answer;
-  }
+  @override
+  Future<int> price(String stockCode) async =>
+      priceOf(stockCode) ?? (throw BrokerError('$fakeBrokerName에 없는 종목이에요 ($stockCode)'));
 
-  /// execute 멈춤의 답: 가격 재확인 → 주문 → 결과 (생체인증은 7단계에서 넣는다)
-  Map<String, dynamic> execute(Map<String, dynamic> request) {
-    final key = request['idempotency_key'] as String;
-    return _results[key] ??= _execute(request, key);
-  }
-
-  Map<String, dynamic> _execute(Map<String, dynamic> request, String key) {
-    final code = request['stock_code'] as String;
-    final qty = request['qty'] as int;
-    final limitPrice = request['limit_price'] as int;
-    final approvedPrice = request['approved_price'] as int;
-    Map<String, dynamic> failed(String message) => {'idempotency_key': key, 'status': 'failed', 'message': message};
-
-    final current = priceOf(code);
-    if (current == null) return failed('$fakeBrokerName에 없는 종목이에요');
-    final driftPct = (current - approvedPrice).abs() * 100 / approvedPrice;
-    if (driftPct > (request['max_price_drift_pct'] as num)) {
-      return {'idempotency_key': key, 'status': 'price_changed', 'current_price': current};
-    }
-
-    final amount = qty * limitPrice;
-    final held = holdings[code];
-    if (request['side'] == 'buy') {
-      if (amount > cash) return failed('현금이 부족해요');
+  @override
+  Future<({String orderNo, int filledQty, int? filledPrice})> order(String side, String stockCode, int qty, int price) async {
+    final amount = qty * price;
+    final held = holdings[stockCode];
+    if (side == 'buy') {
+      if (amount > cash) throw BrokerError('현금이 부족해요');
       cash -= amount;
       final oldQty = held?.qty ?? 0;
-      final avg = ((oldQty * (held?.avgPrice ?? 0)) + amount) ~/ (oldQty + qty);
-      holdings[code] = (qty: oldQty + qty, avgPrice: avg);
+      holdings[stockCode] = (qty: oldQty + qty, avgPrice: (oldQty * (held?.avgPrice ?? 0) + amount) ~/ (oldQty + qty));
     } else {
-      if (held == null || held.qty < qty) return failed('보유 수량이 부족해요');
+      if (held == null || held.qty < qty) throw BrokerError('보유 수량이 부족해요');
       cash += amount;
       if (held.qty == qty) {
-        holdings.remove(code);
+        holdings.remove(stockCode);
       } else {
-        holdings[code] = (qty: held.qty - qty, avgPrice: held.avgPrice);
+        holdings[stockCode] = (qty: held.qty - qty, avgPrice: held.avgPrice);
       }
     }
-    return {
-      'idempotency_key': key,
-      'status': 'filled',
-      'broker_order_no': 'FAKE-${DateTime.now().millisecondsSinceEpoch}',
-      'filled_qty': qty,
-      'filled_price': limitPrice,
-      'message': '가짜 체결 (6단계 테스트용, 실제 주문 아님)',
-    };
+    final orderNo = 'FAKE-${DateTime.now().millisecondsSinceEpoch}';
+    _orders.add((orderNo: orderNo, side: side, qty: qty, price: price, filledQty: qty, filledPrice: price,
+        time: kstHhmmss(DateTime.now())));
+    return (orderNo: orderNo, filledQty: qty, filledPrice: price);
   }
-}
 
-final broker = FakeBroker();
+  @override
+  Future<List<BrokerOrder>> todayOrders(String stockCode) async => _orders;
+}

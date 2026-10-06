@@ -1,6 +1,6 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-06 · 다음 할 일: **7단계 증권사 연결 (KIS 모의)**
+마지막 갱신: 2026-10-06 · 다음 할 일: **7단계 나머지 — KIS 모의 키로 실제 주문 확인** (사용자 키 발급 대기)
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
@@ -22,10 +22,10 @@
 | 5 | 주문 그래프: 처리안 → 승인 → 폰 실행(execute) → 기록, 승인·기록 API | ✅ | `70ed1e3` |
 | — | 개발 환경: Flutter, Android SDK, 에뮬레이터 설치 | ✅ | `51832f9` |
 | 6 | Flutter 앱 뼈대: 화면 8종, 대화·멈춤 처리, 가짜 증권사 | ✅ | `2623ba3` + 마무리 |
-| 7 | **증권사 연결 (KIS 모의 주문, KB 조회)** | ⬜ 다음 | |
+| 7 | **증권사 연결 (KIS 모의 주문, KB 조회)** | 🔶 키 없이 할 부분 완료 (어댑터·연결 화면·주문 실행), KIS 키 대기 | |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | ⬜ | |
 
-서버 테스트 218개 통과, Flutter 테스트 9개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
+서버 테스트 218개 통과, Flutter 테스트 16개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
 ## 3. 지금 서버가 할 수 있는 것 (`apps/api`)
 
@@ -41,7 +41,7 @@
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
 | 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
 
-앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사는 아직 가짜(`broker/fake_broker.dart`) → 7단계에서 KIS 모의로 바꾼다.
+앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사: KIS 모의 어댑터(`broker/kis_mock_broker.dart`)와 연결 화면은 있음. 키가 아직 없어서 디버그 빌드는 가짜 증권사(`broker/fake_broker.dart`)를 기본으로 쓴다.
 
 API 형식: [06-api-spec.md](06-api-spec.md). 멈춤 4종류 `question` / `fetch` / `approval` / `execute`의 형식은 06 문서 3장과 `agents/interrupts.py`.
 

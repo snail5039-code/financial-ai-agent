@@ -4,8 +4,13 @@ import 'api/api.dart';
 import 'common/common.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/main_shell.dart';
+import 'features/settings/broker_page.dart';
 
-void main() => runApp(const InvestApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await loadBroker(); // 저장된 증권사 선택 (키는 폰 보안 저장소에만)
+  runApp(const InvestApp());
+}
 
 final navigatorKey = GlobalKey<NavigatorState>();
 

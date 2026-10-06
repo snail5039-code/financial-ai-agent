@@ -1,0 +1,186 @@
+// 증권사 공통 틀과 폰의 주문 실행 과정 (docs/plan/06-api-spec.md 4장, FR-26 ~ FR-29, NFR-04).
+// 서버의 fetch·execute 멈춤에 답하는 일은 모두 여기를 거친다. 서버에는 키·계좌번호를 보내지 않는다.
+
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:local_auth/local_auth.dart';
+
+import '../secure/key_store.dart';
+
+/// 증권사가 분명하게 거절한 경우 (잘못된 키, 잔고 부족, 장 종료 등). 주문이 들어가지 않은 것이 확실하다
+class BrokerError implements Exception {
+  BrokerError(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// 증권사 주문 내역 한 줄
+typedef BrokerOrder = ({String orderNo, String side, int qty, int price, int filledQty, int? filledPrice, String time});
+
+abstract class Broker {
+  String get name;
+  bool get isFake; // 가짜 증권사는 폰 잠금 확인을 하지 않는다 (개발용)
+
+  /// 서버로 보내는 잔고 형식 (계좌번호 없음)
+  Future<Map<String, dynamic>> balance();
+  Future<int> price(String stockCode);
+
+  /// 마지막 잔고 조회 때 알게 된 현재가 (홈 평가금액용, 없으면 평균 매입가로 본다)
+  Map<String, int> get lastPrices;
+
+  /// 지정가 주문. 접수되면 주문번호. 거절이면 BrokerError, 그 밖의 예외(시간 초과 등)는 "접수됐는지 모름"
+  Future<({String orderNo, int filledQty, int? filledPrice})> order(String side, String stockCode, int qty, int price);
+
+  /// 오늘 이 종목 주문 내역 (응답이 불확실할 때 다시 주문하지 않고 먼저 확인한다, FR-28)
+  Future<List<BrokerOrder>> todayOrders(String stockCode);
+}
+
+/// 지금 고른 증권사. 웹이나 연결 전이면 null
+final currentBroker = ValueNotifier<Broker?>(null);
+
+/// 주문 전 폰 잠금 확인 (생체인증 또는 PIN, NFR-04). 잠금이 설정되지 않은 폰이면 false
+Future<bool> phoneUnlock() async {
+  try {
+    final auth = LocalAuthentication();
+    if (!await auth.isDeviceSupported()) return false;
+    return await auth.authenticate(localizedReason: '주문을 실행하려면 폰 잠금을 확인해 주세요', persistAcrossBackgrounding: true);
+  } on Exception {
+    return false;
+  }
+}
+
+String nowIso() => DateTime.now().toUtc().toIso8601String();
+
+/// 한국 시각 "HHmmss" (증권사 주문 시각과 비교용)
+String kstHhmmss(DateTime t) {
+  final k = t.toUtc().add(const Duration(hours: 9));
+  return [k.hour, k.minute, k.second].map((v) => v.toString().padLeft(2, '0')).join();
+}
+
+/// fetch 멈춤의 답. 실패하면 가짜 값 없이 실패 사유만 보낸다 (NFR-08)
+Future<Map<String, dynamic>> answerFetch(Broker? broker, List<dynamic> needs) async {
+  if (broker == null) return {'error': '증권사가 연결되지 않았어요. 설정에서 연결해 주세요'};
+  final answer = <String, dynamic>{};
+  try {
+    for (final need in needs.cast<Map<String, dynamic>>()) {
+      if (need['type'] == 'balance') answer['balance'] = await broker.balance();
+      if (need['type'] == 'price') {
+        final code = need['stock_code'] as String;
+        (answer['prices'] ??= <Map<String, dynamic>>[])
+            .add({'stock_code': code, 'price': await broker.price(code), 'as_of': nowIso()});
+      }
+    }
+  } catch (error) {
+    return {'error': '${broker.name} 조회 실패: ${error is BrokerError ? error.message : '연결할 수 없어요'}'};
+  }
+  return answer;
+}
+
+/// 실행한 주문 기록. 같은 주문(idempotency_key)을 두 번 내지 않게 한다.
+/// 주문을 보내기 직전에 "보냄"을 적어 두므로, 앱이 그 사이에 꺼졌다 켜져도 다시 주문하지 않고 내역부터 확인한다.
+class OrderJournal {
+  OrderJournal(this._box);
+  final SecureBox _box;
+
+  Future<Map<String, dynamic>?> result(String key) async {
+    final saved = await _box.read('order_result:$key');
+    return saved == null ? null : jsonDecode(saved) as Map<String, dynamic>;
+  }
+
+  Future<String?> startedAt(String key) => _box.read('order_started:$key');
+  Future<void> start(String key, String hhmmss) => _box.write('order_started:$key', hhmmss);
+  Future<void> finish(String key, Map<String, dynamic> result) => _box.write('order_result:$key', jsonEncode(result));
+}
+
+final orderJournal = OrderJournal(secureBox);
+
+/// execute 멈춤의 답: 가격 재확인 → 폰 잠금 확인 → 주문 → (불확실하면) 주문 내역 확인
+Future<Map<String, dynamic>> executeOrder(
+  Broker? broker,
+  Map<String, dynamic> request, {
+  required Future<bool> Function() unlock,
+  required OrderJournal journal,
+  DateTime Function() now = DateTime.now,
+}) async {
+  final key = request['idempotency_key'] as String;
+  final code = request['stock_code'] as String;
+  final side = request['side'] as String;
+  final qty = request['qty'] as int;
+  final limitPrice = request['limit_price'] as int;
+  Map<String, dynamic> result(String status, [Map<String, dynamic> more = const {}]) =>
+      {'idempotency_key': key, 'status': status, ...more};
+
+  // 1. 이미 실행한 주문이면 그 결과를 그대로 (중복 주문 방지)
+  final done = await journal.result(key);
+  if (done != null) return done;
+  if (broker == null) return result('failed', {'message': '증권사가 연결되지 않아 주문하지 않았어요'});
+  final started = await journal.startedAt(key);
+  if (started != null) return _finish(journal, key, await _checkUncertain(broker, request, started));
+
+  // 2. 가격 재확인 (FR-26)
+  final int current;
+  try {
+    current = await broker.price(code);
+  } catch (error) {
+    return result('failed', {'message': '현재가를 확인하지 못해 주문하지 않았어요 ($error)'});
+  }
+  final approved = request['approved_price'] as int;
+  if ((current - approved).abs() * 100 / approved > (request['max_price_drift_pct'] as num)) {
+    return result('price_changed', {'current_price': current});
+  }
+
+  // 3. 폰 잠금 확인 (NFR-04). 가짜 증권사는 개발용이라 건너뛴다
+  if (!broker.isFake && !await unlock()) {
+    return result('failed', {'message': '폰 잠금 확인을 하지 않아 주문하지 않았어요'});
+  }
+
+  // 4. 주문. 보내기 직전에 기록해 둔다
+  final startedAt = kstHhmmss(now().subtract(const Duration(minutes: 1))); // 폰·증권사 시계 차이 여유
+  await journal.start(key, startedAt);
+  try {
+    final ack = await broker.order(side, code, qty, limitPrice);
+    final filled = ack.filledQty >= qty ? 'filled' : ack.filledQty > 0 ? 'partially_filled' : 'accepted';
+    return await _finish(journal, key, result(filled, {
+      'broker_order_no': ack.orderNo,
+      'filled_qty': ack.filledQty,
+      if (ack.filledPrice != null) 'filled_price': ack.filledPrice,
+      'message': broker.isFake ? '가짜 체결 (테스트용, 실제 주문 아님)' : '${broker.name}에 접수됐어요',
+    }));
+  } on BrokerError catch (error) {
+    return _finish(journal, key, result('failed', {'message': error.message}));
+  } catch (_) {
+    // 시간 초과·연결 끊김: 접수됐을 수도 있으니 다시 주문하지 않고 내역부터 확인한다 (FR-28)
+    return _finish(journal, key, await _checkUncertain(broker, request, startedAt));
+  }
+}
+
+Future<Map<String, dynamic>> _finish(OrderJournal journal, String key, Map<String, dynamic> result) async {
+  await journal.finish(key, result);
+  return result;
+}
+
+Future<Map<String, dynamic>> _checkUncertain(Broker broker, Map<String, dynamic> request, String startedAt) async {
+  final key = request['idempotency_key'] as String;
+  try {
+    final orders = await broker.todayOrders(request['stock_code'] as String);
+    final match = orders.where((o) => o.side == request['side'] && o.qty == request['qty'] &&
+        o.price == request['limit_price'] && o.time.compareTo(startedAt) >= 0).firstOrNull;
+    if (match == null) {
+      return {'idempotency_key': key, 'status': 'failed', 'message': '응답이 없어 주문 내역을 확인했는데, 주문이 들어가지 않았어요'};
+    }
+    return {
+      'idempotency_key': key, 'status': 'unknown_checked', 'broker_order_no': match.orderNo,
+      'filled_qty': match.filledQty, if (match.filledPrice != null && match.filledQty > 0) 'filled_price': match.filledPrice,
+      'message': '응답이 없어 주문 내역을 확인했어요. 주문이 접수돼 있어요',
+    };
+  } catch (_) {
+    return {
+      'idempotency_key': key, 'status': 'unknown_checked',
+      'message': '주문이 들어갔는지 확인하지 못했어요. 다시 주문하기 전에 ${broker.name} 앱에서 주문 내역을 확인해 주세요',
+    };
+  }
+}

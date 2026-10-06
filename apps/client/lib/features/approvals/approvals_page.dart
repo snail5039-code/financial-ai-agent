@@ -82,7 +82,7 @@ class _ApprovalListState extends State<_ApprovalList> {
       } else if (widget.status == 'needs_execution' && !kIsWeb) {
         final conversation = await _resume(item, 'execute');
         if (conversation == null) throw ApiError(409, '실행할 주문을 찾지 못했어요');
-        conversation.executeWaiting();
+        await conversation.executeWaiting();
       } else {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ApprovalDetailPage(card: card)));
       }

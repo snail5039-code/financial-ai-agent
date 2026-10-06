@@ -23,7 +23,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 | 4 | 투자 AI + 검증 AI | Gemini, OpenDART | ✅ |
 | 5 | 주문 그래프 | Gemini | ✅ |
 | 6 | Flutter 앱 뼈대 | 없음 | ✅ |
-| 7 | 증권사 연결 | KIS 모의, KB | ⬜ |
+| 7 | 증권사 연결 | KIS 모의, KB | 🔶 키 없이 할 부분 완료, KIS 키 대기 |
 | 8 | 웹 · 기록 · 마무리 | 없음 | ⬜ |
 
 ---
@@ -238,7 +238,14 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 참고 코드: `archive/api-fixture/integrations/kis.py` (KIS 모의 토큰·주문 형식), [KIS open-trading-api](https://github.com/koreainvestment/open-trading-api)
 - 필요한 것: KIS 모의투자 키, KB Open API 키 (사용자 발급)
 
-**완료 기록**: 
+**완료 기록**: (진행 중)
+- 2026-10-06 키 없이 할 수 있는 부분 완료:
+  - 증권사 공통 틀 `broker/broker.dart` (잔고·현재가·주문·오늘 주문 내역)과 폰 주문 실행 `executeOrder`: 이미 실행한 주문 확인 → 현재가 재확인(1% 넘으면 `price_changed`) → 폰 잠금 확인(`local_auth`, 가짜 증권사는 건너뜀) → 주문 직전 기록 → 주문. 시간 초과·연결 끊김이면 다시 주문하지 않고 오늘 주문 내역에서 찾는다(`unknown_checked`). 앱이 주문 도중 꺼져도 같은 주문을 다시 내지 않는다
+  - KIS 모의 어댑터 `broker/kis_mock_broker.dart`: 모의 서버(`openapivts`)와 모의 거래 코드(`VTTC8434R` 잔고, `VTTC0012U`/`VTTC0011U` 매수/매도, `VTTC0081R` 주문 내역)만. 접속 토큰은 폰 보안 저장소에 두고 다시 씀(발급 1분 1회 제한)
+  - 키 저장 `secure/key_store.dart` (앱키·시크리트·계좌번호 12345678-01, 폰 보안 저장소만), S-04 증권사 연결 화면(연결 테스트, 저장, 삭제). 디버그 빌드는 "가짜 증권사(개발용)"도 고를 수 있음
+  - Android: `FlutterFragmentActivity`, `USE_BIOMETRIC`·`INTERNET` 권한
+  - 테스트: Flutter 16개 (KIS 요청 주소·거래 코드·주문 형식·잔고 변환·거절·시간 초과 후 내역 확인·잠금 거부 시 주문 안 함, 가짜 응답으로). 에뮬레이터에서 가짜 증권사로 주문 흐름과 연결 화면 확인
+- 남은 것: KIS 모의 키로 실제 접수·체결 확인 (사용자 키 발급 후), 에뮬레이터 PIN 설정 후 잠금 확인 화면, KB 조회 어댑터(KB 키·문서 받은 뒤)
 
 ---
 
