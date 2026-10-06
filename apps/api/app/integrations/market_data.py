@@ -9,7 +9,8 @@ from datetime import date, datetime
 
 import httpx
 
-URL = "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo"
+# 2026년부터 V2 주소 (예전 /service/GetStockSecuritiesInfoService 주소는 새 키를 "등록되지 않은 서비스키"로 거부)
+URL = "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2"
 TIMEOUT_SECONDS = 30
 
 
