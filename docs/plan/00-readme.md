@@ -14,6 +14,7 @@
 | [PROGRESS.md](PROGRESS.md) | **지금 진행 상황, 실행 방법, 주요 결정, 남은 일 (새 세션은 여기부터)** |
 | [08-dev-order.md](08-dev-order.md) | **개발 순서와 진행 체크**. 단계마다 그때 볼 참고 문서 링크 |
 | [10-coverage-expansion.md](10-coverage-expansion.md) | 분석 대상 30종목을 넓힐 때 바꿔야 할 것 (호출 한도, 수집 방식, 코스닥·ETF, 위험등급) |
+| [11-rag-expansion.md](11-rag-expansion.md) | 검색 근거(RAG) 확장: 뉴스(제목·요약·링크만), 투자 용어, 내 기록 |
 | [09-investor-profile.md](09-investor-profile.md) | 투자성향 퀴즈, 일반·맞춤 모드, 행동 코치, 조사 근거와 단계별 할 일 |
 
 그림은 각 md 파일 안에 직접 들어 있다. 그림 원본만 따로 둔다.

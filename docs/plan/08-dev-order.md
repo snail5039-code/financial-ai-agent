@@ -258,3 +258,10 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - 참고 코드: `virtual_bank_agent`의 `evaluation/` (Golden Set, LangSmith)
 
 **완료 기록**: 
+
+---
+
+## 이후 확장 (MVP 다음)
+
+- 분석 대상 넓히기: [10-coverage-expansion.md](10-coverage-expansion.md)
+- 검색 근거(RAG) 넓히기 — 뉴스, 투자 용어, 내 기록: [11-rag-expansion.md](11-rag-expansion.md)

@@ -98,6 +98,7 @@ cd apps/client && flutter run -d emulator-5554 --no-enable-impeller
 - "아까 주문 체결됐어?"(결과 그래프) 미구현 → "준비 중" 안내
 - 순이익은 비지배지분 포함, 시세는 하루 늦은 값
 - 분석 대상 확장 계획: [10-coverage-expansion.md](10-coverage-expansion.md)
+- 검색 근거(RAG) 확장 계획 — 뉴스·투자 용어·내 기록: [11-rag-expansion.md](11-rag-expansion.md)
 - 로그인 시도 횟수 제한 없음 (공개 배포 전에 추가)
 - ERD·S-03 퀴즈 화면 그림이 옛날 기준 (원본 `.mmd`는 최신)
 - 키 3개가 이전 대화 기록에 남음 → 공개 배포 전 재발급 권장
