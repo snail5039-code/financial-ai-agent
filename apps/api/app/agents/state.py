@@ -2,7 +2,7 @@
 
 체크포인트(PostgresSaver)가 thread_id마다 State를 저장하므로 턴이 바뀌어도 값이 남는다.
 그래서 새 요청을 시작할 때 new_request()로 이번 업무 칸을 비운다.
-지금은 조회(3단계)·분석(4단계)에 필요한 칸만 있다. 주문 칸은 5단계에서 더한다.
+조회(3단계)·분석(4단계)·주문(5단계)에 필요한 칸이 있다.
 """
 
 from dataclasses import dataclass
@@ -48,6 +48,20 @@ class InvestState(TypedDict, total=False):
     verifications: list      # 검증 AI 판정, 반박-수정마다 하나
     revision_round: int      # 검증을 몇 번 했는지 (반박-수정 최대 2번)
 
+    # 주문 (5단계, docs/plan/05-schemas.md 6~8장)
+    side: str | None         # buy / sell
+    qty: int | None          # 주식 수
+    limit_price: int | None  # 1주 지정가 (말하지 않으면 현재가)
+    user_directed: bool      # 사용자가 직접 지시한 주문인지 (분석에서 이어진 주문이면 false)
+    from_analysis: bool      # 분석 결과에서 "이대로 주문할까요?"로 이어졌는지
+    policy_result: dict | None   # 정책 검사 결과 (PolicyResult)
+    coach_warnings: list     # 행동 코치 경고
+    confirm_required: list   # 승인할 때 확인받아야 하는 위험 (검증 반려, 성향 초과 등)
+    approval_id: str | None  # 처리안 ID (approvals.id)
+    card: dict | None        # 처리안 카드 (ApprovalCard)
+    expires_at: str | None   # 승인 만료 시각
+    decision: str | None     # 처리안에 대한 답 (approve / edit)
+
 
 def new_request(query: str, history: list, profile: dict) -> dict:
     """새 요청의 시작값. 지난 업무의 값이 섞이지 않게 비운다. 대화 ID·사용자 정보는 호출하는 쪽이 넣는다."""
@@ -57,4 +71,7 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "query_kind": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
         "sources": {}, "metrics": [], "risk_grade": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
+        "side": None, "qty": None, "limit_price": None, "user_directed": False, "from_analysis": False,
+        "policy_result": None, "coach_warnings": [], "confirm_required": [], "approval_id": None, "card": None,
+        "expires_at": None, "decision": None,
     }

@@ -265,7 +265,7 @@ def test_orders_today_empty(client, user) -> None:
     assert first(chat(client, user, "오늘 주문 내역 보여줘"), "message")["text"] == "오늘 주문 내역이 없어요."
 
 
-@pytest.mark.parametrize("text", ["SK하이닉스 4주 사줘", "아까 주문 체결됐어?"])
+@pytest.mark.parametrize("text", ["아까 주문 체결됐어?"])
 def test_not_ready_intents(client, user, text: str) -> None:
     assert first(chat(client, user, text), "message")["text"] == NOT_READY_MESSAGE
 

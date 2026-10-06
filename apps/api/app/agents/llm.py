@@ -80,6 +80,9 @@ class Understood(BaseModel):
         default=None, description="intent가 query일 때만. balance: 잔고·보유 종목 / price: 현재가 / orders: 오늘 주문 내역"
     )
     stock_name: str | None = Field(default=None, description="요청에 나온 종목 이름이나 코드 그대로. 없으면 null")
+    side: Literal["buy", "sell"] | None = Field(default=None, description="order일 때만. 사줘 → buy, 팔아 → sell")
+    qty: int | None = Field(default=None, description="order일 때 사용자가 말한 주식 수. 말하지 않았으면 null")
+    limit_price: int | None = Field(default=None, description="order일 때 사용자가 말한 1주 가격(원). 없으면 null")
 
 
 UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
@@ -93,6 +96,8 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 - result: 앞서 한 주문의 결과를 묻는 요청. 예) "아까 주문 체결됐어?"
 - other: 주식 앱 업무가 아닌 것
 3. query면 query_kind를 채워라. 종목이 나오면 stock_name에 사용자가 말한 그대로 써라. 지어내지 마라.
+4. order면 side, qty, limit_price를 사용자가 말한 대로만 채워라. "4주" → qty 4, "7만원에" → limit_price 70000.
+   금액으로 말했거나("100만원어치") 말하지 않은 값은 null로 둔다. 추측하지 마라.
 
 최근 대화:
 {history}"""
@@ -141,3 +146,18 @@ def write_proposal(context: str) -> ProposalDraft:
 
 def verify_proposal(context: str) -> VerificationDraft:
     return ask(VerificationDraft, VERIFY_PROMPT, context, thinking_level="low")
+
+
+# ---------- 처리안 수정 ("5주만", "6만9천원에") ----------
+
+class OrderEdit(BaseModel):
+    qty: int | None = Field(default=None, description="바꾼 주식 수. 말하지 않았으면 null")
+    limit_price: int | None = Field(default=None, description="바꾼 1주 가격(원). 말하지 않았으면 null")
+
+
+EDIT_PROMPT = """주식 주문 처리안을 고치는 말에서 바꾸려는 수량과 가격만 뽑아라. 말하지 않은 값은 null.
+지금 처리안: {order}"""
+
+
+def parse_order_edit(text: str, order: str) -> OrderEdit:
+    return ask(OrderEdit, EDIT_PROMPT.format(order=order), text)

@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel, Field, ValidationError
 
-from app.agents.interrupts import ANSWER_MODELS
+from app.agents.interrupts import ANSWER_MODELS, APP_ONLY_KINDS
 from app.agents.llm import LLMUnavailable
 from app.agents.state import Context, new_request
 from app.db import Conn, connect
@@ -43,6 +43,10 @@ PROGRESS_LABELS = {
     "invest_agent": "투자 AI 분석 중",
     "verify_agent": "검증 AI 확인 중",
     "record": "기록 저장 중",
+    "order_values": "주문 내용 확인 중",
+    "policy": "투자 정책 검사 중",
+    "prepare_approval": "처리안 만드는 중",
+    "execute": "주문 결과 기록 중",
 }
 
 
@@ -56,6 +60,7 @@ class ResumeRequest(BaseModel):
     thread_id: UUID
     interrupt_id: str = Field(max_length=100)
     payload: dict
+    client: Literal["app", "web"] | None = None  # 지금 답하는 쪽. 없으면 대화를 시작한 쪽 (웹에서 승인 → 폰에서 실행)
 
 
 # ---------- 대화(thread)와 메시지 ----------
@@ -166,17 +171,22 @@ def resume(body: ResumeRequest, request: Request, conn: Conn, user_id: UserId) -
     if not state.interrupts or state.interrupts[0].id != body.interrupt_id:
         raise HTTPException(409, "이미 처리됐거나 없는 멈춤이에요")
 
-    kind = state.interrupts[0].value["kind"]
-    client = state.values["client"]
-    if kind == "fetch" and client != "app":
-        raise HTTPException(403, "증권사 조회 결과는 앱만 보낼 수 있어요")
+    waiting = state.interrupts[0].value
+    kind = waiting["kind"]
+    client = body.client or state.values["client"]
+    if kind in APP_ONLY_KINDS and client != "app":
+        raise HTTPException(403, "증권사 조회·주문 결과는 앱만 보낼 수 있어요")
     try:
         answer = ANSWER_MODELS[kind].model_validate(body.payload)
     except ValidationError as error:
         reason = error.errors()[0]["msg"].removeprefix("Value error, ")
         raise HTTPException(422, f"멈춤에 대한 답이 올바르지 않아요: {reason}") from None
+    if kind == "approval" and answer.decision == "approve" and waiting.get("confirm_required") and not answer.confirm_risk:
+        raise HTTPException(422, "확인이 필요한 위험이 있어요. 내용을 확인했다면 confirm_risk를 true로 보내 주세요")
+    if kind == "execute" and answer.result.idempotency_key != waiting["request"]["idempotency_key"]:
+        raise HTTPException(422, "다른 주문의 결과예요 (idempotency_key가 달라요)")
 
-    return run_graph(request, Command(resume=answer.model_dump(mode="json", exclude_none=True)),
+    return run_graph(request, Command(resume={**answer.model_dump(mode="json", exclude_none=True), "client": client}),
                      body.thread_id, client)
 
 

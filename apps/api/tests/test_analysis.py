@@ -87,6 +87,12 @@ def analyze(client, user, client_kind="app", holdings=None, name=NAME):
     return events, events_of(resume(client, user, events, payload)), fetch
 
 
+def text_of(events) -> str:
+    """답 문장. 매수·매도 제안이면 마지막에 "이대로 주문할까요?" 질문 안에 분석 내용이 들어 있다."""
+    message = first(events, "message")
+    return message["text"] if message else first(events, "interrupt")["text"]
+
+
 def take_quiz(client, user, **changes):
     assert client.put("/api/profile", headers=user["headers"], json={**LEVEL_4_QUIZ, **changes}).status_code == 200
 
@@ -106,11 +112,11 @@ def test_analysis_flow_with_sources_and_independent_verification(client, user, a
     _, answer, fetch = analyze(client, user)
 
     assert fetch["needs"] == [{"type": "balance"}, {"type": "price", "stock_code": CODE}]
-    text = first(answer, "message")["text"]
+    text = text_of(answer)
     assert "검증: 승인" in text and "제안: 매수 검토" in text
     assert "OpenDART 주요 재무 (2025년 사업보고서, 연결)" in text
     assert "부채비율: 40.00%" in text and "PER:" in text
-    assert "주문으로 이어가는 기능은 다음 단계" in text and "투자 판단과 책임은 본인에게" in text
+    assert text.endswith("이대로 주문할까요?") and "투자 판단과 책임은 본인에게" in text
     sources_part = text.split("출처 (근거와 지표에 쓴 것)")[1]
     assert sources_part.count("사업보고서 (2025.12) · II. 사업의 내용") == 1  # 인용한 조각
     assert "주요사항보고서" not in sources_part  # 인용하지 않은 공시는 빼고 보여준다
@@ -138,9 +144,9 @@ def test_general_mode_gives_information_only(client, user, ai, migrated) -> None
     _, answer, _ = analyze(client, user)  # 퀴즈 안 함
 
     assert "[허용 행동] watch" in ai["invest"][0]
-    text = first(answer, "message")["text"]
+    text = text_of(answer)
     assert "일반 모드라 사라·말라 판단은 하지 않고" in text
-    assert "주문으로 이어가는" not in text
+    assert "이대로 주문할까요?" not in text
     assert saved(migrated, user)[0][0] == "watch"  # AI가 buy를 냈어도 코드가 관찰로 바꿨다
 
 
@@ -151,7 +157,7 @@ def test_level_2_cannot_get_buy_proposal(client, user, ai, migrated) -> None:
 
     assert "buy" not in ai["invest"][0].split("[허용 행동]")[1].split("\n")[0]
     assert saved(migrated, user)[0][0] == "watch"
-    assert "성향 규칙에 따라 '매수 검토' 대신 '관찰'로 바꿨어요 (2등급 종목은 위험중립형 이상만 매수 제안)" in first(answer, "message")["text"]
+    assert "성향 규칙에 따라 '매수 검토' 대신 '관찰'로 바꿨어요 (2등급 종목은 위험중립형 이상만 매수 제안)" in text_of(answer)
     assert "(매수 제외: 2등급 종목은 위험중립형 이상만 매수 제안)" in ai["invest"][0]
 
 
@@ -182,7 +188,7 @@ def test_fake_source_is_rejected_even_if_ai_approves_then_user_judgement(client,
     assert len(ai["invest"]) == 3  # 처음 + 수정 2번
     assert "없는 출처 ID: dart:FAKE" in ai["invest"][1]  # 코드 검사의 반박이 투자 AI에게 간다
     assert [row[1:] for row in saved(migrated, user)] == [(0, "reject"), (1, "reject"), (2, "user_judgement")]
-    assert "검증: 사용자 판단 필요" in first(answer, "message")["text"]
+    assert "검증: 사용자 판단 필요" in text_of(answer)
 
 
 def test_revision_fixes_and_passes(client, user, ai, migrated) -> None:
@@ -199,7 +205,7 @@ def test_conditional_verdict_shows_conditions_and_disagreements(client, user, ai
     take_quiz(client, user)
     ai["verdicts"] = [VerificationDraft(verdict="conditional", checks=[], risk_fit="warn", summary="조건부",
                                         conditions=["비중 10% 이하로"], disagreements=["수요 전망은 불확실"])]
-    text = first(analyze(client, user)[1], "message")["text"]
+    text = text_of(analyze(client, user)[1])
     assert "검증: 조건부 승인" in text and "조건: 비중 10% 이하로" in text and "의견 차이: 수요 전망은 불확실" in text
 
 
@@ -207,7 +213,7 @@ def test_conditional_verdict_shows_conditions_and_disagreements(client, user, ai
 
 def test_not_target_stock(client, user, ai) -> None:
     events, _ = analyze(client, user, name="대상아님")
-    assert "아직 분석 대상이 아니에요" in first(events, "message")["text"]
+    assert "아직 분석·주문 대상이 아니에요" in text_of(events)
     assert ai["invest"] == []
 
 
@@ -218,21 +224,21 @@ def test_daily_limit(client, user, ai, migrated) -> None:
             conn.execute("INSERT INTO proposals (user_id, thread_id, stock_code, action) VALUES (%s, %s, %s, 'watch')",
                          (user["id"], thread, CODE))
     events, _ = analyze(client, user)
-    assert "오늘 분석은 20번까지" in first(events, "message")["text"]
+    assert "오늘 분석은 20번까지" in text_of(events)
     assert ai["invest"] == []
 
 
 def test_web_analysis_uses_server_data_without_phone(client, user, ai) -> None:
     events, _ = analyze(client, user, client_kind="web")
     assert first(events, "interrupt") is None
-    assert "검증: 승인" in first(events, "message")["text"]
+    assert "검증: 승인" in text_of(events)
     assert "quote:" not in ai["invest"][0] and PRICE_ID in ai["invest"][0]  # 실시간 현재가 없이 전일 종가
 
 
 def test_phone_error_stops_without_saving(client, user, ai, migrated) -> None:
     events = events_of(client.post("/api/chat", headers=user["headers"], json={"text": f"{NAME} 사도 돼?", "client": "app"}))
     answer = events_of(resume(client, user, events, {"error": "KB 연결 실패"}))
-    assert "조회에 실패했어요" in first(answer, "message")["text"]
+    assert "조회에 실패했어요" in text_of(answer)
     assert saved(migrated, user) == [] and ai["invest"] == []
 
 

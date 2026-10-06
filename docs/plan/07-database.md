@@ -25,7 +25,7 @@
 | `proposals` | 투자 AI 제안서 (근거, 출처 목록, 코드가 계산한 지표) | 분석·주문 때 |
 | `verifications` | 검증 AI 판정 (반박-수정마다 한 줄, 조건·의견 차이 포함) | 분석·주문 때 |
 | `policy_checks` | 정책 검사 결과 | 주문 때 |
-| `approvals` | 승인 요청과 결과 | 처리안이 나올 때 |
+| `approvals` | 승인 요청과 결과, 처리안 카드(`card`), 만든 시각 | 처리안이 나올 때. 수정·가격 변동이면 같은 줄을 고쳐 다시 대기 |
 | `orders` | 폰이 보낸 주문 결과 | 실행 후 |
 | `audit_logs` | 모든 중요한 일의 기록 | 매 단계 |
 | `disclosures`, `disclosure_chunks` | 공시 목록과 정기보고서 본문 검색용 조각 (`section`: 어느 단원인지, `embedding`: gemini-embedding-2 768차원, HNSW 인덱스) | 수집 명령 `python -m app.collect` |

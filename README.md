@@ -8,7 +8,7 @@
 
 ## 진행 상황
 
-[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 4단계(투자 AI + 검증 AI)까지 끝났다.
+[docs/plan/08-dev-order.md](docs/plan/08-dev-order.md)에 8단계와 진행 체크가 있다. 지금은 5단계(주문 그래프)까지 끝났다. 다음은 6단계(Flutter 앱)다.
 
 ## 폴더
 

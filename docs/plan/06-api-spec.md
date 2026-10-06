@@ -26,7 +26,7 @@
 | | `POST /api/chat/resume` | 멈춤(interrupt)에 답하기 → 진행 이벤트 스트림 | ✅ | ✅ (execute 제외) |
 | | `GET /api/chat/pending` | 멈춰 있는 업무 목록 (앱을 열 때) | ✅ | ✅ |
 | | `GET /api/threads/{thread_id}/messages` | 대화 기록 | ✅ | ✅ |
-| 승인 | `GET /api/approvals?status=` | 승인 대기 목록 (`needs_approval` / `needs_execution` / `closed`) | ✅ | ✅ |
+| 승인 | `GET /api/approvals?status=` | 승인 대기 목록 (`needs_approval` / `needs_execution` / `closed`). 각 항목의 `thread_id`로 `/api/chat/pending`에서 멈춤을 찾아 답한다 | ✅ | ✅ |
 | | `GET /api/approvals/{id}` | 처리안 상세 (ApprovalCard) | ✅ | ✅ |
 | 기록 | `GET /api/history` | 기록 목록 | ✅ | ✅ |
 | | `GET /api/history/{proposal_id}` | 한 건의 전체 과정 (타임라인) | ✅ | ✅ |
@@ -58,7 +58,8 @@ POST /api/chat
 
 ```jsonc
 POST /api/chat/resume
-{ "thread_id": "...", "interrupt_id": "...", "payload": { ... } }
+{ "thread_id": "...", "interrupt_id": "...", "payload": { ... }, "client": "app" }
+// client: 지금 답하는 쪽. 웹에서 시작해 웹에서 승인하고 폰에서 실행하는 경우가 있어서 받는다
 ```
 
 ## 3. 멈춤 4종류의 형식
@@ -109,7 +110,7 @@ POST /api/chat/resume
 
 ```jsonc
 // 답 (payload)
-{ "decision": "approve" }                     // 승인
+{ "decision": "approve" }                     // 승인. 멈춤의 confirm_required가 비어 있지 않으면 "confirm_risk": true 필수 (없으면 422)
 { "decision": "reject" }                      // 거절
 { "decision": "edit", "text": "5주만" }       // 수정
 ```
@@ -137,7 +138,8 @@ POST /api/chat/resume
 | 404 | 남의 대화이거나 없는 대화 |
 | 409 | 지금 멈춰 있는 `interrupt_id`가 아님 (이미 처리됨, 새 메시지로 버려짐) |
 | 422 | 형식이 틀림. 정해진 칸 외의 칸(예: 계좌번호)이 있으면 거부. 그래프는 멈춘 채로 남아 다시 보낼 수 있다 |
-| 403 | `fetch` 답을 웹이 보냄 |
+| 403 | `fetch`·`execute` 답을 웹이 보냄 (`client`로 판단, 없으면 대화를 시작한 쪽) |
+| 422 | `execute` 결과의 `idempotency_key`가 요청과 다름 |
 
 - 같은 대화에 `POST /api/chat`으로 새 메시지를 보내면 멈춰 있던 업무는 버리고 새로 시작한다.
 

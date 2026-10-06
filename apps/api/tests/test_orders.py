@@ -1,0 +1,124 @@
+"""주문 금액·정책 검사·행동 코치 (코드 계산) 테스트."""
+
+from datetime import datetime
+from decimal import Decimal
+
+import pytest
+
+from app.clock import KST
+from app.functions import orders
+
+OPEN = datetime(2026, 10, 6, 10, 0, tzinfo=KST)  # 화요일 10시
+POLICY = {"max_order_krw": 1_000_000, "max_daily_krw": 2_000_000, "max_weight_pct": Decimal("30")}
+SNAPSHOT = {"cash_krw": 2_000_000, "holdings": [
+    {"stock_code": "000660", "stock_name": "SK하이닉스", "qty": 2, "avg_price": 200_000},
+    {"stock_code": "005930", "stock_name": "삼성전자", "qty": 10, "avg_price": 70_000},
+]}
+
+
+def check(side="buy", qty=4, price=200_000, today=0, snapshot=SNAPSHOT, now=OPEN, closes=None):
+    return orders.policy_check(side, qty, price, POLICY, today, snapshot, closes or {"005930": 80_000},
+                               "000660", now, ["snapshot"])
+
+
+def failed(result) -> list[str]:
+    return [r["rule"] for r in result["rules"] if not r["ok"]]
+
+
+def test_amount_fee_tax_worst_case() -> None:
+    assert orders.order_amount(4, 210_000) == 840_000
+    assert orders.fee_estimate(840_000, Decimal("0.015")) == 126           # 126원
+    assert orders.fee_estimate(840_000, None) is None                      # 수수료율 미입력
+    assert orders.sell_tax(840_000, "KOSPI") == 1_680                      # 0.20%
+    assert orders.sell_tax(999, "KOSPI") == 1                              # 1.998원 → 원 미만 버림
+
+
+@pytest.mark.parametrize(
+    "now, is_open",
+    [
+        (datetime(2026, 10, 6, 9, 0, tzinfo=KST), True),
+        (datetime(2026, 10, 6, 15, 30, tzinfo=KST), True),
+        (datetime(2026, 10, 6, 8, 59, tzinfo=KST), False),
+        (datetime(2026, 10, 6, 15, 31, tzinfo=KST), False),
+        (datetime(2026, 10, 10, 10, 0, tzinfo=KST), False),  # 토요일
+    ],
+)
+def test_market_hours(now, is_open) -> None:
+    assert orders.is_market_open(now) is is_open
+
+
+def test_policy_passes_within_limits() -> None:
+    # 1주 × 20만. 계좌: 현금 200만 + 하이닉스 2주 40만 + 삼성 10주(종가 8만) 80만 = 320만
+    # 주문 후 비중: (2+1)주 × 20만 = 60만 ÷ 320만 = 18.75%
+    result = check(qty=1)
+    assert result["ok"], result
+    assert result["weight_after"] == Decimal("18.75")
+
+
+@pytest.mark.parametrize(
+    "kwargs, rule",
+    [
+        ({"qty": 6}, "max_order"),                                   # 120만 > 1회 100만
+        ({"today": 1_500_000}, "max_daily"),                         # 150만 + 80만 > 200만
+        ({"qty": 4, "snapshot": {**SNAPSHOT, "cash_krw": 500_000}}, "cash"),
+        ({"now": datetime(2026, 10, 6, 16, 0, tzinfo=KST)}, "market_hours"),
+        ({"side": "sell", "qty": 3}, "holdings"),                    # 2주 보유인데 3주 매도
+        ({"snapshot": None}, "account"),                             # 계좌 정보 없음
+    ],
+)
+def test_policy_violations(kwargs: dict, rule: str) -> None:
+    result = check(**kwargs)
+    assert not result["ok"]
+    assert rule in failed(result)
+
+
+def test_weight_limit_only_for_buy() -> None:
+    # 매수 4주: (2+4)×20만 = 120만 ÷ 320만 = 37.5% > 30%
+    assert "max_weight" in failed(check())
+    assert "max_weight" not in [r["rule"] for r in check(side="sell", qty=1)["rules"]]
+
+
+def test_account_values_use_close_then_avg_price() -> None:
+    held, position, total = orders.account_values(SNAPSHOT, "000660", 200_000, {})  # 종가 없으면 평균 매입가
+    assert (held, position, total) == (2, 400_000, 2_000_000 + 400_000 + 700_000)
+
+
+def test_price_drift() -> None:
+    assert not orders.price_drifted(100_000, 101_000)  # 정확히 1%
+    assert orders.price_drifted(100_000, 101_001)
+    assert orders.price_drifted(100_000, 98_900)
+
+
+def warnings(**kwargs) -> list[str]:
+    base = dict(side="buy", recent_trades=0, hot_rank=None, five_day_return=None, chases_hot_stocks=False,
+                weight_after=None, max_weight_pct=Decimal("30"), gain_pct=None, losing_holdings=[], cost_krw=None)
+    return orders.coach_warnings(**{**base, **kwargs})
+
+
+def test_no_warnings_for_ordinary_order() -> None:
+    assert warnings() == []
+
+
+def test_frequent_trading_warning_with_cost() -> None:
+    [text] = warnings(recent_trades=2, cost_krw=1_806)
+    assert "최근 7일 동안 이 종목을 2번 거래" in text and "1,806원" in text
+
+
+def test_hot_stock_warning_and_extra_confirm() -> None:
+    [text] = warnings(hot_rank=0.95, five_day_return=Decimal("18.5"), chases_hot_stocks=True)
+    assert "18.5% 올라" in text and "급등주를 바로 사는 편" in text
+    assert orders.needs_hot_confirm([text], chases_hot_stocks=True)
+    assert not orders.needs_hot_confirm([text], chases_hot_stocks=False)
+    assert warnings(hot_rank=0.85, five_day_return=Decimal("10")) == []      # 상위 10% 아님
+    assert warnings(side="sell", hot_rank=0.95, five_day_return=Decimal("18")) == []  # 매도는 해당 없음
+
+
+def test_concentration_warning() -> None:
+    assert warnings(weight_after=Decimal("24.01")) != []   # 30%의 80% = 24% 초과
+    assert warnings(weight_after=Decimal("24")) == []
+
+
+def test_disposition_warning_for_selling_winner_keeping_losers() -> None:
+    [text] = warnings(side="sell", gain_pct=Decimal("12.3"), losing_holdings=["삼성전자"])
+    assert "+12.3%" in text and "삼성전자" in text
+    assert warnings(side="sell", gain_pct=Decimal("-5"), losing_holdings=["삼성전자"]) == []

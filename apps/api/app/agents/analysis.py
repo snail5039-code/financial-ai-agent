@@ -36,7 +36,7 @@ SEARCH_RESULTS = 4
 RECENT_DISCLOSURES = 5
 SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 
-NOT_TARGET_MESSAGE = "{name}은(는) 아직 분석 대상이 아니에요. 지금은 코스피 시가총액 상위 30개 종목만 분석해요."
+NOT_TARGET_MESSAGE = "{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 30개 종목만 분석·주문할 수 있어요."
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
@@ -287,6 +287,12 @@ def source_lines(sources: dict) -> list[str]:
     return [f"- {sid} | {s['title']} | 기준 {s['as_of'] or '미확인'}\n  {s['content']}" for sid, s in sources.items()]
 
 
+def directed_order_text(state: InvestState) -> str:
+    side = {"buy": "매수", "sell": "매도"}[state["side"]]
+    price = f" {won(state['limit_price'])}" if state.get("limit_price") else ""
+    return f"{state['stock_name']} {state['qty']:,}주{price} {side}"
+
+
 def invest_context(state: InvestState) -> str:
     parts = [
         f"[요청] {state['query']}",
@@ -297,6 +303,9 @@ def invest_context(state: InvestState) -> str:
         "[자료]\n" + "\n".join(source_lines(state["sources"])),
         "[지표] (코드가 계산한 값. 이 값만 쓴다)\n" + "\n".join(metric_line(m) for m in state["metrics"]),
     ]
+    if state.get("user_directed"):
+        parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
+                     "행동은 지시대로 쓰고, 이 주문의 근거와 함께 반대 근거·위험을 경고 위주로 쓴다 (FR-21).")
     if state.get("verifications"):
         last = state["verifications"][-1]
         parts.append("[검증 AI 반박] 아래를 고쳐 다시 써라\n" + "\n".join(f"- {c}" for c in last["challenges"]))
@@ -311,7 +320,8 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
     return "\n\n".join([
         f"[종목] {state['stock_name']}({state['stock_code']}), 위험등급 {state['risk_grade']}등급",
         "[사용자]\n" + "\n".join(user_lines(state)),
-        f"[제안] 행동: {proposal['action']}",
+        f"[제안] 행동: {proposal['action']}"
+        + (f" (사용자가 직접 지시한 주문: {directed_order_text(state)}. 경고 위주로 본다)" if state.get("user_directed") else ""),
         "[근거]\n" + "\n".join(claims),
         "[반대 근거]\n" + "\n".join(f"- {x}" for x in proposal["counter_arguments"]),
         "[위험]\n" + "\n".join(f"- {x}" for x in proposal["risks"]),
@@ -390,7 +400,8 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     return {
         "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)), "risk_grade": grade,
-        "allowed_actions": allowed_actions(*profile, holds, rank),
+        # 사용자가 직접 지시한 주문은 행동을 바꾸지 않는다. 성향에 안 맞으면 처리안에서 확인을 받는다 (주문 그래프)
+        "allowed_actions": [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank),
         "buy_block_reason": buy_block_reason(*profile, rank),
         "verifications": [], "revision_round": 0,
     }
@@ -404,7 +415,8 @@ def invest_agent_node(state: InvestState) -> dict:
         draft["risks"].append(f"성향 규칙에 따라 '{ACTION_LABELS[draft['action']]}' 대신 '관찰'로 바꿨어요{reason}.")
         draft["action"] = "watch"
     return {"proposal": {**draft, "stock_code": state["stock_code"], "stock_name": state["stock_name"],
-                         "qty": None, "limit_price": None, "user_directed": False}}
+                         "qty": state.get("qty"), "limit_price": state.get("limit_price"),
+                         "user_directed": bool(state.get("user_directed"))}}
 
 
 def verify_agent_node(state: InvestState, runtime: Runtime[Context]) -> dict:
@@ -432,26 +444,33 @@ def route_after_verify(state: InvestState) -> str:
     return "invest_agent" if state["verifications"][-1]["verdict"] == "reject" else "record"
 
 
-def record_node(state: InvestState, runtime: Runtime[Context]) -> dict:
-    proposal, verifications = state["proposal"], state["verifications"]
+def save_proposal(conn, state: InvestState) -> str:
+    """제안서와 검증 판정(반박-수정 회차마다)을 저장하고 제안서 ID를 돌려준다. 분석·주문이 같이 쓴다."""
+    proposal = state["proposal"]
     data_as_of = max((s["as_of"] for s in state["sources"].values() if s["as_of"]), default=None)
     sources = [{"source_id": sid, **{k: v for k, v in s.items() if k != "content"}} for sid, s in state["sources"].items()]
+    proposal_id = conn.execute(
+        "INSERT INTO proposals (user_id, thread_id, stock_code, action, qty, limit_price, claims, sources, metrics,"
+        " counter_arguments, risks, invalid_if, user_directed, data_as_of)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        (state["user_id"], state["thread_id"], proposal["stock_code"], proposal["action"], proposal["qty"],
+         proposal["limit_price"], Jsonb(proposal["claims"]), Jsonb(sources), Jsonb(state["metrics"]),
+         Jsonb(proposal["counter_arguments"]), Jsonb(proposal["risks"]), Jsonb(proposal["invalid_if"]),
+         proposal["user_directed"], data_as_of),
+    ).fetchone()[0]
+    for v in state["verifications"]:
+        conn.execute(
+            "INSERT INTO verifications (proposal_id, round, verdict, checks, challenges, conditions, disagreements,"
+            " risk_fit, summary) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (proposal_id, v["round"], v["verdict"], Jsonb(v["checks"]), Jsonb(v["challenges"]),
+             Jsonb(v["conditions"]), Jsonb(v["disagreements"]), v["risk_fit"], v["summary"]),
+        )
+    return str(proposal_id)
+
+
+def record_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url) as conn:
-        proposal_id = conn.execute(
-            "INSERT INTO proposals (user_id, thread_id, stock_code, action, qty, limit_price, claims, sources, metrics,"
-            " counter_arguments, risks, invalid_if, user_directed, data_as_of)"
-            " VALUES (%s, %s, %s, %s, NULL, NULL, %s, %s, %s, %s, %s, %s, false, %s) RETURNING id",
-            (state["user_id"], state["thread_id"], proposal["stock_code"], proposal["action"],
-             Jsonb(proposal["claims"]), Jsonb(sources), Jsonb(state["metrics"]), Jsonb(proposal["counter_arguments"]),
-             Jsonb(proposal["risks"]), Jsonb(proposal["invalid_if"]), data_as_of),
-        ).fetchone()[0]
-        for v in verifications:
-            conn.execute(
-                "INSERT INTO verifications (proposal_id, round, verdict, checks, challenges, conditions, disagreements,"
-                " risk_fit, summary) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (proposal_id, v["round"], v["verdict"], Jsonb(v["checks"]), Jsonb(v["challenges"]),
-                 Jsonb(v["conditions"]), Jsonb(v["disagreements"]), v["risk_fit"], v["summary"]),
-            )
+        save_proposal(conn, state)
     return {"answer": format_analysis(state)}
 
 
@@ -492,8 +511,6 @@ def format_analysis(state: InvestState) -> str:
         shown.add((source["title"], source["url"]))
         when = f", {source_time(source['as_of'])}" if source["as_of"] else ""
         lines.append(f"- {source['title']}{when}" + (f" {source['url']}" if source["url"] else ""))
-    if proposal["action"] in ("buy", "sell"):
-        lines.append("\n주문으로 이어가는 기능은 다음 단계에서 연결돼요.")
     lines.append("\n투자 판단과 책임은 본인에게 있어요. 이 분석은 참고용이며 손실이 날 수 있어요.")
     return "\n".join(lines)
 
@@ -501,6 +518,19 @@ def format_analysis(state: InvestState) -> str:
 def source_time(value: str) -> str:
     """날짜만 있으면 그대로, 시각까지 있으면 "10-05 17:39 기준"."""
     return as_of(value) if "T" in value else f"{value} 기준"
+
+
+def offer_order_node(state: InvestState) -> dict:
+    """분석 결과가 매수·매도 제안이면 "이대로 주문할까요?"를 묻는다. 예 → 주문 그래프로 (graph.py)."""
+    action = state["proposal"]["action"]
+    if action not in ("buy", "sell"):
+        return {}
+    reply = pause("question", text=state["answer"] + "\n\n이대로 주문할까요?",
+                  choices=[{"id": "yes", "label": "주문하기"}, {"id": "no", "label": "아니요"}])
+    if (reply.get("choice_id") or reply.get("text") or "").strip() in ("yes", "예", "네", "주문하기", "응"):
+        return {"intent": "order", "side": action, "from_analysis": True, "user_directed": False,
+                "qty": None, "limit_price": None, "answer": None}
+    return {}
 
 
 METRIC_NAMES = {"per": "PER", "pbr": "PBR", "debt_ratio": "부채비율", "revenue_yoy": "매출 전년 대비",
@@ -518,6 +548,7 @@ def build_analysis_graph():
     builder.add_node("invest_agent", invest_agent_node)
     builder.add_node("verify_agent", verify_agent_node)
     builder.add_node("record", record_node)
+    builder.add_node("offer_order", offer_order_node)
 
     builder.add_edge(START, "find_stock")
     builder.add_conditional_edges("find_stock", end_if_answered("check_target"), ["check_target", END])
@@ -526,5 +557,6 @@ def build_analysis_graph():
     builder.add_edge("gather", "invest_agent")
     builder.add_edge("invest_agent", "verify_agent")
     builder.add_conditional_edges("verify_agent", route_after_verify, ["invest_agent", "record"])
-    builder.add_edge("record", END)
+    builder.add_edge("record", "offer_order")
+    builder.add_edge("offer_order", END)
     return builder.compile()

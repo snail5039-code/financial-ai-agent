@@ -6,7 +6,7 @@
 """
 
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langgraph.types import interrupt
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -80,8 +80,49 @@ class QuestionAnswer(Strict):
         return self
 
 
-# approval · execute 답 형식은 5단계(주문 그래프)에서 더한다
-ANSWER_MODELS: dict[str, type[Strict]] = {"question": QuestionAnswer, "fetch": FetchAnswer}
+class ApprovalAnswer(Strict):
+    """approval 멈춤(처리안)에 대한 답: 승인 / 거절 / 수정("5주만")."""
+
+    decision: Literal["approve", "reject", "edit"]
+    text: str | None = Field(default=None, min_length=1, max_length=200)  # 수정 내용
+    confirm_risk: bool = False  # 처리안에 "확인 필요"가 있으면 승인할 때 true여야 한다
+
+    @model_validator(mode="after")
+    def check_edit_text(self) -> "ApprovalAnswer":
+        if self.decision == "edit" and not self.text:
+            raise ValueError("수정하려면 text에 바꿀 내용을 적어 주세요")
+        return self
+
+
+class ExecutionResult(Strict):
+    """폰이 증권사에 주문한 결과 (05-schemas.md 8장). 계좌번호·키는 없다."""
+
+    idempotency_key: str = Field(max_length=100)
+    status: Literal["accepted", "filled", "partially_filled", "failed", "price_changed", "unknown_checked"]
+    broker_order_no: str | None = Field(default=None, max_length=50)
+    filled_qty: int = Field(default=0, ge=0)
+    filled_price: int | None = Field(default=None, gt=0, le=MAX_KRW)
+    current_price: int | None = Field(default=None, gt=0, le=MAX_KRW)  # price_changed일 때 지금 가격
+    message: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def check_status_fields(self) -> "ExecutionResult":
+        if self.status == "price_changed" and self.current_price is None:
+            raise ValueError("price_changed면 current_price가 필요해요")
+        if self.status in ("filled", "partially_filled") and (self.filled_qty <= 0 or self.filled_price is None):
+            raise ValueError("체결이면 filled_qty와 filled_price가 필요해요")
+        return self
+
+
+class ExecuteAnswer(Strict):
+    result: ExecutionResult
+
+
+ANSWER_MODELS: dict[str, type[Strict]] = {
+    "question": QuestionAnswer, "fetch": FetchAnswer, "approval": ApprovalAnswer, "execute": ExecuteAnswer,
+}
+# 증권사 일(fetch·execute)은 키가 있는 앱만 답할 수 있다
+APP_ONLY_KINDS = {"fetch", "execute"}
 
 
 def pause(kind: str, **data) -> dict:
