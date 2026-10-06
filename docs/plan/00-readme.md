@@ -12,6 +12,7 @@
 | [06-api-spec.md](06-api-spec.md) | 서버 API, 대화 이벤트 스트림, 멈춤 메시지 형식 |
 | [07-database.md](07-database.md) | PostgreSQL ERD, 테이블, 제약조건, 자주 쓰는 SQL |
 | [08-dev-order.md](08-dev-order.md) | **개발 순서와 진행 체크**. 단계마다 그때 볼 참고 문서 링크 |
+| [10-coverage-expansion.md](10-coverage-expansion.md) | 분석 대상 30종목을 넓힐 때 바꿔야 할 것 (호출 한도, 수집 방식, 코스닥·ETF, 위험등급) |
 | [09-investor-profile.md](09-investor-profile.md) | 투자성향 퀴즈, 일반·맞춤 모드, 행동 코치, 조사 근거와 단계별 할 일 |
 
 그림은 각 md 파일 안에 직접 들어 있다. 그림 원본만 따로 둔다.

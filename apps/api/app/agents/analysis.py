@@ -182,12 +182,33 @@ def financial_basis(conn, code: str) -> dict | None:
     }
 
 
+def recent_closes(conn, code: str) -> list[dict]:
+    """변동성 계산에 필요한 만큼의 최근 종가 (오래된 것부터)."""
+    return conn.execute(
+        "SELECT trade_date, close, market_cap FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT %s",
+        (code, metrics.VOLATILITY_DAYS + 1),
+    ).fetchall()[::-1]
+
+
+def volatility_rank(conn, code: str) -> float | None:
+    """분석 대상 종목 중 이 종목의 변동성 순위 (0~1, 1이면 가장 출렁임). 계산할 수 없으면 None.
+
+    = 변동성이 이 종목 이하인 대상 종목 수 ÷ 변동성을 계산할 수 있는 대상 종목 수
+    ponytail: 분석할 때마다 대상 전체(30개)를 다시 계산. 종목이 많아지면 수집 때 미리 계산해 저장한다
+    """
+    values = {}
+    for row in conn.execute("SELECT code FROM stocks WHERE is_target").fetchall():
+        value = metrics.volatility([r["close"] for r in recent_closes(conn, row["code"])], metrics.VOLATILITY_DAYS, [])["value"]
+        if value is not None:
+            values[row["code"]] = value
+    if code not in values:
+        return None
+    return sum(1 for value in values.values() if value <= values[code]) / len(values)
+
+
 def compute_metrics(conn, code: str) -> list[dict]:
     """DB의 원 자료로 지표를 계산한다. gather와 verify_agent가 따로 부른다 (검증은 다시 계산)."""
-    closes = conn.execute(
-        "SELECT trade_date, close, market_cap FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 21",
-        (code,),
-    ).fetchall()[::-1]
+    closes = recent_closes(conn, code)
     basis = financial_basis(conn, code) or {}
     price_id = f"price:{code}:{closes[-1]['trade_date']}" if closes else None
     market_cap = closes[-1]["market_cap"] if closes else None
@@ -209,7 +230,8 @@ def compute_metrics(conn, code: str) -> list[dict]:
         else:
             label = f"{account}({basis['period']})"
             result.append(metrics.yoy_growth(metric_id, label, current, previous, [basis["latest_id"]]))
-    result.append(metrics.volatility_20d([row["close"] for row in closes], [price_id] if price_id else []))
+    result.append(metrics.volatility([row["close"] for row in closes], metrics.VOLATILITY_DAYS,
+                                     [price_id] if price_id else []))
     return result
 
 
@@ -363,12 +385,13 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
 
     holds = bool(state.get("snapshot")) and any(h["stock_code"] == code for h in state["snapshot"]["holdings"])
     grade = stock_risk_grade(code)
-    volatility = next(m["value"] for m in found_metrics if m["metric_id"] == "volatility_20d")
+    with connect(runtime.context.database_url, row_factory=dict_row) as conn:
+        rank = volatility_rank(conn, code)
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     return {
         "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)), "risk_grade": grade,
-        "allowed_actions": allowed_actions(*profile, holds, volatility),
-        "buy_block_reason": buy_block_reason(*profile, volatility),
+        "allowed_actions": allowed_actions(*profile, holds, rank),
+        "buy_block_reason": buy_block_reason(*profile, rank),
         "verifications": [], "revision_round": 0,
     }
 
@@ -481,7 +504,7 @@ def source_time(value: str) -> str:
 
 
 METRIC_NAMES = {"per": "PER", "pbr": "PBR", "debt_ratio": "부채비율", "revenue_yoy": "매출 전년 대비",
-                "op_income_yoy": "영업이익 전년 대비", "volatility_20d": "20일 변동성(연 환산)"}
+                "op_income_yoy": "영업이익 전년 대비", "volatility_60d": "60일 변동성(연 환산)"}
 
 
 # ---------- 그래프 ----------

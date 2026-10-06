@@ -10,7 +10,7 @@ import math
 from decimal import ROUND_HALF_UP, Decimal
 
 TRADING_DAYS_PER_YEAR = 252
-VOLATILITY_DAYS = 20
+VOLATILITY_DAYS = 60  # 20일은 흔들림이 커서 60일을 쓴다 (2026-10-06)
 
 
 def rounded(value: Decimal | float) -> Decimal:
@@ -57,16 +57,17 @@ def yoy_growth(metric_id: str, account: str, current: int, previous: int, inputs
     return metric(metric_id, Decimal(current - previous) / abs(Decimal(previous)) * 100, "%", formula, inputs)
 
 
-def volatility_20d(closes: list[int], inputs: list[str]) -> dict:
-    """최근 20거래일 일간 로그수익률의 표준편차를 연 단위로 바꾼 값(%). closes는 오래된 것부터."""
-    formula = f"최근 {VOLATILITY_DAYS}거래일 일간 로그수익률 표준편차 × √{TRADING_DAYS_PER_YEAR} × 100"
-    recent = closes[-(VOLATILITY_DAYS + 1):]
-    if len(recent) < VOLATILITY_DAYS + 1:
-        return metric("volatility_20d", None, "%", formula, inputs, f"종가가 {VOLATILITY_DAYS + 1}일치보다 적음")
+def volatility(closes: list[int], days: int, inputs: list[str]) -> dict:
+    """최근 days거래일 일간 로그수익률의 표준편차를 연 단위로 바꾼 값(%). closes는 오래된 것부터."""
+    metric_id = f"volatility_{days}d"
+    formula = f"최근 {days}거래일 일간 로그수익률 표준편차 × √{TRADING_DAYS_PER_YEAR} × 100"
+    recent = closes[-(days + 1):]
+    if len(recent) < days + 1:
+        return metric(metric_id, None, "%", formula, inputs, f"종가가 {days + 1}일치보다 적음")
     returns = [math.log(today / yesterday) for yesterday, today in zip(recent, recent[1:])]
     mean = sum(returns) / len(returns)
     stdev = math.sqrt(sum((r - mean) ** 2 for r in returns) / (len(returns) - 1))  # 표본 표준편차
-    return metric("volatility_20d", stdev * math.sqrt(TRADING_DAYS_PER_YEAR) * 100, "%", formula, inputs)
+    return metric(metric_id, stdev * math.sqrt(TRADING_DAYS_PER_YEAR) * 100, "%", formula, inputs)
 
 
 def weight_after_order(position_value: int, total_value: int, order_amount: int, side: str,

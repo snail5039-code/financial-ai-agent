@@ -294,3 +294,20 @@ def test_financial_basis_uses_latest_report_and_trailing_four_quarters(migrated)
     assert found["debt_ratio"]["value"] == 50
     assert found["revenue_yoy"]["value"] == 60  # 누적 800 vs 500
     assert "2026년 반기보고서 누적" in found["revenue_yoy"]["formula"]
+
+
+def test_volatility_rank_among_targets(migrated) -> None:
+    from psycopg.rows import dict_row
+    with psycopg.connect(migrated, row_factory=dict_row) as conn:
+        conn.execute("UPDATE stocks SET is_target = false")
+        for code, swing in (("R00001", 0), ("R00002", 1), ("R00003", 5)):  # 변동성: 0 < 작음 < 큼
+            conn.execute("INSERT INTO stocks VALUES (%s, %s, 'KOSPI', true)", (code, code))
+            for day in range(61):
+                close = 1000 + (swing if day % 2 else 0)
+                conn.execute("INSERT INTO stock_prices VALUES (%s, %s, %s, %s, 1)",
+                             (code, date(2026, 1, 1) + timedelta(days=day), close, close))
+        ranks = {code: analysis.volatility_rank(conn, code) for code in ("R00001", "R00002", "R00003")}
+        missing = analysis.volatility_rank(conn, CODE)  # 종가가 61일치보다 적음
+        conn.rollback()
+    assert ranks == {"R00001": 1 / 3, "R00002": 2 / 3, "R00003": 1.0}
+    assert missing is None

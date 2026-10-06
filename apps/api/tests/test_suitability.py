@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 import pytest
 
 from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk_grade
@@ -33,15 +31,14 @@ def test_domestic_stock_is_grade_2() -> None:
 
 
 @pytest.mark.parametrize(
-    "level, volatility, can_buy",
-    [(3, "40", True), (3, "40.01", False), (4, "57.73", True), (4, "60.01", False), (5, "200", True), (4, None, True)],
+    "level, rank, can_buy",
+    [(3, 10 / 30, True), (3, 11 / 30, False), (4, 0.8, True), (4, 25 / 30, False), (5, 1.0, True), (3, None, True)],
 )
-def test_volatility_limit_for_buy(level: int, volatility: str | None, can_buy: bool) -> None:
-    vol = Decimal(volatility) if volatility else None
-    assert ("buy" in allowed_actions("custom", level, [], 2, holds_stock=False, volatility=vol)) is can_buy
+def test_volatility_rank_limit_for_buy(level: int, rank: float | None, can_buy: bool) -> None:
+    assert ("buy" in allowed_actions("custom", level, [], 2, holds_stock=False, volatility_rank=rank)) is can_buy
 
 
-def test_block_reason_explains_volatility() -> None:
-    reason = buy_block_reason("custom", 3, [], 2, Decimal("57.73"))
-    assert reason == "20일 변동성 57.73%가 위험중립형 한도 40%보다 큼"
-    assert buy_block_reason("custom", 5, [], 2, Decimal("57.73")) is None
+def test_block_reason_explains_volatility_rank() -> None:
+    reason = buy_block_reason("custom", 3, [], 2, 0.9)
+    assert reason == "60일 변동성이 분석 대상 중 높은 편이라 (낮은 쪽부터 90% 위치) 위험중립형 기준(낮은 쪽 33% 이내)을 넘음"
+    assert buy_block_reason("custom", 5, [], 2, 1.0) is None

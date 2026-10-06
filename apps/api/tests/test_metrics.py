@@ -48,22 +48,23 @@ def test_yoy_growth(current: int, previous: int, expected: Decimal) -> None:
     assert metrics.yoy_growth("op_income_yoy", "영업이익", current, previous, SRC)["value"] == expected
 
 
-def test_volatility_needs_21_closes() -> None:
-    assert metrics.volatility_20d([100] * 20, SRC)["value"] is None
+def test_volatility_needs_days_plus_one_closes() -> None:
+    assert metrics.volatility([100] * 20, 20, SRC)["value"] is None
+    assert metrics.volatility([100] * 61, 60, SRC)["metric_id"] == "volatility_60d"
 
 
 def test_volatility_of_flat_and_alternating_prices() -> None:
-    assert metrics.volatility_20d([100] * 21, SRC)["value"] == Decimal("0.00")
+    assert metrics.volatility([100] * 21, 20, SRC)["value"] == Decimal("0.00")
     # 100 ↔ 110 반복: 로그수익률 ±ln(1.1), 표본 표준편차를 손으로 계산
     closes = [100, 110] * 10 + [100]
     returns = [math.log(b / a) for a, b in zip(closes, closes[1:])]
     mean = sum(returns) / 20
     expected = math.sqrt(sum((r - mean) ** 2 for r in returns) / 19) * math.sqrt(252) * 100
-    assert metrics.volatility_20d(closes, SRC)["value"] == metrics.rounded(expected)
+    assert metrics.volatility(closes, 20, SRC)["value"] == metrics.rounded(expected)
 
 
 def test_volatility_uses_only_last_21_closes() -> None:
-    assert metrics.volatility_20d([1, 1000] + [100] * 21, SRC)["value"] == Decimal("0.00")
+    assert metrics.volatility([1, 1000] + [100] * 21, 20, SRC)["value"] == Decimal("0.00")
 
 
 @pytest.mark.parametrize(
