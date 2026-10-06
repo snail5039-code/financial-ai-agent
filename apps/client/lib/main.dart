@@ -31,7 +31,7 @@ class InvestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     api.onLoggedOut = () => navigatorKey.currentState
-        ?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (_) => false);
+        ?.pushAndRemoveUntil(pageRoute(const LoginPage()), (_) => false);
     return MaterialApp(
       title: '투자 에이전트',
       navigatorKey: navigatorKey,
@@ -41,7 +41,7 @@ class InvestApp extends StatelessWidget {
         builder: (context, snapshot) => switch (snapshot.data) {
           null => const Scaffold(body: Center(child: CircularProgressIndicator())),
           true => const MainShell(),
-          false => const LoginPage(),
+          false => readable(const LoginPage()),
         },
       ),
     );

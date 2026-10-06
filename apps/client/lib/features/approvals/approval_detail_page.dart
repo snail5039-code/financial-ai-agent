@@ -21,8 +21,9 @@ class VerdictTag extends StatelessWidget {
 
 class ApprovalDetailPage extends StatefulWidget {
   /// conversation이 있으면 승인·거절·수정을 할 수 있고, 없으면 보기만 한다 (지난 처리안)
-  const ApprovalDetailPage({super.key, required this.card, this.conversation, this.interrupt});
+  const ApprovalDetailPage({super.key, required this.card, this.conversation, this.interrupt, this.onClose});
   final Map<String, dynamic> card;
+  final VoidCallback? onClose; // 넓은 화면의 오른쪽 패널이면 화면을 닫는 대신 이것을 부른다
   final Conversation? conversation;
   final Map<String, dynamic>? interrupt;
 
@@ -51,7 +52,15 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
 
   void _answer(Map<String, dynamic> payload, String shown) {
     widget.conversation!.answer(payload, shown: shown);
-    Navigator.of(context).pop();
+    _close();
+  }
+
+  void _close() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _edit() async {
@@ -78,7 +87,13 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     final open = widget.conversation != null && expires.isAfter(DateTime.now());
 
     return Scaffold(
-      appBar: topBar('처리안 상세'),
+      appBar: widget.onClose == null
+          ? topBar('처리안 상세')
+          : AppBar(
+              title: const Text('처리안 상세'),
+              automaticallyImplyLeading: false,
+              actions: [IconButton(tooltip: '닫기', icon: const Icon(Icons.close), onPressed: widget.onClose)],
+            ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         // 1. 주문 요약
         Text('${card['stock_name']} (${card['stock_code']})', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),

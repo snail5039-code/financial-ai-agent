@@ -31,7 +31,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void didUpdateWidget(HomePage old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) setState(() => _data = _load());
+    if (widget.active && !old.active) setState(() { _data = _load(); });
   }
 
   Future<(Map<String, dynamic>?, int)> _load() async {
@@ -57,11 +57,11 @@ class _HomePageState extends State<HomePage> {
         body: FutureBuilder(
           future: _data,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() => _data = _load()));
+            if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() { _data = _load(); }));
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             final (balance, waitingCount) = snapshot.data!;
             return RefreshIndicator(
-              onRefresh: () async => setState(() => _data = _load()),
+              onRefresh: () async => setState(() { _data = _load(); }),
               child: _body(balance, waitingCount),
             );
           },
@@ -76,8 +76,8 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 8),
         FilledButton(
           onPressed: () async {
-            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BrokerPage()));
-            setState(() => _data = _load());
+            await Navigator.of(context).push(pageRoute(const BrokerPage()));
+            setState(() { _data = _load(); });
           },
           child: const Text('증권사 연결'),
         ),

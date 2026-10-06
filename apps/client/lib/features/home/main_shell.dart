@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../common/common.dart';
 import '../approvals/approvals_page.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
@@ -26,25 +27,47 @@ class _MainShellState extends State<MainShell> {
     _conversation.send(text);
   }
 
+  static const _menu = [
+    (Icons.home_outlined, '홈'),
+    (Icons.chat_bubble_outline, '대화'),
+    (Icons.fact_check_outlined, '승인 대기'),
+    (Icons.history, '기록'),
+    (Icons.settings_outlined, '설정'),
+  ];
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: IndexedStack(index: _tab, children: [
-          HomePage(onAsk: _ask, active: _tab == 0),
-          ChatPage(_conversation),
-          ApprovalsPage(active: _tab == 2),
-          HistoryPage(active: _tab == 3),
-          const SettingsPage(),
+  Widget build(BuildContext context) {
+    final pages = IndexedStack(index: _tab, children: [
+      readable(HomePage(onAsk: _ask, active: _tab == 0)),
+      ChatPage(_conversation), // 대화는 넓은 화면에서 오른쪽 처리안 패널까지 쓰므로 폭을 줄이지 않는다
+      readable(ApprovalsPage(active: _tab == 2)),
+      readable(HistoryPage(active: _tab == 3)),
+      readable(const SettingsPage()),
+    ]);
+    void select(int index) => setState(() => _tab = index);
+
+    if (isWide(context)) {
+      // 넓은 화면(웹): 왼쪽 메뉴 + 본문
+      return Scaffold(
+        body: Row(children: [
+          NavigationRail(
+            selectedIndex: _tab,
+            onDestinationSelected: select,
+            labelType: NavigationRailLabelType.all,
+            destinations: [for (final (icon, label) in _menu) NavigationRailDestination(icon: Icon(icon), label: Text(label))],
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(child: pages),
         ]),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (index) => setState(() => _tab = index),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), label: '홈'),
-            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: '대화'),
-            NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: '승인 대기'),
-            NavigationDestination(icon: Icon(Icons.history), label: '기록'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), label: '설정'),
-          ],
-        ),
       );
+    }
+    return Scaffold(
+      body: pages,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: select,
+        destinations: [for (final (icon, label) in _menu) NavigationDestination(icon: Icon(icon), label: label)],
+      ),
+    );
+  }
 }

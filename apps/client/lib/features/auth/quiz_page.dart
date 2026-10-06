@@ -99,7 +99,7 @@ class _QuizPageState extends State<QuizPage> {
       });
       profileMode.value = 'custom';
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => QuizResultPage(result)));
+      Navigator.of(context).pushReplacement(pageRoute(QuizResultPage(result)));
     } on ApiError catch (error) {
       if (mounted) showError(context, error);
     } finally {
@@ -202,7 +202,7 @@ class QuizResultPage extends StatelessWidget {
             if (navigator.canPop()) {
               navigator.popUntil((route) => route.isFirst); // 설정에서 다시 한 경우
             } else {
-              navigator.pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+              navigator.pushReplacement(pageRoute(const MainShell(), full: true));
             }
           },
           child: const Text('확인'),

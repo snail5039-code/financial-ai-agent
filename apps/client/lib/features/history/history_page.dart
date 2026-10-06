@@ -66,7 +66,7 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   void didUpdateWidget(HistoryPage old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) setState(() => _items = _load());
+    if (widget.active && !old.active) setState(() { _items = _load(); });
   }
 
   @override
@@ -92,11 +92,11 @@ class _HistoryPageState extends State<HistoryPage> {
             child: FutureBuilder(
               future: _items,
               builder: (context, snapshot) {
-                if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() => _items = _load()));
+                if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() { _items = _load(); }));
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final items = snapshot.data!.cast<Map<String, dynamic>>().where(filters[_filter].$2).toList();
                 return RefreshIndicator(
-                  onRefresh: () async => setState(() => _items = _load()),
+                  onRefresh: () async => setState(() { _items = _load(); }),
                   child: items.isEmpty
                       ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('기록이 없어요')))])
                       : ListView(children: [for (final item in items) _tile(item)]),
@@ -117,8 +117,7 @@ class _HistoryPageState extends State<HistoryPage> {
         Text(ymdHm(item['created_at'] as String), style: const TextStyle(fontSize: 12)),
       ]),
       trailing: Text(finalResult(item)),
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => HistoryDetailPage(item['proposal_id'] as String, item['stock_name'] as String))),
+      onTap: () => Navigator.of(context).push(pageRoute(HistoryDetailPage(item['proposal_id'] as String, item['stock_name'] as String))),
     );
   }
 }

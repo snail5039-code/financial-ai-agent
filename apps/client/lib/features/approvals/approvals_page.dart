@@ -46,7 +46,7 @@ class _ApprovalListState extends State<_ApprovalList> {
 
   Future<List<dynamic>> _load() async => await api.get('/api/approvals?status=${widget.status}') as List;
 
-  void _reload() => setState(() => _items = _load());
+  void _reload() => setState(() { _items = _load(); });
 
   @override
   void didUpdateWidget(_ApprovalList old) {
@@ -77,14 +77,13 @@ class _ApprovalListState extends State<_ApprovalList> {
       if (widget.status == 'needs_approval') {
         final conversation = await _resume(item, 'approval');
         if (!mounted) return;
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) =>
-            ApprovalDetailPage(card: card, conversation: conversation, interrupt: conversation?.waiting)));
+        await Navigator.of(context).push(pageRoute(ApprovalDetailPage(card: card, conversation: conversation, interrupt: conversation?.waiting)));
       } else if (widget.status == 'needs_execution' && !kIsWeb) {
         final conversation = await _resume(item, 'execute');
         if (conversation == null) throw ApiError(409, '실행할 주문을 찾지 못했어요');
         await conversation.executeWaiting();
       } else {
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ApprovalDetailPage(card: card)));
+        await Navigator.of(context).push(pageRoute(ApprovalDetailPage(card: card)));
       }
     } on ApiError catch (error) {
       if (mounted) showError(context, error);

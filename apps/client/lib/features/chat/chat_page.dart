@@ -17,6 +17,7 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  Map<String, dynamic>? _panel; // 넓은 화면에서 오른쪽에 펼친 처리안 (멈춤 interrupt)
 
   Conversation get _c => widget.conversation;
 
@@ -28,6 +29,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _newChat() => setState(() {
+        _panel = null;
         _c.threadId = null;
         _c.waiting = null;
         _c.items.clear();
@@ -44,7 +46,7 @@ class _ChatPageState extends State<ChatPage> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
             });
-            return Column(children: [
+            final chat = Column(children: [
               Expanded(
                 child: _c.items.isEmpty
                     ? _suggestions()
@@ -54,6 +56,23 @@ class _ChatPageState extends State<ChatPage> {
                       ]),
               ),
               _inputBar(),
+            ]);
+            final panel = _panel;
+            if (!isWide(context) || panel == null) return chat;
+            // 넓은 화면: 대화 + 오른쪽 처리안 상세 (03-screens.md 3장 웹 레이아웃)
+            return Row(children: [
+              Expanded(child: chat),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: 440,
+                child: ApprovalDetailPage(
+                  key: ValueKey(panel['interrupt_id']),
+                  card: panel['card'] as Map<String, dynamic>,
+                  conversation: _c.isWaiting(panel) ? _c : null,
+                  interrupt: panel,
+                  onClose: () => setState(() => _panel = null),
+                ),
+              ),
             ]);
           },
         ),
@@ -116,8 +135,9 @@ class _ChatPageState extends State<ChatPage> {
     final card = interrupt['card'] as Map<String, dynamic>;
     final open = _c.isWaiting(interrupt);
     final needsConfirm = (interrupt['confirm_required'] as List).isNotEmpty;
-    void detail() => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ApprovalDetailPage(card: card, conversation: open ? _c : null, interrupt: interrupt)));
+    void detail() => isWide(context)
+        ? setState(() => _panel = interrupt)
+        : Navigator.of(context).push(pageRoute(ApprovalDetailPage(card: card, conversation: open ? _c : null, interrupt: interrupt)));
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [

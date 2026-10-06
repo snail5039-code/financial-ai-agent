@@ -100,3 +100,15 @@ class ErrorRetry extends StatelessWidget {
         ]),
       );
 }
+
+/// PC 웹처럼 넓은 화면 (왼쪽 메뉴 + 오른쪽 상세 패널을 쓴다)
+bool isWide(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
+/// 넓은 화면에서 글이 옆으로 너무 늘어나지 않게 가운데 읽기 좋은 폭으로 둔다. 폰에서는 그대로
+Widget readable(Widget child) => Center(
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 820), child: child),
+    );
+
+/// 다음 화면으로 이동. 넓은 화면에서는 읽기 좋은 폭으로, full이면 화면 전체 (메뉴가 있는 메인 화면)
+MaterialPageRoute<T> pageRoute<T>(Widget page, {bool full = false}) =>
+    MaterialPageRoute<T>(builder: (_) => full ? page : readable(page));

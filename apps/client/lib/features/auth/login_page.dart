@@ -26,7 +26,7 @@ class _LoginPageState extends State<LoginPage> {
       await api.login(_email.text, _password.text);
       await refreshProfileMode();
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MainShell()), (_) => false);
+      Navigator.of(context).pushAndRemoveUntil(pageRoute(const MainShell(), full: true), (_) => false);
     } on ApiError catch (error) {
       setState(() => _error = error.message);
     } finally {
@@ -49,7 +49,7 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 24),
           FilledButton(onPressed: _busy ? null : _login, child: const Text('로그인')),
           TextButton(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SignupPage())),
+            onPressed: () => Navigator.of(context).push(pageRoute(const SignupPage())),
             child: const Text('회원가입'),
           ),
         ]),
@@ -82,7 +82,7 @@ class _SignupPageState extends State<SignupPage> {
       await api.login(_email.text, _password.text);
       profileMode.value = 'general';
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const QuizOfferPage()), (_) => false);
+      Navigator.of(context).pushAndRemoveUntil(pageRoute(const QuizOfferPage()), (_) => false);
     } on ApiError catch (error) {
       setState(() => _error = error.message);
     } finally {
@@ -130,11 +130,11 @@ class QuizOfferPage extends StatelessWidget {
                 '일반 모드는 정보와 분석만 보여주고, 가장 낮은 한도(1회 30만 원)를 써요.'),
             const Spacer(),
             FilledButton(
-              onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const QuizPage())),
+              onPressed: () => Navigator.of(context).pushReplacement(pageRoute(const QuizPage())),
               child: const Text('퀴즈 하기'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell())),
+              onPressed: () => Navigator.of(context).pushReplacement(pageRoute(const MainShell(), full: true)),
               child: const Text('나중에 (일반 모드로 시작)'),
             ),
           ]),

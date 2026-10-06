@@ -41,7 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _warnings = (policy['warnings'] as List).cast<String>();
   }
 
-  void _reload() => setState(() => _data = _load());
+  void _reload() => setState(() { _data = _load(); });
 
   Future<void> _savePolicy() async {
     try {
@@ -79,7 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _toLogin() =>
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (_) => false);
+      Navigator.of(context).pushAndRemoveUntil(pageRoute(const LoginPage()), (_) => false);
 
   Future<void> _logout() async {
     await api.logout();
@@ -134,7 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('증권사 연결', style: TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(broker == null ? '연결 안 됨' : '${broker.name}${broker.isFake ? ' (가짜 데이터)' : ''}'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BrokerPage())),
+                    onTap: () => Navigator.of(context).push(pageRoute(const BrokerPage())),
                   ),
                 ),
               const Text('투자 모드: 모의투자 (MVP에서는 바꿀 수 없어요)'),
@@ -162,7 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
       Wrap(spacing: 8, children: [
         FilledButton.tonal(
           onPressed: () async {
-            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QuizPage()));
+            await Navigator.of(context).push(pageRoute(const QuizPage()));
             _reload();
           },
           child: Text(custom ? '퀴즈 다시 하기' : '퀴즈 하기'),
