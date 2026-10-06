@@ -48,6 +48,18 @@ def test_login_failure_does_not_say_which_part_was_wrong(client, user) -> None:
     assert wrong_password.json() == unknown_email.json()
 
 
+def test_login_is_blocked_after_too_many_failures(client, user) -> None:
+    from app.routers.auth import MAX_FAILURES_PER_EMAIL, login_limiter
+
+    for _ in range(MAX_FAILURES_PER_EMAIL):
+        assert client.post("/api/auth/login", json={"email": user["email"], "password": "wrong-pass-1"}).status_code == 401
+    blocked = client.post("/api/auth/login", json={"email": user["email"], "password": PASSWORD})
+    assert blocked.status_code == 429  # 맞는 비밀번호여도 막힌 동안은 안 된다
+    other = client.post("/api/auth/login", json={"email": "other-" + user["email"], "password": PASSWORD})
+    assert other.status_code == 401  # 다른 이메일은 막히지 않는다 (접속 주소 한도 전)
+    login_limiter.__init__()  # 다른 테스트에 영향이 없게 초기화
+
+
 def test_me_returns_my_info(client, user) -> None:
     response = client.get("/api/me", headers=user["headers"])
     assert response.status_code == 200

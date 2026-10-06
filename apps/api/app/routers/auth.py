@@ -4,12 +4,15 @@ import hashlib
 import hmac
 import re
 import secrets
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import Conn, audit
@@ -21,6 +24,45 @@ SESSION_LIFETIME = timedelta(days=14)
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # scrypt 비용 설정 (메모리 약 16MB). 해시 문자열에 같이 저장하므로 나중에 올려도 예전 해시를 확인할 수 있다
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2**14, 8, 1
+# 로그인 실패 제한: 같은 이메일 5번, 같은 접속 주소 20번을 15분 안에 틀리면 잠시 막는다 (비밀번호 대입 공격 방지)
+LOGIN_WINDOW_SECONDS = 15 * 60
+MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP = 5, 20
+
+
+class LoginLimiter:
+    """최근 실패 시각을 키(이메일, 접속 주소)별로 기억한다.
+
+    ponytail: 서버 메모리에 둔다 (서버 한 대, 재시작하면 초기화). 서버를 여러 대로 늘리면 DB나 Redis로 옮긴다
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._failures: dict[str, deque] = defaultdict(deque)
+
+    def _recent(self, key: str, now: float) -> deque:
+        failures = self._failures[key]
+        while failures and failures[0] <= now - LOGIN_WINDOW_SECONDS:
+            failures.popleft()
+        return failures
+
+    def blocked(self, email: str, ip: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            return (len(self._recent(f"email:{email}", now)) >= MAX_FAILURES_PER_EMAIL
+                    or len(self._recent(f"ip:{ip}", now)) >= MAX_FAILURES_PER_IP)
+
+    def failed(self, email: str, ip: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._recent(f"email:{email}", now).append(now)
+            self._recent(f"ip:{ip}", now).append(now)
+
+    def succeeded(self, email: str) -> None:
+        with self._lock:
+            self._failures.pop(f"email:{email}", None)
+
+
+login_limiter = LoginLimiter()
 
 
 # ---------- 비밀번호와 토큰 ----------
@@ -129,12 +171,18 @@ def signup(body: SignupRequest, conn: Conn) -> dict:
 
 
 @router.post("/auth/login")
-def login(body: LoginRequest, conn: Conn) -> dict:
+def login(body: LoginRequest, request: Request, conn: Conn) -> dict:
+    ip = request.client.host if request.client else "unknown"
+    if login_limiter.blocked(body.email, ip):
+        # 맞는 비밀번호여도 막는다 (막힌 동안 대입을 계속 시도하지 못하게)
+        raise HTTPException(429, "로그인 시도가 너무 많아요. 15분 뒤에 다시 시도해 주세요")
     user = conn.execute("SELECT id, password_hash FROM users WHERE email = %s", (body.email,)).fetchone()
     password_ok = verify_password(body.password, user["password_hash"] if user else DUMMY_PASSWORD_HASH)
     if not (user and password_ok):
+        login_limiter.failed(body.email, ip)
         # 이메일이 틀렸는지 비밀번호가 틀렸는지 알려주지 않는다
         raise HTTPException(401, "이메일 또는 비밀번호가 맞지 않아요")
+    login_limiter.succeeded(body.email)
 
     token = secrets.token_urlsafe(32)
     conn.execute("DELETE FROM sessions WHERE user_id = %s AND expires_at <= now()", (user["id"],))

@@ -4,7 +4,7 @@ AI 없이 코드로만 계산한다. 공시·뉴스에 이상한 문장이 섞�
 금액은 원 단위 정수. 수수료·세금은 원 단위 아래를 버린 추정값이다 (실제 청구액은 증권사 기준).
 """
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import ROUND_DOWN, Decimal
 
 from app.functions import metrics
@@ -41,8 +41,18 @@ def sell_tax(amount: int, market: str) -> int:
     return floor_won(Decimal(amount) * SELL_TAX_PCT[market] / 100)
 
 
+# 한국거래소 휴장일 (주말 제외 평일만). 2026년 17일, 2025-12 한국거래소 발표 기준 (언론 보도로 확인)
+# ponytail: 해마다 12월에 거래소가 다음 해 휴장일을 발표하면 여기에 더한다. 목록에 없는 해는 주말만 거른다
+KRX_HOLIDAYS = {
+    date(2026, 1, 1), date(2026, 2, 16), date(2026, 2, 17), date(2026, 2, 18), date(2026, 3, 2),
+    date(2026, 5, 1), date(2026, 5, 5), date(2026, 5, 25), date(2026, 6, 3), date(2026, 7, 17),
+    date(2026, 8, 17), date(2026, 9, 24), date(2026, 9, 25), date(2026, 10, 5), date(2026, 10, 9),
+    date(2026, 12, 25), date(2026, 12, 31),
+}
+
+
 def is_market_open(now: datetime) -> bool:
-    return now.weekday() < 5 and MARKET_OPEN <= now.time() <= MARKET_CLOSE
+    return now.weekday() < 5 and now.date() not in KRX_HOLIDAYS and MARKET_OPEN <= now.time() <= MARKET_CLOSE
 
 
 def account_values(snapshot: dict, stock_code: str, price: int, closes: dict[str, int]) -> tuple[int, int, int]:
@@ -70,7 +80,7 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
     """PolicyResult (05-schemas.md 6장): 규칙마다 통과 여부. 하나라도 걸리면 처리안 전에 막는다."""
     amount = order_amount(qty, price)
     rules = [
-        rule("market_hours", "장 운영 시간 (평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}", is_market_open(now)),
+        rule("market_hours", "장 운영 시간 (휴장일 제외 평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}", is_market_open(now)),
         rule("max_order", "1회 주문 한도", policy["max_order_krw"], amount, amount <= policy["max_order_krw"]),
         rule("max_daily", "1일 주문 한도", policy["max_daily_krw"], today_ordered_krw + amount,
              today_ordered_krw + amount <= policy["max_daily_krw"]),

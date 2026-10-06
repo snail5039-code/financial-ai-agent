@@ -41,6 +41,9 @@ def test_amount_fee_tax_worst_case() -> None:
         (datetime(2026, 10, 6, 8, 59, tzinfo=KST), False),
         (datetime(2026, 10, 6, 15, 31, tzinfo=KST), False),
         (datetime(2026, 10, 10, 10, 0, tzinfo=KST), False),  # 토요일
+        (datetime(2026, 10, 9, 10, 0, tzinfo=KST), False),   # 한글날 (금)
+        (datetime(2026, 10, 5, 10, 0, tzinfo=KST), False),   # 개천절 대체공휴일 (월)
+        (datetime(2026, 12, 31, 10, 0, tzinfo=KST), False),  # 연말 휴장
     ],
 )
 def test_market_hours(now, is_open) -> None:
@@ -124,12 +127,14 @@ def test_disposition_warning_for_selling_winner_keeping_losers() -> None:
     assert warnings(side="sell", gain_pct=Decimal("-5"), losing_holdings=["삼성전자"]) == []
 
 
-def test_market_clock_fixes_time_and_moves_weekend_to_friday(monkeypatch):
+def test_market_clock_moves_to_last_trading_day(monkeypatch):
     from app import clock, config
     saturday_night = datetime(2026, 10, 10, 23, 5, tzinfo=KST)
     monkeypatch.setattr(clock, "now", lambda: saturday_night)
     monkeypatch.setattr(config, "MARKET_CLOCK", None)
     assert clock.market_now() == saturday_night
     monkeypatch.setattr(config, "MARKET_CLOCK", "10:00")
-    assert clock.market_now() == datetime(2026, 10, 9, 10, 0, tzinfo=KST)
+    assert clock.market_now() == datetime(2026, 10, 8, 10, 0, tzinfo=KST)  # 토 → 금(한글날) 건너뛰고 목
     assert orders.is_market_open(clock.market_now())
+    monkeypatch.setattr(clock, "now", lambda: datetime(2026, 10, 6, 20, 0, tzinfo=KST))  # 거래일 밤
+    assert clock.market_now() == datetime(2026, 10, 6, 10, 0, tzinfo=KST)  # 같은 날 10시
