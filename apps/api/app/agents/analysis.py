@@ -447,14 +447,16 @@ def route_after_verify(state: InvestState) -> str:
 def save_proposal(conn, state: InvestState) -> str:
     """제안서와 검증 판정(반박-수정 회차마다)을 저장하고 제안서 ID를 돌려준다. 분석·주문이 같이 쓴다."""
     proposal = state["proposal"]
+    # 분석에서 "이대로 주문"으로 이어진 주문은 수량·가격이 제안서를 쓴 뒤에 정해진다. 주문 값이 있으면 그것을 저장한다
+    qty, limit_price = state.get("qty") or proposal["qty"], state.get("limit_price") or proposal["limit_price"]
     data_as_of = max((s["as_of"] for s in state["sources"].values() if s["as_of"]), default=None)
     sources = [{"source_id": sid, **{k: v for k, v in s.items() if k != "content"}} for sid, s in state["sources"].items()]
     proposal_id = conn.execute(
         "INSERT INTO proposals (user_id, thread_id, stock_code, action, qty, limit_price, claims, sources, metrics,"
         " counter_arguments, risks, invalid_if, user_directed, data_as_of)"
         " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-        (state["user_id"], state["thread_id"], proposal["stock_code"], proposal["action"], proposal["qty"],
-         proposal["limit_price"], Jsonb(proposal["claims"]), Jsonb(sources), Jsonb(state["metrics"]),
+        (state["user_id"], state["thread_id"], proposal["stock_code"], proposal["action"], qty,
+         limit_price, Jsonb(proposal["claims"]), Jsonb(sources), Jsonb(state["metrics"]),
          Jsonb(proposal["counter_arguments"]), Jsonb(proposal["risks"]), Jsonb(proposal["invalid_if"]),
          proposal["user_directed"], data_as_of),
     ).fetchone()[0]

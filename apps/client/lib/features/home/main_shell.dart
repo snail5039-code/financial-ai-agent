@@ -1,10 +1,11 @@
-// 로그인 뒤 하단 탭: 홈 / 대화 / 승인 대기 / 설정
+// 로그인 뒤 하단 탭: 홈 / 대화 / 승인 대기 / 기록 / 설정
 
 import 'package:flutter/material.dart';
 
 import '../approvals/approvals_page.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
+import '../history/history_page.dart';
 import '../settings/settings_page.dart';
 import 'home_page.dart';
 
@@ -31,6 +32,7 @@ class _MainShellState extends State<MainShell> {
           HomePage(onAsk: _ask, active: _tab == 0),
           ChatPage(_conversation),
           ApprovalsPage(active: _tab == 2),
+          HistoryPage(active: _tab == 3),
           const SettingsPage(),
         ]),
         bottomNavigationBar: NavigationBar(
@@ -40,6 +42,7 @@ class _MainShellState extends State<MainShell> {
             NavigationDestination(icon: Icon(Icons.home_outlined), label: '홈'),
             NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: '대화'),
             NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: '승인 대기'),
+            NavigationDestination(icon: Icon(Icons.history), label: '기록'),
             NavigationDestination(icon: Icon(Icons.settings_outlined), label: '설정'),
           ],
         ),

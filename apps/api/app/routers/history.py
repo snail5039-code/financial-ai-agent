@@ -20,7 +20,8 @@ def list_history(conn: Conn, user_id: UserId) -> list[dict]:
         SELECT p.id AS proposal_id, p.created_at, p.stock_code, s.name AS stock_name, p.action, p.qty, p.limit_price,
                p.user_directed,
                (SELECT verdict FROM verifications v WHERE v.proposal_id = p.id ORDER BY round DESC LIMIT 1) AS verdict,
-               a.status AS approval_status,
+               (SELECT ok FROM policy_checks pc WHERE pc.proposal_id = p.id) AS policy_ok,
+               CASE WHEN a.status = 'pending' AND a.expires_at <= now() THEN 'expired' ELSE a.status END AS approval_status,
                (SELECT status FROM orders o WHERE o.approval_id = a.id ORDER BY created_at LIMIT 1) AS order_status
         FROM proposals p
         JOIN stocks s ON s.code = p.stock_code

@@ -9,6 +9,7 @@ import 'package:invest_client/broker/broker.dart';
 import 'package:invest_client/broker/fake_broker.dart';
 import 'package:invest_client/broker/kis_mock_broker.dart';
 import 'package:invest_client/common/common.dart';
+import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/secure/key_store.dart';
 
 Map<String, dynamic> order(String side, int qty, int price, {String key = 'k1', int? approved}) => {
@@ -31,6 +32,15 @@ void main() {
   test('시각은 기기 시간대와 상관없이 한국 시각으로 보여준다', () {
     expect(hhmm('2026-10-06T02:40:00Z'), '11:40');
     expect(hhmm('2026-10-06T11:40:05+09:00'), '11:40');
+  });
+
+  test('기록: 최종 결과와 검증 항목 이름', () {
+    expect(finalResult({'order_status': 'filled', 'approval_status': 'approved'}), '체결');
+    expect(finalResult({'approval_status': 'rejected'}), '거절');
+    expect(finalResult({'policy_ok': false}), '정책 차단');
+    expect(finalResult({'policy_ok': null}), '분석');
+    expect(checkTarget('claim:0'), '근거 1');
+    expect(checkTarget('freshness'), '자료 시점');
   });
 
   test('이벤트 스트림: 빈 줄로 이벤트를 나누고 한글을 그대로 읽는다', () async {

@@ -12,6 +12,8 @@ from app.main import create_app
 from app.migrate import migrate
 
 TEST_DB = "invest_test"
+# 개발용 .env의 장 시간 고정(MARKET_CLOCK)이 테스트에 섞이지 않게 한다. 테스트는 clock.now를 직접 바꾼다
+config.MARKET_CLOCK = None
 
 
 @pytest.fixture(scope="session")

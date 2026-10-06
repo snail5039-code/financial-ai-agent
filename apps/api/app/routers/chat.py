@@ -47,6 +47,7 @@ PROGRESS_LABELS = {
     "policy": "투자 정책 검사 중",
     "prepare_approval": "처리안 만드는 중",
     "execute": "주문 결과 기록 중",
+    "result": "주문 기록 확인 중",
 }
 
 

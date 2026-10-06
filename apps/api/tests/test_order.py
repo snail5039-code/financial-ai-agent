@@ -34,6 +34,8 @@ def now(monkeypatch):
 
 
 def understand(query: str, history: list) -> llm.Understood:
+    if "체결" in query:
+        return llm.Understood(query=query, intent="result", stock_name=NAME if NAME in query else None)
     if "사도 돼" in query:
         return llm.Understood(query=query, intent="analysis", stock_name=NAME)
     side = "sell" if "팔" in query else "buy"
@@ -307,6 +309,10 @@ def test_analysis_offers_order_and_continues(client, custom_user, ai) -> None:
     card = first(approval, "interrupt")["card"]
     assert (card["qty"], card["user_directed"]) == (3, False)
     assert len(ai["invest"]) == 1  # 분석 때 한 번만. 주문으로 이어갈 때 AI를 다시 부르지 않는다
+    # 기록에도 주문 수량·가격이 남는다 (분석 때 제안서에는 수량이 없었다)
+    latest = client.get("/api/history", headers=user["headers"]).json()[0]
+    assert (latest["qty"], latest["limit_price"]) == (3, PRICE)
+    assert "3주 매수" in result_text(client, user)
 
 
 def test_analysis_offer_declined(client, custom_user, ai) -> None:
@@ -365,6 +371,7 @@ def test_approval_lists_and_history_timeline(client, custom_user, ai) -> None:
 
     [item] = client.get("/api/history", headers=headers).json()
     assert (item["stock_name"], item["verdict"], item["approval_status"], item["order_status"]) == (NAME, "approve", "approved", "filled")
+    assert item["policy_ok"] is True
     steps = [step["step"] for step in client.get(f"/api/history/{item['proposal_id']}", headers=headers).json()["timeline"]]
     assert steps[0] == "proposal" and steps[-1] == "order_result"
     assert {"verification", "policy_check", "approval_requested", "approval_approved"} <= set(steps)
@@ -390,3 +397,41 @@ def test_other_users_cannot_see_approvals_or_history(client, custom_user, ai) ->
     assert client.get(f"/api/history/{proposal_id}", headers=other).status_code == 404
     assert client.get("/api/approvals", headers=other).json() == []
     assert client.get("/api/history", headers=other).json() == []
+
+
+# ---------- 결과 확인 ("아까 주문 체결됐어?") ----------
+
+def result_text(client, user, text="아까 주문 체결됐어?"):
+    return first(chat(client, user, text), "message")["text"]
+
+
+def test_result_after_fill(client, custom_user, ai) -> None:
+    place_filled_order(client, custom_user)
+    text = result_text(client, custom_user, "주문전자 체결됐어?")
+    assert "주문전자(555555) 4주 매수" in text and "체결됐어요" in text
+    assert "체결 4주 × 100,000원" in text and "주문번호 0000123" in text and "기준" in text
+
+
+def test_result_while_waiting_and_after_web_approval(client, custom_user, ai) -> None:
+    events = to_approval(client, custom_user)
+    assert "승인을 기다리고 있어요" in result_text(client, custom_user)
+    # 새 메시지를 보내면 멈춘 업무는 버려지므로 다른 대화에서 웹 승인 흐름을 만든다
+    events = to_approval(client, custom_user)
+    events_of(answer(client, custom_user, events, {"decision": "approve"}, client_kind="web"))
+    assert "웹에서 승인했지만 아직 폰에서 실행하지 않았어요" in result_text(client, custom_user)
+
+
+def test_result_for_blocked_and_rejected(client, custom_user, ai) -> None:
+    to_approval(client, custom_user, "주문전자 4주 사줘", cash=100)  # 현금 부족
+    assert "정책 검사에 걸려 주문하지 않았어요" in result_text(client, custom_user)
+    events = to_approval(client, custom_user)
+    events_of(answer(client, custom_user, events, {"decision": "reject"}))
+    assert "거절했어요" in result_text(client, custom_user)
+
+
+def test_result_is_only_mine(client, custom_user, ai) -> None:
+    place_filled_order(client, custom_user)
+    email = "other-" + custom_user["email"]
+    client.post("/api/auth/signup", json={"email": email, "password": "pw-other-1", "agreed_terms": True})
+    token = client.post("/api/auth/login", json={"email": email, "password": "pw-other-1"}).json()["token"]
+    assert result_text(client, {"headers": {"Authorization": f"Bearer {token}"}}) == "주문 기록이 없어요."

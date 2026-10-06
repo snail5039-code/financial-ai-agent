@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agents import llm
-from app.agents.graph import NOT_READY_MESSAGE
 from app.agents.query import SYNC_MESSAGE, WEB_PRICE_MESSAGE
 from app.clock import KST
 from app.main import create_app
@@ -265,9 +264,8 @@ def test_orders_today_empty(client, user) -> None:
     assert first(chat(client, user, "오늘 주문 내역 보여줘"), "message")["text"] == "오늘 주문 내역이 없어요."
 
 
-@pytest.mark.parametrize("text", ["아까 주문 체결됐어?"])
-def test_not_ready_intents(client, user, text: str) -> None:
-    assert first(chat(client, user, text), "message")["text"] == NOT_READY_MESSAGE
+def test_result_without_orders(client, user) -> None:
+    assert first(chat(client, user, "아까 주문 체결됐어?"), "message")["text"] == "주문 기록이 없어요."
 
 
 def test_query_without_kind_gets_guide(client, user, monkeypatch) -> None:
