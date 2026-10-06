@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="invest_client"
+        android:label="투자 에이전트"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

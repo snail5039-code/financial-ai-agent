@@ -1,13 +1,13 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-06 · 다음 할 일: **6단계 Flutter 앱**
+마지막 갱신: 2026-10-06 · 다음 할 일: **7단계 증권사 연결 (KIS 모의)**
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
 ## 1. 새 세션에서 처음 할 일
 
 1. [AGENTS.md](../../AGENTS.md)(작업 규칙)와 이 문서를 읽는다
-2. [08-dev-order.md](08-dev-order.md)의 **6단계** 할 일과 참고 문서를 읽는다
+2. [08-dev-order.md](08-dev-order.md)의 **7단계** 할 일과 참고 문서를 읽는다
 3. 계획을 사용자에게 보여주고 동의를 받은 뒤 구현한다 (AGENTS.md 2장)
 4. 푸시·외부 전송·설치·약관 동의·비용 생기는 일은 **매번** 먼저 묻는다
 
@@ -21,11 +21,11 @@
 | 4 | 투자 AI ↔ 검증 AI 분석 · 30종목 데이터 수집 · 지표 | ✅ | `6ef5516`, `c3a6640`, `29b817d`, `0461808`, `91a391c` |
 | 5 | 주문 그래프: 처리안 → 승인 → 폰 실행(execute) → 기록, 승인·기록 API | ✅ | `70ed1e3` |
 | — | 개발 환경: Flutter, Android SDK, 에뮬레이터 설치 | ✅ | `51832f9` |
-| 6 | **Flutter 앱 뼈대** | ⬜ 다음 | |
-| 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | ⬜ | |
+| 6 | Flutter 앱 뼈대: 화면 8종, 대화·멈춤 처리, 가짜 증권사 | ✅ | `2623ba3` + 마무리 |
+| 7 | **증권사 연결 (KIS 모의 주문, KB 조회)** | ⬜ 다음 | |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | ⬜ | |
 
-모든 커밋은 원격 `main`에 푸시됨 (2026-10-06 `51832f9`까지). 테스트 217개 통과 + 실제 Gemini 확인 11개(`-m gemini`).
+서버 테스트 218개 통과, Flutter 테스트 9개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
 ## 3. 지금 서버가 할 수 있는 것 (`apps/api`)
 
@@ -40,6 +40,8 @@
 | 승인 대기·기록 | `GET /api/approvals?status=`, `/api/approvals/{id}`, `/api/history`, `/api/history/{id}` |
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
 | 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
+
+앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사는 아직 가짜(`broker/fake_broker.dart`) → 7단계에서 KIS 모의로 바꾼다.
 
 API 형식: [06-api-spec.md](06-api-spec.md). 멈춤 4종류 `question` / `fetch` / `approval` / `execute`의 형식은 06 문서 3장과 `agents/interrupts.py`.
 
@@ -61,6 +63,14 @@ uv --directory apps/api run uvicorn app.main:app --port 8000
 ```bash
 uv --directory apps/api run pytest
 ```
+
+앱 (Android 에뮬레이터, 서버는 `10.0.2.2:8000`으로 접속):
+
+```bash
+cd apps/client && flutter run -d emulator-5554 --no-enable-impeller
+```
+
+웹 (`.claude/launch.json`의 `web`, http://localhost:5000): `.env`에 `CORS_ORIGINS=http://localhost:5000` 필요
 
 - 비밀값은 `apps/api/.env`에만 있다 (git 제외): `DATABASE_URL`, `GEMINI_API_KEY`, `OPENDART_API_KEY`, `DATA_GO_KR_API_KEY`. 값을 출력하지 않는다
 - Flutter: `C:\Users\snail\dev\flutter` (사용자 PATH 등록됨, 새 터미널부터 `flutter` 사용 가능)
@@ -98,4 +108,7 @@ uv --directory apps/api run pytest
 - Windows Git Bash의 `curl`은 한글 JSON 본문을 깨뜨린다 → API 수동 확인은 Python `httpx` 스크립트로
 - Python heredoc으로 파일을 고칠 때 `"\n"`, `\U`가 실제 줄바꿈·이스케이프로 바뀌는 문제가 있었다 → 파일 수정은 Edit 도구 사용
 - 주문 장 시간 검사는 실제 시계를 쓴다 → 장이 닫힌 시간에 실제 확인할 때는 테스트처럼 `app.clock.now`를 고정한다
+- 에뮬레이터에서 Impeller(기본 그래픽)로 그리면 탭을 바꿔도 본문이 이전 화면으로 남는 현상이 있다 (앱 문제 아님). `--no-enable-impeller`로 실행하거나, 설치한 앱은 `adb shell am start -n com.investagent.invest_client/.MainActivity --ez enable-impeller false`
+- 에뮬레이터 화면 조작은 `adb shell input tap/text` (한글 입력은 안 됨 → 추천 질문 칩을 누른다)
+- 장이 닫힌 시간에 주문 흐름을 확인하려면 `.env`에 `MARKET_CLOCK=10:00` (운영에서는 비운다)
 - 테스트는 `invest_test` DB를 새로 만들어 쓴다 (개발 DB `invest`는 안 건드림). Gemini는 가짜로 바꿔 끼워 비용 0

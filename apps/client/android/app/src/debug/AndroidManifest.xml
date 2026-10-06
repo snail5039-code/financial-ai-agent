@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 개발 서버(http://10.0.2.2:8000)에 접속하려고 디버그 빌드에서만 http를 허용한다. 배포 빌드는 https만 -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

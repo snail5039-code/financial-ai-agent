@@ -20,9 +20,9 @@ String won(num value) => '${comma(value)}원';
 /// 상승·이익 빨강, 하락·손실 파랑
 Color? changeColor(num value) => value > 0 ? Colors.red : value < 0 ? Colors.blue : null;
 
-/// 서버 시각(ISO) → 이 기기 시각 "10:32"
+/// 서버 시각(ISO) → 한국 시각 "10:32". 장 시간·만료가 한국 기준이라 기기 시간대와 상관없이 KST로 보여준다
 String hhmm(String iso) {
-  final t = DateTime.parse(iso).toLocal();
+  final t = DateTime.parse(iso).toUtc().add(const Duration(hours: 9));
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
