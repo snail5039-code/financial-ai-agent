@@ -132,7 +132,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         closes = closes_of(conn, [h["stock_code"] for h in holdings])
         hot_rank, five_day_return = five_day_rank(conn, code)
 
-    result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.now(),
+    result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.market_now(),
                                  ["snapshot"] if snapshot else [])
     amount = orders.order_amount(qty, price)
     fee = orders.fee_estimate(amount, policy["fee_rate_pct"])

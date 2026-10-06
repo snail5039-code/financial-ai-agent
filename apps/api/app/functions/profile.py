@@ -138,11 +138,11 @@ def contradiction_notices(answers: QuizAnswers) -> list[str]:
     """서로 맞지 않는 답. 계산은 이미 낮은 쪽을 쓰므로 막지 않고 다시 확인하라고만 알린다."""
     checks = [
         (answers.money_use in ("living", "borrowed") and answers.portfolio_choice == "D",
-         "생활비나 빌린 돈이라고 했는데, 최악 −35%인 상품을 골랐어요."),
+         "생활비나 빌린 돈이라고 했는데, 최악 약 −40%인 상품을 골랐어요."),
         (answers.drop_reaction == "buy_more" and answers.portfolio_choice == "A",
          "떨어지면 더 산다고 했는데, 손실이 없는 상품을 골랐어요."),
         (answers.drop_reaction == "sell_all" and answers.portfolio_choice == "D",
-         "떨어지면 전부 판다고 했는데, 최악 −35%인 상품을 골랐어요."),
+         "떨어지면 전부 판다고 했는데, 최악 약 −40%인 상품을 골랐어요."),
     ]
     return [message for applies, message in checks if applies]
 

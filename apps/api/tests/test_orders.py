@@ -122,3 +122,14 @@ def test_disposition_warning_for_selling_winner_keeping_losers() -> None:
     [text] = warnings(side="sell", gain_pct=Decimal("12.3"), losing_holdings=["삼성전자"])
     assert "+12.3%" in text and "삼성전자" in text
     assert warnings(side="sell", gain_pct=Decimal("-5"), losing_holdings=["삼성전자"]) == []
+
+
+def test_market_clock_fixes_time_and_moves_weekend_to_friday(monkeypatch):
+    from app import clock, config
+    saturday_night = datetime(2026, 10, 10, 23, 5, tzinfo=KST)
+    monkeypatch.setattr(clock, "now", lambda: saturday_night)
+    monkeypatch.setattr(config, "MARKET_CLOCK", None)
+    assert clock.market_now() == saturday_night
+    monkeypatch.setattr(config, "MARKET_CLOCK", "10:00")
+    assert clock.market_now() == datetime(2026, 10, 9, 10, 0, tzinfo=KST)
+    assert orders.is_market_open(clock.market_now())

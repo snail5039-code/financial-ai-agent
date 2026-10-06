@@ -1,7 +1,9 @@
+import logging
 import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -25,6 +27,8 @@ async def lifespan(app: FastAPI):
         checkpointer = PostgresSaver(pool)
         checkpointer.setup()
         app.state.graph = build_graph(checkpointer)
+        if config.MARKET_CLOCK:
+            logging.getLogger(__name__).warning("개발용 MARKET_CLOCK=%s: 장 운영 시간을 실제 시계로 검사하지 않아요", config.MARKET_CLOCK)
         stop = threading.Event()
         if app.state.auto_collect_hour is not None:
             threading.Thread(target=collect.run_daily, args=(stop, app.state.auto_collect_hour), daemon=True).start()
@@ -37,6 +41,9 @@ def create_app(database_url: str | None = None, auto_collect_hour: int | None = 
     app = FastAPI(title="invest-agent-api", lifespan=lifespan)
     app.state.database_url = database_url or config.DATABASE_URL
     app.state.auto_collect_hour = auto_collect_hour
+    if config.CORS_ORIGINS:
+        # 웹 개발 서버(다른 포트)에서 오는 요청 허용. 로그인은 쿠키가 아니라 Authorization 헤더라서 credentials는 끈다
+        app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
     for module in (auth, policy, chat, snapshot, approvals, history):
         app.include_router(module.router)
 
