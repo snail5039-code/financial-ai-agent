@@ -204,7 +204,7 @@ MVP를 8단계로 나눠 만든다. 증권사 키 없이 할 수 있는 것부�
 - [09-investor-profile.md](09-investor-profile.md): 3장 퀴즈 문항·보기 키, 5장 6단계
 - [02-architecture.md](02-architecture.md): 4장 클라이언트 구조
 - [06-api-spec.md](06-api-spec.md): 2장 이벤트 스트림, 3장 멈춤 형식
-- 개발 환경: 이 PC에 Flutter SDK·Android SDK 아직 없음
+- 개발 환경 (2026-10-06 설치): Flutter 3.47.6, Android SDK(명령줄 도구), 에뮬레이터 `invest_phone` — [02-architecture.md](02-architecture.md) 7장. 에뮬레이터 실행: `%ANDROID_HOME%\emulator\emulator.exe -avd invest_phone`
 
 **완료 기록**: 
 

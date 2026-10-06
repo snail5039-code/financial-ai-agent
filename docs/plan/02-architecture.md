@@ -151,4 +151,4 @@ financial-ai-agent/
 
 - PostgreSQL은 로컬에 Docker로 띄우는 것을 추천한다. 테스트는 테스트용 DB를 따로 쓴다.
 - 서버 배포 위치(클라우드)는 MVP가 로컬에서 돌아간 뒤에 정한다.
-- 2026-10-04: PostgreSQL은 Docker 컨테이너 `invest-db` (`pgvector/pgvector:pg18`)로 띄운다. Flutter SDK, Android SDK는 아직 없다 (6단계 전에 설치).
+- 2026-10-04: PostgreSQL은 Docker 컨테이너 `invest-db` (`pgvector/pgvector:pg18`)로 띄운다. Flutter SDK, Android SDK는 2026-10-06에 설치했다: Flutter 3.47.6 `C:\Users\snail\dev\flutter` (사용자 PATH 등록), Android SDK 명령줄 도구 방식 `C:\Users\snail\dev\android` (`ANDROID_HOME`, 플랫폼 36, 빌드 도구 36.0.0, 에뮬레이터 + x86_64 이미지), 가상 폰 `invest_phone` (Pixel 7, Android 16, 데이터는 `C:\Users\snail\.android`). Android Studio는 쓰지 않는다. 가속은 WHPX
