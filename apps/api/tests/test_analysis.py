@@ -151,7 +151,8 @@ def test_level_2_cannot_get_buy_proposal(client, user, ai, migrated) -> None:
 
     assert "buy" not in ai["invest"][0].split("[허용 행동]")[1].split("\n")[0]
     assert saved(migrated, user)[0][0] == "watch"
-    assert "성향 규칙에 따라 '매수 검토' 대신 '관찰'로 바꿨어요" in first(answer, "message")["text"]
+    assert "성향 규칙에 따라 '매수 검토' 대신 '관찰'로 바꿨어요 (2등급 종목은 위험중립형 이상만 매수 제안)" in first(answer, "message")["text"]
+    assert "(매수 제외: 2등급 종목은 위험중립형 이상만 매수 제안)" in ai["invest"][0]
 
 
 def test_borrowed_money_flag_reaches_invest_ai(client, user, ai, migrated) -> None:
@@ -258,3 +259,38 @@ def test_code_checks_catch_changed_metric_values() -> None:
     recomputed = [{"metric_id": "debt_ratio", "value": "41.00"}]
     checks = {c["target"]: c for c in analysis.code_checks(draft, {"fin:T1": {}, "dart:T1#0": {}}, gathered, recomputed)}
     assert checks["metrics"]["result"] == "fail"
+
+
+# ---------- 재무 기준: 최근 정기보고서 ----------
+
+def test_financial_basis_uses_latest_report_and_trailing_four_quarters(migrated) -> None:
+    from psycopg.rows import dict_row
+    with psycopg.connect(migrated, row_factory=dict_row) as conn:
+        conn.execute("INSERT INTO stocks VALUES ('666666', '분기회사', 'KOSPI', true) ON CONFLICT DO NOTHING")
+        rows = [
+            # (연도, 보고서, 계정, 이번 기간, 비교 기간, 누적, 전년 누적, 접수번호)
+            (2025, "11011", "당기순이익(손실)", 100, 80, None, None, "A25"),
+            (2025, "11011", "자본총계", 1000, 900, None, None, "A25"),
+            (2026, "11012", "당기순이익(손실)", 40, 30, 70, 50, "H26"),  # 반기: 3개월 40, 누적 70
+            (2026, "11012", "매출액", 400, 300, 800, 500, "H26"),
+            (2026, "11012", "자본총계", 1200, 1000, None, None, "H26"),
+            (2026, "11012", "부채총계", 600, 500, None, None, "H26"),
+        ]
+        for row in rows:
+            conn.execute("INSERT INTO financials (stock_code, bsns_year, reprt_code, fs_div, account, amount, prev_amount,"
+                         " add_amount, prev_add_amount, rcept_no) VALUES ('666666', %s, %s, 'CFS', %s, %s, %s, %s, %s, %s)",
+                         row)
+        conn.execute("INSERT INTO stock_prices VALUES ('666666', '2026-10-01', 100, 2400, 24)")
+
+        basis = analysis.financial_basis(conn, "666666")
+        found = {m["metric_id"]: m for m in analysis.compute_metrics(conn, "666666")}
+        conn.rollback()
+
+    assert basis["period"] == "2026년 반기보고서 누적"
+    assert basis["net_ttm"] == 100 + 70 - 50  # 작년 연간 + 올해 누적 − 작년 같은 기간 누적
+    assert basis["fin_ids"] == ["fin:H26", "fin:A25"]
+    assert found["per"]["value"] == 20      # 2400 ÷ 120
+    assert found["pbr"]["value"] == 2       # 2400 ÷ 1200 (반기 말 자본)
+    assert found["debt_ratio"]["value"] == 50
+    assert found["revenue_yoy"]["value"] == 60  # 누적 800 vs 500
+    assert "2026년 반기보고서 누적" in found["revenue_yoy"]["formula"]

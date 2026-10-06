@@ -43,6 +43,7 @@ class InvestState(TypedDict, total=False):
     metrics: list            # 코드가 계산한 지표 [{metric_id, value, unit, formula, inputs}]
     risk_grade: int          # 종목 위험등급 (1 매우 높음 ~ 6)
     allowed_actions: list    # 성향 규칙상 투자 AI가 낼 수 있는 행동
+    buy_block_reason: str | None  # 매수를 뺀 이유 (투자 AI와 사용자에게 알림)
     proposal: dict | None    # 투자 AI 제안서 (최신)
     verifications: list      # 검증 AI 판정, 반박-수정마다 하나
     revision_round: int      # 검증을 몇 번 했는지 (반박-수정 최대 2번)
@@ -54,6 +55,6 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "query": query, "history": history, "intent": None, "answer": None,
         "mode": profile["mode"], "risk_level": profile.get("risk_level"), "flags": profile.get("flags", []),
         "query_kind": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
-        "sources": {}, "metrics": [], "risk_grade": None, "allowed_actions": [], "proposal": None,
+        "sources": {}, "metrics": [], "risk_grade": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
     }

@@ -27,7 +27,7 @@ from app.clock import KST
 from app.db import connect
 from app.functions import metrics
 from app.functions.profile import LABELS
-from app.functions.suitability import allowed_actions, stock_risk_grade
+from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk_grade
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
@@ -83,14 +83,17 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
                         "as_of": str(row["filed_at"]), "content": f"공시 제목: {row['title']} (접수일 {row['filed_at']})"}
     if kind == "fin":
         rows = conn.execute(
-            "SELECT bsns_year, reprt_code, fs_div, account, amount, prev_amount FROM financials"
+            "SELECT bsns_year, reprt_code, account, amount, prev_amount, add_amount, prev_add_amount FROM financials"
             " WHERE rcept_no = %s AND fs_div = 'CFS' ORDER BY account", (rest,),
         ).fetchall()
         if not rows:
             return None
-        lines = [f"{r['account']}: 이번 기간 {fmt_amount(r['amount'])}, 전년 같은 기간 {fmt_amount(r['prev_amount'])}"
+        lines = [f"{r['account']}: 이번 기간 {fmt_amount(r['amount'])}"
+                 + (f" (누적 {fmt_amount(r['add_amount'])})" if r["add_amount"] is not None else "")
+                 + f", 비교 기간 {fmt_amount(r['prev_amount'])}"
+                 + (f" (누적 {fmt_amount(r['prev_add_amount'])})" if r["prev_add_amount"] is not None else "")
                  for r in rows]
-        return {"kind": "dart", "title": f"OpenDART 주요 재무 ({rows[0]['bsns_year']}년 사업보고서, 연결)",
+        return {"kind": "dart", "title": f"OpenDART 주요 재무 ({report_name(rows[0]['bsns_year'], rows[0]['reprt_code'])}, 연결)",
                 "url": disclosure_url(rest), "as_of": None, "content": "\n".join(lines)}
     if kind == "price":
         code, _, day = rest.partition(":")
@@ -117,19 +120,66 @@ def fmt_amount(value: int | None) -> str:
 
 # ---------- 지표 (코드 계산) ----------
 
-def latest_annual_financials(conn, code: str) -> dict[str, dict]:
-    """가장 최근 사업보고서(연결)의 계정 → {amount, prev_amount, rcept_no}."""
-    rows = conn.execute(
-        "SELECT account, amount, prev_amount, rcept_no FROM financials"
-        " WHERE stock_code = %s AND reprt_code = '11011' AND fs_div = 'CFS'"
-        " AND bsns_year = (SELECT max(bsns_year) FROM financials WHERE stock_code = %s AND reprt_code = '11011')",
-        (code, code),
-    ).fetchall()
+PERIOD_ORDER = {"11013": 1, "11012": 2, "11014": 3, "11011": 4}  # 1분기 < 반기 < 3분기 < 사업(연간)
+PERIOD_NAMES = {"11013": "1분기", "11012": "반기", "11014": "3분기", "11011": "사업"}
+
+
+def report_name(year: int, reprt_code: str) -> str:
+    return f"{year}년 {PERIOD_NAMES[reprt_code]}보고서"
+
+
+def report_accounts(conn, code: str, year: int, reprt_code: str) -> dict[str, dict]:
+    """한 보고서(연결)의 계정 → 행. "당기순이익(손실)"처럼 이름이 조금씩 달라도 "당기순이익"으로 모은다."""
     accounts = {}
-    for row in rows:
-        name = "당기순이익" if row["account"].startswith("당기순이익") else row["account"]
-        accounts.setdefault(name, row)
+    for row in conn.execute(
+        "SELECT * FROM financials WHERE stock_code = %s AND bsns_year = %s AND reprt_code = %s AND fs_div = 'CFS'",
+        (code, year, reprt_code),
+    ):
+        accounts.setdefault("당기순이익" if row["account"].startswith("당기순이익") else row["account"], row)
     return accounts
+
+
+def financial_basis(conn, code: str) -> dict | None:
+    """지표 계산에 쓸 재무 값. 가장 최근 정기보고서 기준으로 맞춘다.
+
+    - 자본·부채: 최근 보고서 기말 값
+    - 매출·영업이익 증감: 최근 보고서의 올해 누적 vs 전년 같은 기간 누적 (사업보고서면 연간)
+    - 순이익(PER용): 최근 4개 분기 = 작년 연간 + 올해 누적 − 작년 같은 기간 누적 (사업보고서면 연간 그대로)
+    """
+    reports = conn.execute("SELECT DISTINCT bsns_year, reprt_code FROM financials WHERE stock_code = %s AND fs_div = 'CFS'",
+                           (code,)).fetchall()
+    if not reports:
+        return None
+    latest = max(reports, key=lambda r: (r["bsns_year"], PERIOD_ORDER[r["reprt_code"]]))
+    year, reprt_code = latest["bsns_year"], latest["reprt_code"]
+    accounts = report_accounts(conn, code, year, reprt_code)
+    is_annual = reprt_code == "11011"
+
+    def cumulative(name: str) -> tuple[int | None, int | None]:
+        row = accounts.get(name) or {}
+        if is_annual:
+            return row.get("amount"), row.get("prev_amount")
+        return (row.get("add_amount") if row.get("add_amount") is not None else row.get("amount"),
+                row.get("prev_add_amount") if row.get("prev_add_amount") is not None else row.get("prev_amount"))
+
+    latest_id = f"fin:{next(iter(accounts.values()))['rcept_no']}" if accounts else None
+    net_now, net_before = cumulative("당기순이익")
+    net_ids = [latest_id]
+    if is_annual:
+        net_ttm = net_now
+    else:
+        annual = report_accounts(conn, code, year - 1, "11011").get("당기순이익")
+        net_ttm = (annual["amount"] + net_now - net_before
+                   if annual and None not in (annual["amount"], net_now, net_before) else None)
+        if annual:
+            net_ids.append(f"fin:{annual['rcept_no']}")
+    period = report_name(year, reprt_code) + ("" if is_annual else " 누적")
+    return {
+        "period": period, "fin_ids": list(dict.fromkeys(net_ids)), "latest_id": latest_id,
+        "equity": (accounts.get("자본총계") or {}).get("amount"),
+        "liabilities": (accounts.get("부채총계") or {}).get("amount"),
+        "revenue": cumulative("매출액"), "op_income": cumulative("영업이익"), "net_ttm": net_ttm,
+    }
 
 
 def compute_metrics(conn, code: str) -> list[dict]:
@@ -138,30 +188,27 @@ def compute_metrics(conn, code: str) -> list[dict]:
         "SELECT trade_date, close, market_cap FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 21",
         (code,),
     ).fetchall()[::-1]
-    fin = latest_annual_financials(conn, code)
+    basis = financial_basis(conn, code) or {}
     price_id = f"price:{code}:{closes[-1]['trade_date']}" if closes else None
-    fin_id = f"fin:{next(iter(fin.values()))['rcept_no']}" if fin else None
-
-    def value_of(account: str, field: str = "amount"):
-        return (fin.get(account) or {}).get(field)
-
-    result = []
     market_cap = closes[-1]["market_cap"] if closes else None
-    for metric_id, account, function in (("per", "당기순이익", metrics.per), ("pbr", "자본총계", metrics.pbr)):
-        if market_cap is None or value_of(account) is None:
-            result.append(metrics.metric(metric_id, None, "배", "", [], "시세나 재무 자료가 없음"))
-        else:
-            result.append(function(market_cap, value_of(account), [price_id, fin_id]))
-    if value_of("부채총계") is None or value_of("자본총계") is None:
-        result.append(metrics.metric("debt_ratio", None, "%", "", [], "재무 자료가 없음"))
-    else:
-        result.append(metrics.debt_ratio(value_of("부채총계"), value_of("자본총계"), [fin_id]))
-    for metric_id, account in (("revenue_yoy", "매출액"), ("op_income_yoy", "영업이익")):
-        current, previous = value_of(account), value_of(account, "prev_amount")
+    missing = "시세나 재무 자료가 없음"
+
+    result = [
+        metrics.per(market_cap, basis["net_ttm"], [price_id, *basis["fin_ids"]])
+        if market_cap and basis.get("net_ttm") is not None else metrics.metric("per", None, "배", "", [], missing),
+        metrics.pbr(market_cap, basis["equity"], [price_id, basis["latest_id"]])
+        if market_cap and basis.get("equity") is not None else metrics.metric("pbr", None, "배", "", [], missing),
+        metrics.debt_ratio(basis["liabilities"], basis["equity"], [basis["latest_id"]])
+        if basis.get("liabilities") is not None and basis.get("equity") is not None
+        else metrics.metric("debt_ratio", None, "%", "", [], "재무 자료가 없음"),
+    ]
+    for metric_id, key, account in (("revenue_yoy", "revenue", "매출액"), ("op_income_yoy", "op_income", "영업이익")):
+        current, previous = basis.get(key, (None, None))
         if current is None or previous is None:
             result.append(metrics.metric(metric_id, None, "%", "", [], "재무 자료가 없음"))
         else:
-            result.append(metrics.yoy_growth(metric_id, account, current, previous, [fin_id]))
+            label = f"{account}({basis['period']})"
+            result.append(metrics.yoy_growth(metric_id, label, current, previous, [basis["latest_id"]]))
     result.append(metrics.volatility_20d([row["close"] for row in closes], [price_id] if price_id else []))
     return result
 
@@ -223,7 +270,8 @@ def invest_context(state: InvestState) -> str:
         f"[요청] {state['query']}",
         f"[종목] {state['stock_name']}({state['stock_code']}), 위험등급 {state['risk_grade']}등급",
         "[사용자]\n" + "\n".join(user_lines(state)),
-        f"[허용 행동] {', '.join(state['allowed_actions'])}",
+        f"[허용 행동] {', '.join(state['allowed_actions'])}"
+        + (f" (매수 제외: {state['buy_block_reason']})" if state.get("buy_block_reason") else ""),
         "[자료]\n" + "\n".join(source_lines(state["sources"])),
         "[지표] (코드가 계산한 값. 이 값만 쓴다)\n" + "\n".join(metric_line(m) for m in state["metrics"]),
     ]
@@ -293,9 +341,9 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
                               (code,)).fetchone()
         if latest:
             ids.append(f"price:{code}:{latest['trade_date']}")
-        fin = latest_annual_financials(conn, code)
-        if fin:
-            ids.append(f"fin:{next(iter(fin.values()))['rcept_no']}")
+        basis = financial_basis(conn, code)
+        if basis:
+            ids += [i for i in (basis["latest_id"], *basis["fin_ids"]) if i]
         ids += [f"dart:{row['rcept_no']}" for row in conn.execute(
             "SELECT rcept_no FROM disclosures WHERE stock_code = %s ORDER BY filed_at DESC LIMIT %s",
             (code, RECENT_DISCLOSURES))]
@@ -315,10 +363,12 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
 
     holds = bool(state.get("snapshot")) and any(h["stock_code"] == code for h in state["snapshot"]["holdings"])
     grade = stock_risk_grade(code)
+    volatility = next(m["value"] for m in found_metrics if m["metric_id"] == "volatility_20d")
+    profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     return {
-        "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)),
-        "risk_grade": grade, "allowed_actions": allowed_actions(state["mode"], state.get("risk_level"),
-                                                                state.get("flags") or [], grade, holds),
+        "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)), "risk_grade": grade,
+        "allowed_actions": allowed_actions(*profile, holds, volatility),
+        "buy_block_reason": buy_block_reason(*profile, volatility),
         "verifications": [], "revision_round": 0,
     }
 
@@ -327,7 +377,8 @@ def invest_agent_node(state: InvestState) -> dict:
     draft = llm.write_proposal(invest_context(state)).model_dump()
     if draft["action"] not in state["allowed_actions"]:
         # 성향 규칙은 AI가 아니라 코드가 지킨다
-        draft["risks"].append(f"성향 규칙에 따라 '{ACTION_LABELS[draft['action']]}' 대신 '관찰'로 바꿨어요.")
+        reason = f" ({state['buy_block_reason']})" if draft["action"] == "buy" and state.get("buy_block_reason") else ""
+        draft["risks"].append(f"성향 규칙에 따라 '{ACTION_LABELS[draft['action']]}' 대신 '관찰'로 바꿨어요{reason}.")
         draft["action"] = "watch"
     return {"proposal": {**draft, "stock_code": state["stock_code"], "stock_name": state["stock_name"],
                          "qty": None, "limit_price": None, "user_directed": False}}

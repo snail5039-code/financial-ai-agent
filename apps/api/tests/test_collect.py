@@ -36,6 +36,7 @@ def test_collect_prices_marks_top_by_market_cap_on_latest_day(conn, monkeypatch)
         price_row("111111", "작은회사", new, 1000, 10_000),
         price_row("222222", "큰회사", new, 5000, 900_000),
         price_row("333333", "어제만큰회사", old, 9000, 9_000_000),  # 최신일이 아니라 순위에서 빠진다
+        price_row("222225", "큰회사우", new, 5000, 950_000),       # 우선주: OpenDART에 없어서 빠진다
     ]
 
     def fake_daily_prices(api_key, begin, end, stock_code=None):
@@ -44,7 +45,7 @@ def test_collect_prices_marks_top_by_market_cap_on_latest_day(conn, monkeypatch)
     monkeypatch.setattr(market_data, "daily_prices", fake_daily_prices)
     monkeypatch.setattr(collect, "TARGET_COUNT", 1)
 
-    assert collect.collect_prices(conn, "key", new) == ["222222"]
+    assert collect.collect_prices(conn, "key", new, eligible={"111111", "222222", "333333"}) == ["222222"]
     targets = conn.execute("SELECT code FROM stocks WHERE is_target").fetchall()
     assert [t["code"] for t in targets] == ["222222"]
     assert conn.execute("SELECT close FROM stock_prices WHERE stock_code = '222222'").fetchone()["close"] == 5000
@@ -90,3 +91,29 @@ def test_sections_of_extracts_titles_and_plain_text() -> None:
         ("I. 회사의 개요", "I. 회사의 개요 개요"),
         ("II. 사업의 내용", "II. 사업의 내용 메모리 & 파운드리 매출"),
     ]
+
+
+def test_seconds_until_next_run() -> None:
+    from datetime import datetime
+
+    from app.clock import KST
+    assert collect.seconds_until(15, datetime(2026, 10, 6, 14, 0, tzinfo=KST)) == 3600
+    assert collect.seconds_until(15, datetime(2026, 10, 6, 15, 0, tzinfo=KST)) == 24 * 3600  # 정각이면 다음 날
+    assert collect.seconds_until(15, datetime(2026, 10, 6, 16, 30, tzinfo=KST)) == 22.5 * 3600
+
+
+def test_run_daily_stops_when_asked(monkeypatch) -> None:
+    import threading
+    calls = []
+    monkeypatch.setattr(collect, "seconds_until", lambda hour, now: 0)
+    stop = threading.Event()
+
+    def fake_run():
+        calls.append(1)
+        if len(calls) == 2:
+            stop.set()
+        raise RuntimeError("하루 실패해도 계속")
+
+    monkeypatch.setattr(collect, "run", fake_run)
+    collect.run_daily(stop, 15)
+    assert len(calls) == 2

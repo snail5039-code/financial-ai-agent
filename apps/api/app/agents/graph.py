@@ -20,7 +20,7 @@ from app.agents.state import Context, InvestState
 GUIDE_MESSAGE = (
     "이렇게 말해 보세요.\n"
     "- 잔고 보여줘\n"
-    "- 삼성전자 얼마야? (앱에서)\n"
+    "- 삼성전자 얼마야?\n"
     "- 오늘 주문 내역 보여줘\n"
     "- 삼성전자 사도 돼?"
 )

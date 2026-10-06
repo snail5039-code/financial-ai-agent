@@ -30,14 +30,14 @@ def ratio_pct(numerator: int, denominator: int) -> Decimal:
 
 
 def per(market_cap: int, net_income: int, inputs: list[str]) -> dict:
-    formula = "시가총액 ÷ 당기순이익 (최근 사업보고서, 연결)"
+    formula = "시가총액 ÷ 최근 4개 분기 당기순이익 (연결, 비지배지분 포함)"
     if net_income <= 0:
         return metric("per", None, "배", formula, inputs, "순이익이 0 이하라 계산할 수 없음")
     return metric("per", Decimal(market_cap) / Decimal(net_income), "배", formula, inputs)
 
 
 def pbr(market_cap: int, equity: int, inputs: list[str]) -> dict:
-    formula = "시가총액 ÷ 자본총계 (최근 사업보고서, 연결)"
+    formula = "시가총액 ÷ 자본총계 (최근 정기보고서, 연결)"
     if equity <= 0:
         return metric("pbr", None, "배", formula, inputs, "자본이 0 이하라 계산할 수 없음")
     return metric("pbr", Decimal(market_cap) / Decimal(equity), "배", formula, inputs)

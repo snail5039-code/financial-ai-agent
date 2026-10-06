@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 import pytest
 
-from app.functions.suitability import allowed_actions, stock_risk_grade
+from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk_grade
 
 
 def test_general_mode_only_watches() -> None:
@@ -28,3 +30,18 @@ def test_sell_and_hold_only_when_holding() -> None:
 
 def test_domestic_stock_is_grade_2() -> None:
     assert stock_risk_grade("005930") == 2
+
+
+@pytest.mark.parametrize(
+    "level, volatility, can_buy",
+    [(3, "40", True), (3, "40.01", False), (4, "57.73", True), (4, "60.01", False), (5, "200", True), (4, None, True)],
+)
+def test_volatility_limit_for_buy(level: int, volatility: str | None, can_buy: bool) -> None:
+    vol = Decimal(volatility) if volatility else None
+    assert ("buy" in allowed_actions("custom", level, [], 2, holds_stock=False, volatility=vol)) is can_buy
+
+
+def test_block_reason_explains_volatility() -> None:
+    reason = buy_block_reason("custom", 3, [], 2, Decimal("57.73"))
+    assert reason == "20일 변동성 57.73%가 위험중립형 한도 40%보다 큼"
+    assert buy_block_reason("custom", 5, [], 2, Decimal("57.73")) is None

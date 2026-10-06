@@ -6,7 +6,7 @@
     └─ orders  → read_orders
 
 - 잔고·현재가는 서버가 직접 볼 수 없다 (증권사 키가 폰에만 있음). 앱이면 fetch로 멈춰 폰에 부탁하고,
-  웹이면 폰이 올려 둔 계좌 스냅샷을 쓴다. 웹은 현재가를 볼 수 없다 (서버 시세 출처는 4단계에서 정함).
+  웹이면 폰이 올려 둔 계좌 스냅샷을 쓴다. 웹의 시세는 서버의 전일 종가(공개 데이터)로 답한다.
 - 답 문장은 코드가 만든다. 금액은 원 단위 정수 그대로, 출처와 기준 시각을 붙인다 (AGENTS.md 5장).
 """
 
@@ -28,7 +28,7 @@ STATUS_LABELS = {
     "accepted": "접수", "filled": "체결", "partially_filled": "일부 체결",
     "failed": "실패", "unknown_checked": "확인 필요",
 }
-WEB_PRICE_MESSAGE = "웹에서는 현재가를 볼 수 없어요. 폰 앱에서 확인해 주세요."
+WEB_PRICE_MESSAGE = "웹에서는 실시간 현재가를 볼 수 없고, 이 종목은 서버에 종가 자료도 없어요. 폰 앱에서 확인해 주세요."
 SYNC_MESSAGE = "최근 30분 안에 동기화된 계좌 정보가 없어요. 폰 앱을 열어 동기화해 주세요."
 
 
@@ -117,7 +117,14 @@ def get_market_node(state: InvestState, runtime: Runtime[Context]) -> dict:
 
     if state["client"] == "web":
         if kind == "price":
-            return {"answer": WEB_PRICE_MESSAGE}
+            # 웹은 실시간 현재가가 없어서 서버의 전일 종가(공개 데이터)로 답한다
+            with connect(runtime.context.database_url, row_factory=dict_row) as conn:
+                last = conn.execute("SELECT trade_date, close FROM stock_prices WHERE stock_code = %s"
+                                    " ORDER BY trade_date DESC LIMIT 1", (state["stock_code"],)).fetchone()
+            if last is None:
+                return {"answer": WEB_PRICE_MESSAGE}
+            return {"answer": f"{state['stock_name']}({state['stock_code']}) 최근 종가 {won(last['close'])} "
+                              f"(금융위원회_주식시세정보, {last['trade_date']} 기준). 실시간 현재가는 폰 앱에서 볼 수 있어요."}
         with connect(runtime.context.database_url, row_factory=dict_row) as conn:
             snapshot = latest_snapshot(conn, state["user_id"])
         if snapshot is None or datetime.now(KST) - snapshot["fetched_at"] > SNAPSHOT_MAX_AGE:

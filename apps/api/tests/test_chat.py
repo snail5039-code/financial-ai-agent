@@ -215,8 +215,16 @@ def test_web_old_snapshot_asks_to_sync(client, user) -> None:
     assert first(chat(client, user, "잔고 보여줘", "web"), "message")["text"] == SYNC_MESSAGE
 
 
-def test_web_price_is_not_available(client, user) -> None:
+def test_web_price_without_server_data(client, user) -> None:
     assert first(chat(client, user, "삼성전자 얼마야?", "web"), "message")["text"] == WEB_PRICE_MESSAGE
+
+
+def test_web_price_uses_last_close(client, user, migrated) -> None:
+    with psycopg.connect(migrated) as conn:
+        conn.execute("INSERT INTO stock_prices VALUES ('000660', '2026-10-01', 1833000, 1000000000, 1000)"
+                     " ON CONFLICT DO NOTHING")
+    text = first(chat(client, user, "SK하이닉스 얼마야?", "web"), "message")["text"]
+    assert "SK하이닉스(000660) 최근 종가 1,833,000원" in text and "2026-10-01 기준" in text
 
 
 # ---------- 시세: 종목 찾기 → fetch ----------

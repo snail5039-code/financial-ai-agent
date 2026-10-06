@@ -5,11 +5,14 @@
 3. 공시 (OpenDART): 최근 1년 공시 목록, 최신 정기보고서의 "사업의 내용"·"경영진단" 본문 → 조각 → 임베딩
 
 여러 번 실행해도 된다. 받은 값은 덮어쓰고, 이미 조각낸 공시는 건너뛴다.
+서버를 띄워 두면 매일 AUTO_COLLECT_HOUR시(기본 15시, KST)에 자동으로 실행한다 (app/main.py).
     --skip-prices   1단계를 건너뛰고 지금 분석 대상 종목으로만 (시세 키가 아직 안 될 때)
     --codes A,B     이 종목들만 (stocks에 이미 있어야 함)
 """
 
 import argparse
+import logging
+import threading
 from datetime import datetime, timedelta
 
 import psycopg
@@ -37,10 +40,12 @@ def amount(text: str | None) -> int | None:
 
 # ---------- 1. 시세 ----------
 
-def collect_prices(conn: psycopg.Connection, api_key: str, today) -> list[str]:
+def collect_prices(conn: psycopg.Connection, api_key: str, today, eligible: set[str]) -> list[str]:
+    """eligible: OpenDART에 회사가 있는 종목 코드. 우선주(예: 삼성전자우)는 재무·공시가 따로 없어서 뺀다."""
     recent = market_data.daily_prices(api_key, today - timedelta(days=10), today)
     latest = max(row["trade_date"] for row in recent)
-    top = sorted((r for r in recent if r["trade_date"] == latest), key=lambda r: r["market_cap"], reverse=True)
+    top = sorted((r for r in recent if r["trade_date"] == latest and r["stock_code"] in eligible),
+                 key=lambda r: r["market_cap"], reverse=True)
     top = top[:TARGET_COUNT]
     print(f"[시세] {latest} 기준 시가총액 상위 {len(top)}개")
 
@@ -74,12 +79,14 @@ def collect_financials(conn: psycopg.Connection, api_key: str, code: str, corp_c
         for reprt_code in opendart.REPORT_CODES:
             for row in opendart.major_accounts(corp_code, bsns_year, reprt_code, api_key):
                 conn.execute(
-                    "INSERT INTO financials (stock_code, bsns_year, reprt_code, fs_div, account, amount, prev_amount, rcept_no)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                    "INSERT INTO financials (stock_code, bsns_year, reprt_code, fs_div, account, amount, prev_amount,"
+                    " add_amount, prev_add_amount, rcept_no) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                     " ON CONFLICT (stock_code, bsns_year, reprt_code, fs_div, account) DO UPDATE"
-                    " SET amount = EXCLUDED.amount, prev_amount = EXCLUDED.prev_amount, rcept_no = EXCLUDED.rcept_no",
+                    " SET amount = EXCLUDED.amount, prev_amount = EXCLUDED.prev_amount, add_amount = EXCLUDED.add_amount,"
+                    " prev_add_amount = EXCLUDED.prev_add_amount, rcept_no = EXCLUDED.rcept_no",
                     (code, bsns_year, reprt_code, row["fs_div"], row["account_nm"],
-                     amount(row.get("thstrm_amount")), amount(row.get("frmtrm_amount")), row["rcept_no"]),
+                     amount(row.get("thstrm_amount")), amount(row.get("frmtrm_amount")),
+                     amount(row.get("thstrm_add_amount")), amount(row.get("frmtrm_add_amount")), row["rcept_no"]),
                 )
                 count += 1
     return count
@@ -129,26 +136,22 @@ def collect_disclosures(conn: psycopg.Connection, api_key: str, code: str, corp_
 
 # ---------- 실행 ----------
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="분석용 시세·재무·공시 수집")
-    parser.add_argument("--skip-prices", action="store_true")
-    parser.add_argument("--codes", help="쉼표로 구분한 종목 코드")
-    args = parser.parse_args()
+def run(codes: list[str] | None = None, skip_prices: bool = False) -> None:
     if not config.OPENDART_API_KEY:
         raise SystemExit("OPENDART_API_KEY가 비어 있습니다 (apps/api/.env)")
     today = datetime.now(KST).date()
 
     with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
-        if args.codes:
-            codes = args.codes.split(",")
-        elif args.skip_prices:
+        corp_of = opendart.corp_codes(config.OPENDART_API_KEY)
+        if codes:
+            pass
+        elif skip_prices:
             codes = [row["code"] for row in conn.execute("SELECT code FROM stocks WHERE is_target")]
         else:
             if not config.DATA_GO_KR_API_KEY:
                 raise SystemExit("DATA_GO_KR_API_KEY가 비어 있습니다 (apps/api/.env)")
-            codes = collect_prices(conn, config.DATA_GO_KR_API_KEY, today)
+            codes = collect_prices(conn, config.DATA_GO_KR_API_KEY, today, set(corp_of))
 
-        corp_of = opendart.corp_codes(config.OPENDART_API_KEY)
         for code in codes:
             name = conn.execute("SELECT name FROM stocks WHERE code = %s", (code,)).fetchone()
             if name is None or code not in corp_of:
@@ -158,6 +161,33 @@ def main() -> None:
             summary = collect_disclosures(conn, config.OPENDART_API_KEY, code, corp_of[code], today)
             conn.commit()
             print(f"[재무·공시] {name['name']}({code}) 재무 {financial_rows}줄, {summary}")
+
+
+# ---------- 매일 자동 실행 ----------
+
+def seconds_until(hour: int, now: datetime) -> float:
+    """now 다음에 오는 hour시 정각까지 남은 초."""
+    target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+def run_daily(stop: threading.Event, hour: int) -> None:
+    """서버가 켜져 있는 동안 매일 hour시에 수집한다. stop이 켜지면 끝난다."""
+    while not stop.wait(seconds_until(hour, datetime.now(KST))):
+        try:
+            run()
+        except (Exception, SystemExit):  # 하루 실패해도 서버는 계속 돌고 다음 날 다시 한다
+            logging.getLogger(__name__).exception("자동 수집 실패")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="분석용 시세·재무·공시 수집")
+    parser.add_argument("--skip-prices", action="store_true")
+    parser.add_argument("--codes", help="쉼표로 구분한 종목 코드")
+    args = parser.parse_args()
+    run(args.codes.split(",") if args.codes else None, args.skip_prices)
 
 
 if __name__ == "__main__":

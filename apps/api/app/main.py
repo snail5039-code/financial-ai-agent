@@ -1,3 +1,4 @@
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,7 +8,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from app import config
+from app import collect, config
 from app.agents.graph import build_graph
 from app.db import connect
 from app.routers import auth, chat, policy, snapshot
@@ -24,12 +25,18 @@ async def lifespan(app: FastAPI):
         checkpointer = PostgresSaver(pool)
         checkpointer.setup()
         app.state.graph = build_graph(checkpointer)
+        stop = threading.Event()
+        if app.state.auto_collect_hour is not None:
+            threading.Thread(target=collect.run_daily, args=(stop, app.state.auto_collect_hour), daemon=True).start()
         yield
+        stop.set()
 
 
-def create_app(database_url: str | None = None) -> FastAPI:
+def create_app(database_url: str | None = None, auto_collect_hour: int | None = None) -> FastAPI:
+    """auto_collect_hour: 매일 이 시각에 분석용 데이터 수집 (None이면 안 함. 테스트는 안 함)."""
     app = FastAPI(title="invest-agent-api", lifespan=lifespan)
     app.state.database_url = database_url or config.DATABASE_URL
+    app.state.auto_collect_hour = auto_collect_hour
     for module in (auth, policy, chat, snapshot):
         app.include_router(module.router)
 
@@ -53,4 +60,4 @@ def create_app(database_url: str | None = None) -> FastAPI:
     return app
 
 
-app = create_app()
+app = create_app(auto_collect_hour=None if config.AUTO_COLLECT_HOUR == "off" else int(config.AUTO_COLLECT_HOUR))

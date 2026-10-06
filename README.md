@@ -52,6 +52,8 @@ uv --directory apps/api run uvicorn app.main:app --port 8000
 uv --directory apps/api run python -m app.collect
 ```
 
+서버를 띄워 두면 매일 15시(KST)에 자동으로 수집한다. 시각은 `.env`의 `AUTO_COLLECT_HOUR`로 바꾸고, `off`면 끈다.
+
 http://localhost:8000/api/health 가 `{"status":"ok","db":"ok"}`면 정상이다. DB에 연결되지 않으면 503과 `"db":"error"`를 돌려준다.
 
 ## 테스트
