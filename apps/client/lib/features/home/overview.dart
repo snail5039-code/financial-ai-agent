@@ -65,6 +65,9 @@ Future<Overview> loadOverview() async {
 /// 한국 날짜 "2026-10-07" (브리핑이 오늘 것인지 볼 때)
 String kstToday() => DateTime.now().toUtc().add(const Duration(hours: 9)).toIso8601String().substring(0, 10);
 
+/// 서버 시각(ISO) → 한국 날짜 "2026-10-07"
+String toKstDate(String iso) => DateTime.parse(iso).toUtc().add(const Duration(hours: 9)).toIso8601String().substring(0, 10);
+
 List<Map<String, dynamic>> holdingsOf(Map<String, dynamic> balance) => (balance['holdings'] as List).cast<Map<String, dynamic>>();
 
 /// 현재가: 마지막 잔고 조회에서 받은 값, 없으면(웹) 평균 매입가로 본다
@@ -93,10 +96,11 @@ String sourceOf(Map<String, dynamic> balance) {
 
 /// 링 3개: 오늘 한도 사용(주황), 규칙에 걸린 요청 없는 날(초록), 분산(파랑)
 class RingsCard extends StatelessWidget {
-  const RingsCard({super.key, required this.overview, this.onTap, this.big = false});
+  const RingsCard({super.key, required this.overview, this.onTap, this.big = false, this.showTotal = true});
   final Overview overview;
   final VoidCallback? onTap;
   final bool big;
+  final bool showTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +132,7 @@ class RingsCard extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (t != null) ...[
+                if (t != null && showTotal) ...[
                   const Text('총 자산', style: TextStyle(fontSize: 12, color: mutedText)),
                   FittedBox(
                     fit: BoxFit.scaleDown,

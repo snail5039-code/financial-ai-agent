@@ -165,6 +165,16 @@ class KisMockBroker implements Broker {
   }
 
   @override
+  Future<int> buyingPower() async {
+    // 매수가능조회는 종목을 받지만 주문가능현금(ord_psbl_cash)은 종목과 상관없다. 시장가(01) 기준으로 묻는다
+    final data = await _call('GET', '/uapi/domestic-stock/v1/trading/inquire-psbl-order', 'VTTC8908R', query: {
+      'CANO': keys.cano, 'ACNT_PRDT_CD': keys.productCode, 'PDNO': '005930', 'ORD_UNPR': '', 'ORD_DVSN': '01',
+      'CMA_EVLU_AMT_ICLD_YN': 'N', 'OVRS_ICLD_YN': 'N',
+    });
+    return _int((data['output'] as Map?)?['ord_psbl_cash']);
+  }
+
+  @override
   Future<List<BrokerOrder>> todayOrders(String stockCode) async {
     final kst = DateTime.now().toUtc().add(const Duration(hours: 9));
     final today = '${kst.year}${kst.month.toString().padLeft(2, '0')}${kst.day.toString().padLeft(2, '0')}';
@@ -179,6 +189,8 @@ class KisMockBroker implements Broker {
       for (final r in (data['output1'] as List? ?? []).cast<Map<String, dynamic>>())
         (
           orderNo: '${r['odno']}',
+          stockCode: '${r['pdno']}',
+          stockName: '${r['prdt_name']}',
           side: r['sll_buy_dvsn_cd'] == '01' ? 'sell' : 'buy',
           qty: _int(r['ord_qty']),
           price: _int(r['ord_unpr']),

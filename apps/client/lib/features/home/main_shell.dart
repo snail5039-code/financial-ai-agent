@@ -1,4 +1,4 @@
-// 로그인 뒤 하단 탭 (디자인 H안): 채팅 / 오늘 / 기록 / 더보기
+// 로그인 뒤 하단 탭 (디자인 H안): 채팅 / 자산 / 기록 / 더보기
 // 대화는 채팅 탭의 "투자 비서" 방에서 연다 (폰은 새 화면, 넓은 화면은 목록 오른쪽).
 
 import 'package:flutter/material.dart';
@@ -34,7 +34,7 @@ class _MainShellState extends State<MainShell> {
 
   static const _menu = [
     (Icons.chat_bubble_outline, Icons.chat_bubble, '채팅'),
-    (Icons.track_changes_outlined, Icons.track_changes, '오늘'),
+    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet, '자산'),
     (Icons.bar_chart_outlined, Icons.bar_chart, '기록'),
     (Icons.menu, Icons.menu, '더보기'),
   ];

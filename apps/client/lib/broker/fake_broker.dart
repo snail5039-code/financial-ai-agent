@@ -89,11 +89,16 @@ class FakeBroker implements Broker {
       }
     }
     final orderNo = 'FAKE-${DateTime.now().millisecondsSinceEpoch}';
-    _orders.add((orderNo: orderNo, side: side, qty: qty, price: price, filledQty: qty, filledPrice: price,
+    _orders.add((orderNo: orderNo, stockCode: stockCode, stockName: nameOf(stockCode), side: side, qty: qty, price: price,
+        filledQty: qty, filledPrice: price,
         time: kstHhmmss(DateTime.now())));
     return (orderNo: orderNo, filledQty: qty, filledPrice: price);
   }
 
   @override
-  Future<List<BrokerOrder>> todayOrders(String stockCode) async => _orders;
+  Future<List<BrokerOrder>> todayOrders(String stockCode) async =>
+      [for (final o in _orders) if (stockCode.isEmpty || o.stockCode == stockCode) o];
+
+  @override
+  Future<int> buyingPower() async => cash; // 가짜 증권사는 바로 결제된다
 }

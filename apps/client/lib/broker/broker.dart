@@ -18,8 +18,11 @@ class BrokerError implements Exception {
   String toString() => message;
 }
 
-/// 증권사 주문 내역 한 줄
-typedef BrokerOrder = ({String orderNo, String side, int qty, int price, int filledQty, int? filledPrice, String time});
+/// 증권사 주문 내역 한 줄 (time은 한국 시각 "HHmmss")
+typedef BrokerOrder = ({
+  String orderNo, String stockCode, String stockName, String side, int qty, int price, int filledQty, int? filledPrice,
+  String time,
+});
 
 abstract class Broker {
   String get name;
@@ -35,8 +38,11 @@ abstract class Broker {
   /// 지정가 주문. 접수되면 주문번호. 거절이면 BrokerError, 그 밖의 예외(시간 초과 등)는 "접수됐는지 모름"
   Future<({String orderNo, int filledQty, int? filledPrice})> order(String side, String stockCode, int qty, int price);
 
-  /// 오늘 이 종목 주문 내역 (응답이 불확실할 때 다시 주문하지 않고 먼저 확인한다, FR-28)
+  /// 오늘 이 종목 주문 내역 (응답이 불확실할 때 다시 주문하지 않고 먼저 확인한다, FR-28). 빈 문자열이면 전체 종목
   Future<List<BrokerOrder>> todayOrders(String stockCode);
+
+  /// 지금 주문에 쓸 수 있는 현금 (예수금은 결제 전 금액이라 다르다). 자산 화면용
+  Future<int> buyingPower();
 }
 
 /// 지금 고른 증권사. 웹이나 연결 전이면 null

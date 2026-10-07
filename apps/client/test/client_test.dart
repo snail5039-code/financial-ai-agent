@@ -242,6 +242,20 @@ void main() {
       expect(sent.where((r) => r.headers['tr_id'] == 'VTTC0081R').length, 1); // 같은 종목은 한 번만 조회
     });
 
+    test('자산: 주문 가능 금액과 전체 종목 오늘 주문', () async {
+      final b = kis((request) async => request.url.path.endsWith('inquire-psbl-order')
+          ? jsonResponse({'rt_cd': '0', 'output': {'ord_psbl_cash': '9777600'}})
+          : jsonResponse({'rt_cd': '0', 'output1': [
+              {'odno': '0000010734', 'pdno': '000270', 'prdt_name': '기아', 'sll_buy_dvsn_cd': '02', 'ord_qty': '2',
+               'ord_unpr': '111400', 'tot_ccld_qty': '2', 'avg_prvs': '111200', 'ord_tmd': '093514'},
+            ]}));
+      expect(await b.buyingPower(), 9777600);
+      expect(sent.last.headers['tr_id'], 'VTTC8908R');
+      final [order] = await b.todayOrders('');
+      expect((order.stockName, order.stockCode, order.filledQty, order.filledPrice), ('기아', '000270', 2, 111200));
+      expect(sent.last.url.queryParameters['PDNO'], ''); // 전체 종목
+    });
+
     test('계좌번호 형식이 틀리면 저장하지 않는다', () {
       expect(() => BrokerKeys(appKey: 'a', appSecret: 'b', account: '1234'), throwsFormatException);
       expect(BrokerKeys(appKey: 'a', appSecret: 'b', account: '50123456').productCode, '01'); // 8자리만 넣으면 01
