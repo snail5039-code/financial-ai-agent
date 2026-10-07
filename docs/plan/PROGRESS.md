@@ -1,6 +1,6 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-06 · 다음 할 일: **7단계 나머지 — KIS 모의 키로 실제 주문 확인** (사용자 키 발급 대기)
+마지막 갱신: 2026-10-06 · 다음 할 일: 7단계 KB 조회(KB 키 필요) 또는 투자 용어 RAG (11번 문서)
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
@@ -22,7 +22,7 @@
 | 5 | 주문 그래프: 처리안 → 승인 → 폰 실행(execute) → 기록, 승인·기록 API | ✅ | `70ed1e3` |
 | — | 개발 환경: Flutter, Android SDK, 에뮬레이터 설치 | ✅ | `51832f9` |
 | 6 | Flutter 앱 뼈대: 화면 8종, 대화·멈춤 처리, 가짜 증권사 | ✅ | `2623ba3` + 마무리 |
-| 7 | **증권사 연결 (KIS 모의 주문, KB 조회)** | 🔶 키 없이 할 부분 완료 (어댑터·연결 화면·주문 실행), KIS 키 대기 | |
+| 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결 확인 완료 (2026-10-07), KB 조회 남음 | |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | ⬜ | |
 
 서버 테스트 226개 통과, Flutter 테스트 17개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
@@ -41,7 +41,7 @@
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
 | 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
 
-앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사: KIS 모의 어댑터(`broker/kis_mock_broker.dart`)와 연결 화면은 있음. 키가 아직 없어서 디버그 빌드는 가짜 증권사(`broker/fake_broker.dart`)를 기본으로 쓴다.
+앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사: KIS 모의(`broker/kis_mock_broker.dart`)로 실제 주문·체결 확인. 개발 키는 `apps/client/dev_keys.env`(git 제외, 양식 `dev_keys.example.env`)를 `--dart-define-from-file=dev_keys.env`로 넘긴다. 키가 없으면 디버그 빌드는 가짜 증권사를 쓴다.
 
 API 형식: [06-api-spec.md](06-api-spec.md). 멈춤 4종류 `question` / `fetch` / `approval` / `execute`의 형식은 06 문서 3장과 `agents/interrupts.py`.
 
@@ -67,7 +67,7 @@ uv --directory apps/api run pytest
 앱 (Android 에뮬레이터, 서버는 `10.0.2.2:8000`으로 접속):
 
 ```bash
-cd apps/client && flutter run -d emulator-5554 --no-enable-impeller
+cd apps/client && flutter run -d emulator-5554 --no-enable-impeller --dart-define-from-file=dev_keys.env
 ```
 
 웹 (`.claude/launch.json`의 `web`, http://localhost:5000): `.env`에 `CORS_ORIGINS=http://localhost:5000` 필요
@@ -110,6 +110,7 @@ cd apps/client && flutter run -d emulator-5554 --no-enable-impeller
 - Python heredoc으로 파일을 고칠 때 `"\n"`, `\U`가 실제 줄바꿈·이스케이프로 바뀌는 문제가 있었다 → 파일 수정은 Edit 도구 사용
 - 주문 장 시간 검사는 실제 시계를 쓴다 → 장이 닫힌 시간에 실제 확인할 때는 테스트처럼 `app.clock.now`를 고정한다
 - 에뮬레이터에서 Impeller(기본 그래픽)로 그리면 탭을 바꿔도 본문이 이전 화면으로 남는 현상이 있다 (앱 문제 아님). `--no-enable-impeller`로 실행하거나, 설치한 앱은 `adb shell am start -n com.investagent.invest_client/.MainActivity --ez enable-impeller false`
+- KIS 연결 점검: `python tools/kis_mock_check.py` (90070000이면 HTS 아이디 변경 등 KIS 계정 연결 문제 → 모의투자·Open API 재신청). 에뮬레이터에는 PIN 잠금이 있어야 주문 전 잠금 확인이 된다
 - 에뮬레이터 화면 조작은 `adb shell input tap/text` (한글 입력은 안 됨 → 추천 질문 칩을 누른다)
 - 장이 닫힌 시간에 주문 흐름을 확인하려면 `.env`에 `MARKET_CLOCK=10:00` (주말·휴장일이면 직전 거래일로 봄, 운영에서는 비운다). 테스트는 이 값을 무시한다
 - 테스트는 `invest_test` DB를 새로 만들어 쓴다 (개발 DB `invest`는 안 건드림). Gemini는 가짜로 바꿔 끼워 비용 0

@@ -12,6 +12,7 @@ import '../../secure/key_store.dart';
 /// 저장된 선택으로 증권사를 정한다 (앱을 켤 때). 디버그 빌드는 아무것도 연결 안 했으면 가짜 증권사를 쓴다
 Future<void> loadBroker() async {
   if (kIsWeb) return;
+  await _saveDevKeys();
   final choice = await secureBox.read('broker_choice') ?? (kDebugMode ? 'fake' : null);
   final keys = await BrokerKeys.load(secureBox);
   currentBroker.value = switch (choice) {
@@ -19,6 +20,22 @@ Future<void> loadBroker() async {
     'fake' when kDebugMode => FakeBroker(),
     _ => null,
   };
+}
+
+// 개발용 모의 키: apps/client/dev_keys.json (git 제외)을 --dart-define-from-file로 넘기면 디버그 빌드에서만 쓴다.
+// 저장된 키가 없을 때 한 번 폰 보안 저장소에 넣고 KIS 모의투자로 연결한다. 서버로는 보내지 않는다
+const _devAppKey = String.fromEnvironment('KIS_APP_KEY');
+const _devAppSecret = String.fromEnvironment('KIS_APP_SECRET');
+const _devAccount = String.fromEnvironment('KIS_ACCOUNT');
+
+Future<void> _saveDevKeys() async {
+  if (!kDebugMode || _devAppKey.isEmpty || _devAppSecret.isEmpty) return;
+  final saved = await BrokerKeys.load(secureBox);
+  if (saved != null && saved.appKey == _devAppKey && saved.appSecret == _devAppSecret && saved.account == _devAccount) return;
+  // 파일 값을 고쳤으면 새 값으로 바꾼다. 다른 키의 접속 토큰도 버린다
+  await BrokerKeys.delete(secureBox);
+  await BrokerKeys(appKey: _devAppKey, appSecret: _devAppSecret, account: _devAccount).save(secureBox);
+  await secureBox.write('broker_choice', 'kis_mock');
 }
 
 class BrokerPage extends StatefulWidget {

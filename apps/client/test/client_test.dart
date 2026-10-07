@@ -222,6 +222,7 @@ void main() {
 
     test('계좌번호 형식이 틀리면 저장하지 않는다', () {
       expect(() => BrokerKeys(appKey: 'a', appSecret: 'b', account: '1234'), throwsFormatException);
+      expect(BrokerKeys(appKey: 'a', appSecret: 'b', account: '50123456').productCode, '01'); // 8자리만 넣으면 01
     });
   });
 }

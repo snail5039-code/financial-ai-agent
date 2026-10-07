@@ -12,6 +12,8 @@ import 'broker.dart';
 
 const kisMockBaseUrl = 'https://openapivts.koreainvestment.com:29443';
 const _timeout = Duration(seconds: 10);
+// 모의투자는 초당 호출 수가 적다 ("초당 거래건수를 초과" 오류). 호출 사이를 이만큼 띄운다
+const _minGap = Duration(milliseconds: 550);
 
 class KisMockBroker implements Broker {
   KisMockBroker(this.keys, {http.Client? client, SecureBox? box})
@@ -23,6 +25,7 @@ class KisMockBroker implements Broker {
   final SecureBox _box;
   String? _token;
   DateTime? _tokenExpires;
+  Future<void> _lastCall = Future.value();
 
   /// 마지막 잔고 조회에서 받은 현재가 (홈 화면 평가금액용)
   @override
@@ -86,6 +89,12 @@ class KisMockBroker implements Broker {
   Future<Map<String, dynamic>> _call(String method, String path, String trId,
       {Map<String, String>? query, Map<String, String>? body}) async {
     final token = await _accessToken();
+    // 앞 호출이 끝난 뒤 _minGap만큼 기다렸다 보낸다 (동시에 불려도 차례로)
+    final previous = _lastCall;
+    final turn = Completer<void>();
+    _lastCall = turn.future;
+    await previous;
+    Future.delayed(_minGap, turn.complete);
     final request = http.Request(method, Uri.parse('$kisMockBaseUrl$path').replace(queryParameters: query))
       ..headers.addAll({
         'content-type': 'application/json; charset=utf-8',

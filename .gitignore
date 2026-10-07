@@ -37,3 +37,6 @@ temp/
 test-results/
 playwright-report/
 docs/plan/**/*.png
+
+# KIS 점검 도구의 토큰 캐시
+tools/.kis_token_cache.json

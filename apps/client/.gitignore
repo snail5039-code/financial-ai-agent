@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# 개발용 증권사 모의 키 (앱 전용 env). 커밋하지 않는다
+dev_keys.env

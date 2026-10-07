@@ -32,12 +32,12 @@ class SecureBox {
 
 final secureBox = SecureBox();
 
-/// KIS 계좌번호는 "앞 8자리-뒤 2자리"(종합계좌번호-상품코드)
-final accountPattern = RegExp(r'^(\d{8})-?(\d{2})$');
+/// KIS 계좌번호는 "앞 8자리-뒤 2자리"(종합계좌번호-상품코드). 8자리만 넣으면 주식 계좌 상품코드 01로 본다
+final accountPattern = RegExp(r'^(\d{8})(?:-?(\d{2}))?$');
 
 class BrokerKeys {
   BrokerKeys({required this.appKey, required this.appSecret, required this.account}) {
-    if (!accountPattern.hasMatch(account)) throw const FormatException('계좌번호는 12345678-01 형식이에요');
+    if (!accountPattern.hasMatch(account)) throw const FormatException('계좌번호는 12345678-01 (또는 앞 8자리) 형식이에요');
   }
 
   final String appKey;
@@ -45,7 +45,7 @@ class BrokerKeys {
   final String account;
 
   String get cano => accountPattern.firstMatch(account)!.group(1)!;
-  String get productCode => accountPattern.firstMatch(account)!.group(2)!;
+  String get productCode => accountPattern.firstMatch(account)!.group(2) ?? '01';
 
   static Future<BrokerKeys?> load(SecureBox box) async {
     final appKey = await box.read('kis_app_key');
