@@ -18,11 +18,13 @@ class ChatItem {
 }
 
 class Conversation extends ChangeNotifier {
-  Conversation({this.threadId, this.waiting, this.stockCode, this.stockName});
+  Conversation({this.threadId, this.waiting, this.stockCode, this.stockName, this.unlock = phoneUnlock});
 
   String? threadId;
   final String? stockCode; // 종목 대화방이면 그 종목 (없으면 투자 비서)
   final String? stockName;
+  /// 주문 전 폰 잠금 확인. 모의투자 자동매매는 사용자가 켠 것으로 대신한다 (features/auto/auto_trader.dart)
+  final Future<bool> Function() unlock;
   final items = <ChatItem>[];
   String? progress; // "투자 AI 분석 중" 같은 진행 단계
   bool busy = false;
@@ -125,7 +127,7 @@ class Conversation extends ChangeNotifier {
   /// execute 멈춤: 가격 재확인 → 폰 잠금 확인 → 주문 → 결과. 승인 대기의 "실행 필요"에서도 부른다
   Future<void> executeWaiting() async {
     final request = waiting!['request'] as Map<String, dynamic>;
-    final result = await executeOrder(currentBroker.value, request, unlock: phoneUnlock, journal: orderJournal);
+    final result = await executeOrder(currentBroker.value, request, unlock: unlock, journal: orderJournal);
     await answer({'result': result});
   }
 

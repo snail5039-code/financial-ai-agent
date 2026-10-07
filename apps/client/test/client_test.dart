@@ -11,6 +11,7 @@ import 'package:invest_client/broker/fake_broker.dart';
 import 'package:invest_client/broker/kb_broker.dart';
 import 'package:invest_client/broker/kis_mock_broker.dart';
 import 'package:invest_client/common/common.dart';
+import 'package:invest_client/features/auto/auto_trader.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/secure/key_store.dart';
@@ -340,5 +341,13 @@ void main() {
     await expectLater(broker.balance(), throwsA(isA<BrokerError>()));
     await expectLater(broker.order('buy', '005930', 1, 276000), throwsA(isA<BrokerError>()));
     expect(sent.length, 4); // 잔고·주문은 KB로 아무것도 보내지 않았다
+  });
+
+  test('자동매매는 모의투자(가짜·KIS 모의)에서만 켤 수 있다', () {
+    final keys = BrokerKeys(appKey: 'a', appSecret: 'b', account: '12345678');
+    expect(AutoTrader.allowed(FakeBroker()), isTrue);
+    expect(AutoTrader.allowed(KisMockBroker(keys, box: SecureBox.memory())), isTrue);
+    expect(AutoTrader.allowed(KbBroker(keys, box: SecureBox.memory())), isFalse); // 실전 증권사
+    expect(AutoTrader.allowed(null), isFalse);
   });
 }

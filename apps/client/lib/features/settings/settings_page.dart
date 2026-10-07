@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../api/api.dart';
 import '../../common/common.dart';
 import '../approvals/approvals_page.dart';
+import '../auto/auto_page.dart';
+import '../auto/auto_trader.dart';
 import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
 import 'behavior_page.dart';
@@ -133,6 +135,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: () => Navigator.of(context).push(pageRoute(const ApprovalsPage(active: true))),
                 ),
               ),
+              if (!kIsWeb)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.smart_toy_outlined, color: brandBlue),
+                    title: const Text('모의 자동매매', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: ListenableBuilder(listenable: autoTrader, builder: (_, _) => Text(autoTrader.on ? '켜짐' : '꺼짐')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(pageRoute(const AutoTradePage())),
+                  ),
+                ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.insights_outlined, color: coachOrange),

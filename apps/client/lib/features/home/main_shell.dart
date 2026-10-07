@@ -1,9 +1,11 @@
 // 로그인 뒤 하단 탭 (디자인 H안): 채팅 / 자산 / 기록 / 더보기
 // 대화는 채팅 탭의 "투자 비서" 방에서 연다 (폰은 새 화면, 넓은 화면은 목록 오른쪽).
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../common/common.dart';
+import '../auto/auto_trader.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
 import '../history/history_page.dart';
@@ -21,6 +23,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
   final _conversation = Conversation(); // 탭을 바꿔도 대화가 남게 여기서 가진다
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) autoTrader.load().then((_) => autoTrader.start()); // 모의투자 자동매매 (켜져 있을 때만 산다)
+  }
 
   /// 투자 비서 대화 열기. text가 있으면 바로 보낸다 (오늘 탭의 추천 질문)
   void _openChat([String? text]) {
