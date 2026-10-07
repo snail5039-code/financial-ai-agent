@@ -35,6 +35,7 @@ from app.agents.query import end_if_answered, find_stock_node, won
 from app.agents.state import Context, InvestState
 from app.db import audit, connect
 from app.functions import orders
+from app.functions.behavior import behavior
 
 SIDE_LABELS = {"buy": "매수", "sell": "매도"}
 RESULT_LABELS = {
@@ -126,6 +127,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         market = conn.execute("SELECT market FROM stocks WHERE code = %s", (code,)).fetchone()["market"]
         closes = closes_of(conn, [h["stock_code"] for h in holdings])
         hot_rank, five_day_return = five_day_rank(conn, code)
+        habits = behavior(conn, state["user_id"]) if "frequent_trading" in state["flags"] else None
 
     result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.market_now(),
                                  ["snapshot"] if snapshot else [])
@@ -139,7 +141,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
               if h["stock_code"] != code and closes.get(h["stock_code"], h["avg_price"]) < h["avg_price"]]
     warnings = orders.coach_warnings(side, recent_trades, hot_rank, five_day_return, "chases_hot_stocks" in state["flags"],
                                      result["weight_after"], policy["max_weight_pct"], gain_pct, losers,
-                                     (fee or 0) + tax)
+                                     (fee or 0) + tax, hot_buys_habit="hot_buys" in state["flags"],
+                                     monthly_fills=habits and habits["fills"])
 
     confirm = []
     if state["mode"] != "custom":
@@ -149,7 +152,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     verification = state["verifications"][-1]
     if verification["verdict"] in ("reject", "user_judgement"):
         confirm.append(f"검증 AI 판정이 '{VERDICT_LABELS[verification['verdict']]}'이에요: {verification['summary']}")
-    if orders.needs_hot_confirm(warnings, "chases_hot_stocks" in state["flags"]):
+    # 퀴즈 답이든 실제 습관이든 급등주를 바로 사는 편이면 급등 매수 때 한 번 더 확인한다
+    if orders.needs_hot_confirm(warnings, bool({"chases_hot_stocks", "hot_buys"} & set(state["flags"]))):
         confirm.append("급등 직후 매수예요. 한 번 더 생각해 보셨나요?")
 
     card = {

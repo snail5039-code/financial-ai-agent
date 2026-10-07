@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.clock import KST
 from app.db import Conn, audit
+from app.functions.behavior import behavior
 from app.functions.profile import (
     DEFAULT_POLICIES,
     GENERAL_MODE_LEVEL,
@@ -71,11 +72,14 @@ def save_limits(conn: psycopg.Connection, user_id: UUID, limits: dict) -> None:
 
 
 def profile_summary(conn: psycopg.Connection, user_id: UUID) -> dict:
-    """대화 그래프에 넘길 성향 요약. 퀴즈 결과가 없거나 24개월이 지났으면 일반 모드."""
+    """대화 그래프에 넘길 성향 요약. 퀴즈 결과가 없거나 24개월이 지났으면 일반 모드.
+    flags에는 퀴즈 표시 값에 최근 매매 습관(functions/behavior.py)을 더한다. 성향 단계는 퀴즈 그대로다."""
     row = conn.execute(
         "SELECT risk_level, flags FROM investor_profiles WHERE user_id = %s AND expires_at > now()", (user_id,)
     ).fetchone()
-    return {"mode": "custom", **row} if row else {"mode": "general", "risk_level": None, "flags": []}
+    summary = {"mode": "custom", **row} if row else {"mode": "general", "risk_level": None, "flags": []}
+    habits = behavior(conn, user_id)["flags"]
+    return {**summary, "flags": list(dict.fromkeys([*summary["flags"], *habits]))}
 
 
 # ---------- 응답 만들기 ----------
@@ -124,6 +128,12 @@ def get_profile(conn: Conn, user_id: UserId) -> dict:
         "expires_at": row["expires_at"],
         "expired": not row["valid"],
     }
+
+
+@router.get("/profile/behavior")
+def get_behavior(conn: Conn, user_id: UserId) -> dict:
+    """내 투자 습관 (최근 30일). 성향 단계·한도는 바꾸지 않고 조심하는 쪽으로만 쓴다."""
+    return behavior(conn, user_id)
 
 
 @router.put("/profile")

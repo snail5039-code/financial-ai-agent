@@ -138,3 +138,10 @@ def test_market_clock_moves_to_last_trading_day(monkeypatch):
     assert orders.is_market_open(clock.market_now())
     monkeypatch.setattr(clock, "now", lambda: datetime(2026, 10, 6, 20, 0, tzinfo=KST))  # 거래일 밤
     assert clock.market_now() == datetime(2026, 10, 6, 10, 0, tzinfo=KST)  # 같은 날 10시
+
+
+def test_habit_warnings() -> None:
+    [text] = warnings(hot_rank=0.95, five_day_return=Decimal("18.5"), hot_buys_habit=True)
+    assert "급등 경고를 받고도 산 적이 여러 번" in text and "퀴즈에서" not in text
+    [text] = warnings(monthly_fills=12, cost_krw=1_500)
+    assert "최근 30일 동안 12건 체결" in text and "1,500원" in text

@@ -112,7 +112,8 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
 
 def coach_warnings(side: str, recent_trades: int, hot_rank: float | None, five_day_return: Decimal | None,
                    chases_hot_stocks: bool, weight_after: Decimal | None, max_weight_pct: Decimal,
-                   gain_pct: Decimal | None, losing_holdings: list[str], cost_krw: int | None) -> list[str]:
+                   gain_pct: Decimal | None, losing_holdings: list[str], cost_krw: int | None,
+                   hot_buys_habit: bool = False, monthly_fills: int | None = None) -> list[str]:
     """손실로 이어지기 쉬운 행동을 짚는다. 막지는 않고 처리안에 경고로 보여준다 (자본시장연구원 2022, Barber·Odean 2000)."""
     warnings = []
     if recent_trades >= FREQUENT_TRADE_COUNT:
@@ -122,9 +123,13 @@ def coach_warnings(side: str, recent_trades: int, hot_rank: float | None, five_d
     if side == "buy" and hot_rank is not None and hot_rank > HOT_RANK and five_day_return and five_day_return > 0:
         warnings.append(f"최근 5거래일 {five_day_return}% 올라 분석 대상 중 가장 많이 오른 편이에요. "
                         "급등 직후 매수는 고점에 살 위험이 있어요."
-                        + (" 퀴즈에서 급등주를 바로 사는 편이라고 답하셨어요." if chases_hot_stocks else ""))
+                        + (" 퀴즈에서 급등주를 바로 사는 편이라고 답하셨어요." if chases_hot_stocks else "")
+                        + (" 최근 30일 동안 급등 경고를 받고도 산 적이 여러 번 있어요." if hot_buys_habit else ""))
     if side == "buy" and weight_after is not None and weight_after > Decimal(max_weight_pct) * CONCENTRATION_SHARE:
         warnings.append(f"주문 후 이 종목 비중이 {weight_after}%로 한도({max_weight_pct}%)에 가까워요. 여러 종목에 나누는 것도 생각해 보세요.")
+    if monthly_fills is not None:  # 내 투자 습관: 잦은 매매 (functions/behavior.py)
+        cost = f" 이번 주문의 수수료·세금 추정은 {cost_krw:,}원이에요." if cost_krw else ""
+        warnings.append(f"최근 30일 동안 {monthly_fills}건 체결했어요. 거래가 잦을수록 비용이 쌓여요.{cost}")
     if side == "sell" and gain_pct is not None and gain_pct > 0 and losing_holdings:
         warnings.append(f"수익 중인 종목(+{gain_pct}%)을 팔고, 손실 중인 종목({', '.join(losing_holdings)})은 그대로예요. "
                         "오른 것만 먼저 팔고 떨어진 것을 오래 들고 있는 습관은 성과를 낮추기 쉬워요.")

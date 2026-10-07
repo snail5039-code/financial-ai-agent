@@ -7,6 +7,7 @@ import '../../common/common.dart';
 import '../approvals/approvals_page.dart';
 import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
+import 'behavior_page.dart';
 import 'broker_page.dart';
 import '../../broker/broker.dart';
 import 'package:flutter/foundation.dart';
@@ -130,6 +131,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: const Text('승인 필요 · 실행 필요 · 만료·거절'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(pageRoute(const ApprovalsPage(active: true))),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.insights_outlined, color: coachOrange),
+                  title: const Text('내 투자 습관', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('최근 30일 매매 기록으로 본 습관'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(pageRoute(const BehaviorPage())),
                 ),
               ),
               const SizedBox(height: 16),

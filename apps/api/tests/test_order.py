@@ -324,10 +324,10 @@ def test_analysis_offer_declined(client, custom_user, ai) -> None:
 
 # ---------- 행동 코치 · 하루 한도 (실제 주문 기록으로) ----------
 
-def place_filled_order(client, user, text="주문전자 4주 사줘"):
+def place_filled_order(client, user, text="주문전자 4주 사줘", qty=4):
     events = to_approval(client, user, text)
     execute_events = events_of(answer(client, user, events, {"decision": "approve"}))
-    events_of(answer(client, user, execute_events, filled(first(execute_events, "interrupt"))))
+    events_of(answer(client, user, execute_events, filled(first(execute_events, "interrupt"), qty)))
 
 
 def test_frequent_trading_warning_and_daily_total(client, custom_user, ai) -> None:
@@ -625,3 +625,30 @@ def test_close_review_general_mode_and_nothing_to_review(client, user, review_ai
     assert result["general"] and result["tomorrow"][0]["action"] == "관찰"
     assert any("성향 규칙에 따라 주문전자은(는) '매도 검토' 대신 '관찰'" in r for r in result["risks"])
     assert "일반 모드다" in review_ai["invest"][0]
+
+
+# ---------- 내 투자 습관 (행동 기반 성향) ----------
+
+def test_behavior_habits_add_caution_only(client, custom_user, ai, migrated, monkeypatch) -> None:
+    from app.functions import behavior as habits
+
+    headers, url = custom_user["headers"], "/api/profile/behavior"
+    for _ in range(4):
+        place_filled_order(client, custom_user, "주문전자 1주 사줘", 1)
+    found = client.get(url, headers=headers).json()
+    assert (found["records"], found["fills"], found["enough"], found["flags"]) == (4, 4, False, [])  # 5건 미만이면 판단 안 함
+    place_filled_order(client, custom_user, "주문전자 1주 사줘", 1)
+    # 두 건은 급등 경고를 받고도 승인한 것으로 기록을 바꾼다 (실제 급등 시세 대신)
+    db(migrated, "UPDATE approvals SET card = jsonb_set(card, '{warnings}', '[\"급등 직후 매수는 고점에 살 위험이 있어요.\"]')"
+                 " WHERE id IN (SELECT a.id FROM approvals a JOIN proposals p ON p.id = a.proposal_id"
+                 " WHERE p.user_id = %s ORDER BY a.created_at LIMIT 2) RETURNING id", custom_user["id"])
+    monkeypatch.setattr(habits, "FREQUENT_FILLS", 5)
+
+    found = client.get(url, headers=headers).json()
+    assert found["enough"] and (found["fills"], found["hot_buys"], found["winner_sells"]) == (5, 2, 0)
+    assert found["flags"] == ["frequent_trading", "hot_buys"] and len(found["notes"]) == 2
+    assert client.get("/api/profile", headers=headers).json()["risk_level"] == 4  # 성향 단계는 그대로
+    # 다음 주문: 처리안에 30일 체결 수, 투자 AI에게 비용 강조 안내
+    card = first(to_approval(client, custom_user, "주문전자 1주 사줘"), "interrupt")["card"]
+    assert any("최근 30일 동안 5건 체결" in w for w in card["warnings"])
+    assert "최근 30일 동안 자주 거래했다" in ai["invest"][-1] and "급등 경고를 받고도 산 적이" in ai["invest"][-1]
