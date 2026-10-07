@@ -21,6 +21,7 @@ typedef Overview = ({
   List<Map<String, dynamic>> executions, // 승인했지만 폰에서 실행 전
   List<Map<String, dynamic>> history,
   Map<String, dynamic>? briefing, // 가장 최근 아침 브리핑, 없으면 null
+  List<Map<String, dynamic>> watchlist, // 관심 종목
 });
 
 Future<Overview> loadOverview() async {
@@ -50,6 +51,7 @@ Future<Overview> loadOverview() async {
       if (error is ApiError && error.status == 404) return null; // 아직 브리핑이 없음
       throw error;
     }),
+    api.get('/api/watchlist'),
   ]);
   List<Map<String, dynamic>> rows(Object? value) => (value as List).cast<Map<String, dynamic>>();
   return (
@@ -59,6 +61,7 @@ Future<Overview> loadOverview() async {
     executions: rows(results[2]),
     history: rows(results[3]),
     briefing: results[4] as Map<String, dynamic>?,
+    watchlist: rows(results[5]),
   );
 }
 

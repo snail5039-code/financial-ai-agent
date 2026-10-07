@@ -101,3 +101,25 @@ def test_next_run_skips_weekend_and_holidays() -> None:
     assert briefing.seconds_until(at, friday_evening) == (datetime(2026, 10, 6, 8, 30, tzinfo=KST) - friday_evening).total_seconds()
     thursday = datetime(2026, 10, 8, 9, 0, tzinfo=KST)  # 지났으니 다음 날인데 금요일은 한글날
     assert briefing.seconds_until(at, thursday) == (datetime(2026, 10, 12, 8, 30, tzinfo=KST) - thursday).total_seconds()
+
+
+def test_watchlist_api_and_briefing(client, user, ai, migrated) -> None:
+    setup_user(client, user)
+    headers = user["headers"]
+    with psycopg.connect(migrated) as conn:  # 공시 없는 관심 종목
+        conn.execute("INSERT INTO stocks VALUES ('666668', '관심전자', 'KOSPI', true) ON CONFLICT DO NOTHING")
+        for days_ago in range(70):
+            conn.execute("INSERT INTO stock_prices VALUES ('666668', %s, %s, 1, 1000) ON CONFLICT DO NOTHING",
+                         (date(2026, 10, 1) - timedelta(days=days_ago), 50000 + (50 if days_ago % 2 else 0)))
+    assert client.put("/api/watchlist/666668", headers=headers).status_code == 204
+    assert client.put("/api/watchlist/666668", headers=headers).status_code == 204  # 두 번 넣어도 하나
+    assert client.put("/api/watchlist/999999", headers=headers).status_code == 404
+    assert [w["stock_name"] for w in client.get("/api/watchlist", headers=headers).json()] == ["관심전자"]
+    stock = next(s for s in client.get("/api/stocks", headers=headers).json() if s["code"] == "666668")
+    assert stock["watching"] is True
+
+    content = briefing.build_briefing(migrated, user["id"])
+    assert [c["stock_name"] for c in content["checked"]][:1] == ["관심전자"]  # 관심 종목이 먼저 후보 (공시가 없어도)
+
+    assert client.delete("/api/watchlist/666668", headers=headers).status_code == 204
+    assert client.get("/api/watchlist", headers=headers).json() == []

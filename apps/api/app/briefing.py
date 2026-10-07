@@ -1,7 +1,7 @@
 """아침 브리핑 (docs/plan/12-todo-by-stage.md 1-1).
 
 사용자마다 하루 한 번 만든다.
-  1. 보유 종목 소식: 최근 공시 제목·원문 링크 (공개 데이터)
+  1. 보유·관심 종목 소식: 최근 공시 제목·원문 링크 (공개 데이터)
   2. 오늘 한도: 1일 한도, 규칙에 걸린 요청 없는 날
   3. 오늘의 매수 제안 (맞춤 모드만): 후보는 코드가 고르고, 지금 분석과 똑같이 투자 AI → 검증 AI를 거친다.
      투자 AI가 매수 검토라고 하고 검증 AI가 승인·조건부 승인한 것만 싣는다.
@@ -39,18 +39,21 @@ def is_trading_day(day) -> bool:
     return day.weekday() < 5 and day not in KRX_HOLIDAYS
 
 
-def pick_candidates(conn, profile: dict, held: set[str]) -> list[dict]:
-    """최근 공시가 있는 분석 대상 중, 아직 갖고 있지 않고 내 성향 규칙상 매수를 제안할 수 있는 종목 (최근 공시 순).
+def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = ()) -> list[dict]:
+    """아직 갖고 있지 않고 내 성향 규칙상 매수를 제안할 수 있는 분석 대상. 관심 종목을 먼저, 그다음 최근 공시가 있는 종목.
 
-    ponytail: "최근 공시가 있다"만으로 고른다. 가격 흐름·재무 점수로 순위를 매기려면 여기서 바꾼다
+    ponytail: "관심 종목 · 최근 공시가 있다"만으로 고른다. 가격 흐름·재무 점수로 순위를 매기려면 여기서 바꾼다
     """
     rows = conn.execute(
         """
-        SELECT s.code, s.name, max(d.filed_at) AS latest FROM stocks s JOIN disclosures d ON d.stock_code = s.code
-        WHERE s.is_target AND d.filed_at >= (now() AT TIME ZONE 'Asia/Seoul')::date - %s
-        GROUP BY s.code, s.name ORDER BY latest DESC, s.code
+        SELECT s.code, s.name FROM stocks s
+        LEFT JOIN (SELECT stock_code, max(filed_at) AS latest FROM disclosures
+                   WHERE filed_at >= (now() AT TIME ZONE 'Asia/Seoul')::date - %(days)s GROUP BY stock_code) d
+               ON d.stock_code = s.code
+        WHERE s.is_target AND (d.latest IS NOT NULL OR s.code = ANY(%(watching)s))
+        ORDER BY s.code = ANY(%(watching)s) DESC, d.latest DESC NULLS LAST, s.code
         """,
-        (NEWS_DAYS,),
+        {"days": NEWS_DAYS, "watching": list(watching)},
     ).fetchall()
     picks = []
     for row in rows:
@@ -99,16 +102,19 @@ def build_briefing(database_url: str, user_id: str, now: datetime | None = None)
         profile = profile_summary(conn, user_id)
         snapshot = latest_snapshot(conn, user_id)
         held = {h["stock_code"] for h in snapshot["holdings"]} if snapshot else set()
+        watching = [r["stock_code"] for r in conn.execute(
+            "SELECT stock_code FROM watchlist WHERE user_id = %s ORDER BY created_at", (user_id,)).fetchall()]
         news = conn.execute(
             """
-            SELECT d.stock_code, s.name AS stock_name, d.title, d.url, d.filed_at FROM disclosures d
-            JOIN stocks s ON s.code = d.stock_code
-            WHERE d.stock_code = ANY(%s) AND d.filed_at >= %s ORDER BY d.filed_at DESC LIMIT 20
+            SELECT d.stock_code, s.name AS stock_name, d.title, d.url, d.filed_at,
+                   CASE WHEN d.stock_code = ANY(%(held)s) THEN '보유' ELSE '관심' END AS why
+            FROM disclosures d JOIN stocks s ON s.code = d.stock_code
+            WHERE d.stock_code = ANY(%(codes)s) AND d.filed_at >= %(since)s ORDER BY d.filed_at DESC LIMIT 20
             """,
-            (list(held), now.date() - timedelta(days=NEWS_DAYS)),
+            {"held": list(held), "codes": list(held | set(watching)), "since": now.date() - timedelta(days=NEWS_DAYS)},
         ).fetchall()
         limits = today_summary(conn, user_id)
-        candidates = pick_candidates(conn, profile, held) if profile["mode"] == "custom" else []
+        candidates = pick_candidates(conn, profile, held, watching) if profile["mode"] == "custom" else []
         thread_id = None
         if candidates:  # 제안서는 대화(thread)에 묶여 저장된다. 브리핑마다 대화 하나를 만든다
             thread_id = str(conn.execute("INSERT INTO threads (user_id) VALUES (%s) RETURNING id", (user_id,)).fetchone()["id"])

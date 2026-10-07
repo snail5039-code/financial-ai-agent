@@ -15,6 +15,7 @@ import '../settings/broker_page.dart';
 import 'agents_page.dart';
 import 'briefing_page.dart';
 import 'overview.dart';
+import 'watchlist_page.dart';
 
 class RoomsPage extends StatefulWidget {
   const RoomsPage({super.key, required this.conversation, required this.active, required this.onOpenChat,
@@ -104,7 +105,8 @@ class _RoomsPageState extends State<RoomsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: RingsCard(overview: o, onTap: widget.onOpenToday),
       ),
-      if (balance != null) _holdingsRow(balance) else _connectHint(),
+      _bubbles(o),
+      if (balance == null) _connectHint(),
       const Divider(height: 1),
       if (o.briefing != null)
         () {
@@ -210,32 +212,47 @@ class _RoomsPageState extends State<RoomsPage> {
     return '${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}';
   }
 
-  Widget _holdingsRow(Map<String, dynamic> balance) {
-    final holdings = holdingsOf(balance);
-    Widget bubble(String label, String sub, Color ring, {Color? subColor}) => SizedBox(
-          width: 66,
-          child: Column(children: [
-            Container(
-              width: 56, height: 56,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: ring, width: 3)),
-              child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-            ),
-            const SizedBox(height: 4),
-            Text(sub, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: subColor ?? mutedText)),
-          ]),
+  /// 동그라미 줄: 보유 종목(손익 색 테두리) · 현금 · 관심 종목(노란 별 테두리) · 관심 종목 추가. 누르면 종목 대화방
+  Widget _bubbles(Overview o) {
+    final balance = o.balance;
+    final held = balance == null ? <Map<String, dynamic>>[] : holdingsOf(balance);
+    final heldCodes = {for (final h in held) h['stock_code']};
+    Widget bubble(String label, String sub, Color ring, {Color? subColor, VoidCallback? onTap, bool dashed = false}) => InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 66,
+            child: Column(children: [
+              Container(
+                width: 56, height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: dashed ? softGray : null,
+                    border: Border.all(color: ring, width: dashed ? 1 : 3)),
+                child: dashed
+                    ? const Icon(Icons.add, color: mutedText)
+                    : Text(label, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+              ),
+              const SizedBox(height: 4),
+              Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: subColor ?? mutedText)),
+            ]),
+          ),
         );
     return SizedBox(
-      height: 100,
+      height: 104,
       child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.fromLTRB(14, 12, 14, 0), children: [
-        for (final h in holdings)
+        for (final h in held)
           () {
             final cost = (h['avg_price'] as int) * (h['qty'] as int);
             final gain = priceOf(h) * (h['qty'] as int) - cost;
             return bubble(_short(h['stock_name'] as String), rateText(gain, cost), changeColor(gain) ?? const Color(0xFFD5DADF),
-                subColor: changeColor(gain));
+                subColor: changeColor(gain), onTap: () => _openStockRoom(h['stock_code'] as String, h['stock_name'] as String));
           }(),
-        bubble('현금', '${comma((balance['cash_krw'] as int) ~/ 10000)}만', const Color(0xFFD5DADF)),
+        if (balance != null) bubble('현금', '${comma((balance['cash_krw'] as int) ~/ 10000)}만', const Color(0xFFD5DADF)),
+        for (final w in o.watchlist.where((w) => !heldCodes.contains(w['stock_code'])))
+          bubble(_short(w['stock_name'] as String), '관심', const Color(0xFFFFB020), subColor: const Color(0xFF8A5A00),
+              onTap: () => _openStockRoom(w['stock_code'] as String, w['stock_name'] as String)),
+        bubble('', '관심 종목', const Color(0xFFB9C0C7), dashed: true, onTap: () => _push(const WatchlistPage())),
       ]),
     );
   }

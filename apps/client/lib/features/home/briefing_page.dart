@@ -54,12 +54,13 @@ class BriefingPage extends StatelessWidget {
         else
           for (final pick in picks) _pickCard(context, pick),
         const SizedBox(height: 20),
-        _title('보유 종목 소식'),
-        if (news.isEmpty) _note('최근 3일 동안 보유 종목의 새 공시가 없어요.'),
+        _title('보유·관심 종목 소식'),
+        if (news.isEmpty) _note('최근 3일 동안 보유·관심 종목의 새 공시가 없어요.'),
         for (final n in news)
           Card(
             color: Colors.white,
             child: ListTile(
+              leading: Tag('${n['why'] ?? '보유'}', n['why'] == '관심' ? const Color(0xFF8A5A00) : brandBlue),
               title: Text('${n['stock_name']} · ${n['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: SourceText('DART 공시 · ${n['filed_at']} · ${n['url']}'),
             ),
