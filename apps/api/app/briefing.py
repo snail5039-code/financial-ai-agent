@@ -25,7 +25,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.agents.analysis import (gather_node, invest_agent_node, route_after_verify, save_proposal, verify_agent_node,
-                                 volatility_ranks, CLAIM_LABELS)
+                                 volatility_ranks, with_titles, CLAIM_LABELS)
 from app.agents.query import latest_snapshot
 from app.agents.state import new_request
 from app.clock import KST
@@ -92,8 +92,8 @@ def pick_entry(conn, state: dict, proposal_id: str) -> dict:
         "stock_code": state["stock_code"], "stock_name": state["stock_name"], "proposal_id": proposal_id,
         "verdict": verification["verdict"], "summary": verification["summary"], "conditions": verification["conditions"],
         "claims": [{"type": CLAIM_LABELS[c["type"]], "text": c["text"],
-                    "sources": [sources[s]["title"] for s in c["source_ids"] if s in sources]} for c in proposal["claims"][:3]],
-        "risks": proposal["risks"][:3],
+                    "sources": list(dict.fromkeys(sources[s]["title"] for s in c["source_ids"] if s in sources))} for c in proposal["claims"][:3]],
+        "risks": [with_titles(r, sources) for r in proposal["risks"][:3]],
         "last_close": close and close["close"], "close_date": close and str(close["trade_date"]),
         # 1주 기준 최악의 경우 (처리안과 같은 기준)
         "worst_case_loss": close and close["close"] * WORST_CASE_DROP_PCT // 100,

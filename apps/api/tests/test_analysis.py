@@ -345,3 +345,20 @@ def test_search_chunks_filters_far_noise_and_other_stocks(migrated, monkeypatch)
         assert analysis.search_chunks(conn, "777003", "없음", "사도 돼?") == []
         conn.rollback()
     assert analysis.is_table_noise("1,234 | 5,678 (9.1)") and not analysis.is_table_noise("매출 1,234억 원으로 늘었다")
+
+
+def test_counter_argument_source_tags() -> None:
+    known = {"dart:R1#3": {"title": "반기보고서 · 사업의 내용"}}
+    proposal = {"claims": [{"text": "공시", "type": "opinion", "source_ids": [], "metric_ids": []}],
+                "counter_arguments": ["환율 위험이 있다 (출처: dart:R1#3)", "경쟁 심화 (출처: dart:없음#1)"],
+                "risks": ["손실 가능"]}
+    assert analysis.cited_ids(proposal) == ["dart:R1#3", "dart:없음#1"]
+    checks = {c["target"]: c for c in analysis.code_checks(proposal, known, [], [], offered_chunks=True)}
+    assert checks["risk_sources"]["result"] == "fail" and "dart:없음#1" in checks["risk_sources"]["detail"]
+    assert "body_citations" not in checks  # 본문 조각을 하나 인용했다
+    assert analysis.with_titles("환율 위험이 있다 (출처: dart:R1#3)", known) == "환율 위험이 있다 [반기보고서 · 사업의 내용]"
+
+    plain = {**proposal, "counter_arguments": ["경쟁 심화"]}
+    checks = {c["target"]: c for c in analysis.code_checks(plain, known, [], [], offered_chunks=True)}
+    assert checks["body_citations"]["result"] == "warn"  # 본문을 받고도 인용하지 않으면 주의 (막지는 않음)
+    assert all(c["result"] != "fail" for c in checks.values())

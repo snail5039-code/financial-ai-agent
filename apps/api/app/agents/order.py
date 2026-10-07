@@ -28,7 +28,7 @@ from app import clock
 from app.agents import llm
 from app.agents.analysis import (
     VERDICT_LABELS, check_target_node, gather_node, get_account_node, invest_agent_node, save_proposal,
-    verify_agent_node,
+    verify_agent_node, with_titles,
 )
 from app.agents.interrupts import pause
 from app.agents.query import end_if_answered, find_stock_node, won
@@ -164,7 +164,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "verdict": verification["verdict"], "summary": verification["summary"],
         "conditions": verification["conditions"], "disagreements": verification["disagreements"],
         "claims": [{"text": c["text"], "type": c["type"]} for c in state["proposal"]["claims"]],
-        "counter_arguments": state["proposal"]["counter_arguments"], "risks": state["proposal"]["risks"],
+        "counter_arguments": [with_titles(x, state["sources"]) for x in state["proposal"]["counter_arguments"]],
+        "risks": [with_titles(x, state["sources"]) for x in state["proposal"]["risks"]],
         "policy": result["rules"], "warnings": warnings, "confirm_required": confirm,
         "broker": BROKER, "mode": MODE, "user_directed": state["user_directed"],
     }

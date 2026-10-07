@@ -235,7 +235,7 @@ def build_review(database_url: str, user_id: str, now: datetime | None = None) -
 
     def shown(claim: dict) -> dict:
         return {"type": CLAIM_LABELS[claim["type"]], "text": claim["text"],
-                "sources": [sources[s]["title"] for s in claim["source_ids"] if s in sources]}
+                "sources": list(dict.fromkeys(sources[s]["title"] for s in claim["source_ids"] if s in sources))}
 
     used = dict.fromkeys(sid for _, claim in all_claims(draft) for sid in claim["source_ids"] if sid in sources)
     review = {

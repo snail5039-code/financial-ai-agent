@@ -12,6 +12,7 @@
 """
 
 import json
+import re
 from datetime import datetime, timedelta
 
 from langgraph.graph import END, START, StateGraph
@@ -298,13 +299,46 @@ def search_chunks(conn, code: str, name: str, query: str) -> list[str]:
     return sorted(picked, key=picked.get)[:SEARCH_RESULTS]
 
 
+# ---------- 반대 근거·위험 문장의 출처 표시 "(출처: ID, ID)" ----------
+# 반대 근거·위험은 문장 목록이라 출처 칸이 없다. 자료에서 온 문장은 끝에 이 표시를 달게 하고 코드가 확인한다 (2-8)
+
+SOURCE_TAG = re.compile(r"\(출처:\s*([^)]*)\)")
+
+
+def tagged_ids(texts: list[str]) -> list[str]:
+    return [sid.strip() for text in texts for tag in SOURCE_TAG.findall(text) for sid in tag.split(",") if sid.strip()]
+
+
+def cited_ids(proposal: dict) -> list[str]:
+    """제안서가 인용한 출처 ID 전부 (근거 + 반대 근거·위험의 출처 표시)."""
+    return ([sid for claim in proposal["claims"] for sid in claim["source_ids"]]
+            + tagged_ids(proposal["counter_arguments"] + proposal["risks"]))
+
+
+def with_titles(text: str, sources: dict) -> str:
+    """사용자에게 보일 때 "(출처: dart:…#3)"을 출처 제목으로 바꾼다. 모르는 ID는 그대로 둔다."""
+    def title(match: re.Match) -> str:
+        ids = [sid.strip() for sid in match.group(1).split(",")]
+        return "[" + ", ".join(dict.fromkeys(sources[sid]["title"] if sid in sources else sid for sid in ids)) + "]"
+    return SOURCE_TAG.sub(title, text)
+
+
 # ---------- 코드 검사 (검증 AI 전에) ----------
 
-def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict]) -> list[dict]:
+def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict],
+                offered_chunks: bool = False) -> list[dict]:
     """AI 없이 확실히 잡을 수 있는 것: 출처·지표 ID가 실제로 있는지, 사실·계산에 출처가 붙었는지,
-    지표를 다시 계산하면 같은 값인지, 반대 근거·위험이 있는지. 하나라도 fail이면 승인하지 않는다."""
+    지표를 다시 계산하면 같은 값인지, 반대 근거·위험이 있는지. 하나라도 fail이면 승인하지 않는다.
+    offered_chunks: 투자 AI에게 공시 본문 조각을 줬는지. 줬는데 하나도 인용하지 않으면 warn (막지는 않는다)."""
     metric_ids = {m["metric_id"] for m in recomputed if m["value"] is not None}
     checks = [claim_check(f"claim:{n}", c, known_sources, metric_ids) for n, c in enumerate(proposal["claims"])]
+    tags = tagged_ids(proposal["counter_arguments"] + proposal["risks"])
+    if missing := [sid for sid in tags if sid not in known_sources]:
+        checks.append({"target": "risk_sources", "result": "fail",
+                       "detail": f"반대 근거·위험의 없는 출처 ID: {', '.join(missing)}", "source_ids": missing})
+    if offered_chunks and not any("#" in sid for sid in cited_ids(proposal)):
+        checks.append({"target": "body_citations", "result": "warn",
+                       "detail": "공시 본문 조각을 받았지만 근거·반대 근거·위험 어디에도 인용하지 않음", "source_ids": []})
 
     before = {m["metric_id"]: m["value"] for m in gathered_metrics}
     changed = [m["metric_id"] for m in recomputed if before.get(m["metric_id"]) != m["value"]]
@@ -484,11 +518,11 @@ def invest_agent_node(state: InvestState) -> dict:
 
 def verify_agent_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     proposal = state["proposal"]
-    cited = [sid for claim in proposal["claims"] for sid in claim["source_ids"]]
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-        reloaded = load_sources(conn, cited, state)  # 투자 AI가 본 자료가 아니라 원문을 다시 읽는다
+        reloaded = load_sources(conn, cited_ids(proposal), state)  # 투자 AI가 본 자료가 아니라 원문을 다시 읽는다
         recomputed = json.loads(json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
-    checks = code_checks(proposal, reloaded, state["metrics"], recomputed)
+    checks = code_checks(proposal, reloaded, state["metrics"], recomputed,
+                         offered_chunks=any("#" in sid for sid in state["sources"]))
     draft = llm.verify_proposal(verify_context(state, proposal, reloaded, recomputed, checks)).model_dump()
 
     failed = [c for c in checks if c["result"] == "fail"]
@@ -553,11 +587,11 @@ def format_analysis(state: InvestState) -> str:
 
     lines.append("\n근거")
     for claim in proposal["claims"]:
-        cited = ", ".join(sources[s]["title"] for s in claim["source_ids"] if s in sources)
+        cited = ", ".join(dict.fromkeys(sources[s]["title"] for s in claim["source_ids"] if s in sources))  # 같은 보고서 조각은 한 번
         lines.append(f"- ({CLAIM_LABELS[claim['type']]}) {claim['text']}" + (f" [{cited}]" if cited else ""))
     for title, items in (("반대 근거", proposal["counter_arguments"]), ("위험", proposal["risks"]),
                          ("이런 경우 판단이 틀린 것", proposal["invalid_if"])):
-        lines += [f"\n{title}"] + [f"- {item}" for item in items]
+        lines += [f"\n{title}"] + [f"- {with_titles(item, sources)}" for item in items]
 
     lines.append("\n지표 (코드 계산)")
     for metric in state["metrics"]:
@@ -569,7 +603,7 @@ def format_analysis(state: InvestState) -> str:
     lines += [f"- 의견 차이: {d}" for d in verification["disagreements"]]
 
     lines.append("\n출처 (근거와 지표에 쓴 것)")
-    used = [sid for claim in proposal["claims"] for sid in claim["source_ids"]]
+    used = cited_ids(proposal)
     used += [sid for metric in state["metrics"] if metric["value"] is not None for sid in metric["inputs"]]
     shown = set()
     for source in (sources[sid] for sid in dict.fromkeys(used) if sid in sources):
