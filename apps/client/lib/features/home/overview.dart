@@ -136,7 +136,7 @@ class RingsCard extends StatelessWidget {
                   const Text('총 자산', style: TextStyle(fontSize: 12, color: mutedText)),
                   FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text(won(t.total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                    child: Text(won(t.total), style: const TextStyle(fontFamily: displayFont, fontSize: 26)),
                   ),
                   Text('${signedWon(gain)} (${rateText(gain, t.cost)})',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: changeColor(gain))),

@@ -99,7 +99,7 @@ class _HomePageState extends State<HomePage> {
             const Text('총 자산', style: TextStyle(color: mutedText)),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(won(t.total), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
+              child: Text(won(t.total), style: const TextStyle(fontFamily: displayFont, fontSize: 34)),
             ),
             Text('평가손익 ${signedWon(gain)} (${rateText(gain, t.cost)})',
                 style: TextStyle(fontWeight: FontWeight.bold, color: changeColor(gain))),
@@ -128,7 +128,7 @@ class _HomePageState extends State<HomePage> {
       // 3. 보유 종목
       const SizedBox(height: 16),
       Row(children: [
-        const Text('보유 종목', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        const Text('보유 종목', style: TextStyle(fontFamily: displayFont, fontSize: 20)),
         const Spacer(),
         Text('${holdingsOf(balance).length}종목', style: const TextStyle(color: mutedText)),
       ]),
@@ -137,7 +137,7 @@ class _HomePageState extends State<HomePage> {
       if (kIsWeb) const SourceText('웹은 현재가 대신 평균 매입가로 계산해요 (실시간 시세는 폰에서)'),
       // 4. 오늘 주문
       const SizedBox(height: 16),
-      const Text('오늘 주문', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+      const Text('오늘 주문', style: TextStyle(fontFamily: displayFont, fontSize: 20)),
       ..._todayOrders(o, extras),
       const SizedBox(height: 16),
       Wrap(spacing: 8, runSpacing: 8, children: [

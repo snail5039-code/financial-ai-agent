@@ -26,6 +26,8 @@ const downBlue = Color(0xFF1F5FD1);
 const softGray = Color(0xFFF5F6F8);
 const ink = Color(0xFF15181C);
 const mutedText = Color(0xFF5F6770);
+/// 제목·큰 숫자 글꼴 (굵기 하나뿐이라 fontWeight는 주지 않는다)
+const displayFont = 'BlackHanSans';
 
 ThemeData appTheme() {
   final pill = RoundedRectangleBorder(borderRadius: BorderRadius.circular(16));
@@ -35,7 +37,7 @@ ThemeData appTheme() {
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
-      titleTextStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: ink),
+      titleTextStyle: TextStyle(fontFamily: displayFont, fontSize: 26, color: ink),
     ),
     cardTheme: CardThemeData(
       elevation: 0, color: softGray, margin: const EdgeInsets.symmetric(vertical: 6),

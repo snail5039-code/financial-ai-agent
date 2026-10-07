@@ -188,7 +188,7 @@ class _ChatPageState extends State<ChatPage> {
           Text('주문 처리안$expires', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: brandBlue)),
           const SizedBox(height: 2),
           Text('${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              style: const TextStyle(fontFamily: displayFont, fontSize: 22)),
           Text('지정가 ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}',
               style: const TextStyle(fontSize: 14, color: mutedText)),
           if (card['worst_case_loss'] != null)

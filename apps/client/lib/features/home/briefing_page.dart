@@ -84,7 +84,7 @@ class BriefingPage extends StatelessWidget {
 
   Widget _title(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        child: Text(text, style: const TextStyle(fontFamily: displayFont, fontSize: 20)),
       );
 
   Widget _note(String text) => Card(

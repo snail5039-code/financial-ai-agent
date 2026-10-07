@@ -60,6 +60,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 제목·큰 숫자 글꼴 (디자인 H안). SIL OFL 1.1, 라이선스는 assets/fonts/OFL.txt
+  fonts:
+    - family: BlackHanSans
+      fonts:
+        - asset: assets/fonts/BlackHanSans-Regular.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
