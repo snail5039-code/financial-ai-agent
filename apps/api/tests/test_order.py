@@ -1,6 +1,7 @@
 """주문 그래프 테스트: 처리안 → 승인 → 폰 실행 → 기록. Gemini·시계·폰은 가짜로 바꿔 끼운다."""
 
 from datetime import date, datetime, timedelta
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -9,7 +10,7 @@ from app import clock
 from app.agents import llm
 from app.agents.schemas import ProposalDraft, VerificationDraft
 from app.clock import KST
-from tests.conftest import LEVEL_4_QUIZ
+from tests.conftest import LEVEL_4_QUIZ, PASSWORD
 from tests.test_chat import events_of, first, now_iso
 
 CODE, NAME, PRICE = "555555", "주문전자", 100_000
@@ -652,3 +653,33 @@ def test_behavior_habits_add_caution_only(client, custom_user, ai, migrated, mon
     card = first(to_approval(client, custom_user, "주문전자 1주 사줘"), "interrupt")["card"]
     assert any("최근 30일 동안 5건 체결" in w for w in card["warnings"])
     assert "최근 30일 동안 자주 거래했다" in ai["invest"][-1] and "급등 경고를 받고도 산 적이" in ai["invest"][-1]
+
+
+# ---------- 내 기록 질문 ----------
+
+def test_history_questions(client, custom_user, ai, monkeypatch) -> None:
+    headers = custom_user["headers"]
+    place_filled_order(client, custom_user)                    # 체결된 매수
+    ai["verdict"] = "reject"                                    # 2번 고쳐도 반려 → 사용자 판단 필요, 주문 안 함
+    to_approval(client, custom_user, "주문전자 2주 사줘")
+    ask = {}
+    monkeypatch.setattr(llm, "understand", lambda q, h: llm.Understood(query=q, intent="history", **ask))
+
+    def answer_of(**kwargs):
+        ask.clear(); ask.update(kwargs)
+        return first(events_of(client.post("/api/chat", headers=headers, json={"text": "기록", "client": "web"})), "message")["text"]
+
+    text = answer_of()
+    assert text.startswith("최근 30일 제안·주문 2건") and "검증 사용자 판단 필요" in text and "체결됐어요 (4주 × 100,000원)" in text
+    text = answer_of(history_kind="orders", side="buy", period="today")
+    assert text.startswith("오늘 매수 주문 1건") and "2주" not in text
+    text = answer_of(history_kind="rejected", stock_name=NAME)
+    assert text.startswith(f"최근 30일 {NAME} 검증을 통과하지 못한 제안 1건") and "- 검증 AI: 2번 수정했지만" in text
+    assert answer_of(stock_name="없는회사").startswith("'없는회사' 종목을 찾지 못했어요")
+    assert answer_of(side="sell").startswith("최근 30일 매도 제안·주문 기록이 없어요")
+
+    # 다른 사용자의 기록은 보이지 않는다
+    email = f"{uuid4().hex}@test.kr"
+    client.post("/api/auth/signup", json={"email": email, "password": PASSWORD, "agreed_terms": True})
+    headers = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"email": email, "password": PASSWORD}).json()["token"]}
+    assert answer_of().startswith("최근 30일 제안·주문 기록이 없어요")

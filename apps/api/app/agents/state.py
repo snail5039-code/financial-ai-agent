@@ -54,6 +54,8 @@ class InvestState(TypedDict, total=False):
     qty: int | None          # 주식 수
     limit_price: int | None  # 1주 지정가 (말하지 않으면 현재가)
     term: str | None         # explain일 때 뜻을 묻는 용어
+    period: str | None       # history: today / week / month (없으면 최근 30일)
+    history_kind: str | None # history: orders / rejected (없으면 제안·주문 전부)
     room_stock: str | None   # 종목 대화방이면 그 종목 이름. 요청에 종목이 없으면 이 종목으로 본다
     user_directed: bool      # 사용자가 직접 지시한 주문인지 (분석에서 이어진 주문이면 false)
     from_analysis: bool      # 분석 결과에서 "이대로 주문할까요?"로 이어졌는지
@@ -71,7 +73,7 @@ def new_request(query: str, history: list, profile: dict) -> dict:
     return {
         "query": query, "history": history, "intent": None, "answer": None,
         "mode": profile["mode"], "risk_level": profile.get("risk_level"), "flags": profile.get("flags", []),
-        "query_kind": None, "term": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
+        "query_kind": None, "term": None, "period": None, "history_kind": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
         "sources": {}, "metrics": [], "risk_grade": None, "risk_reason": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
         "side": None, "qty": None, "limit_price": None, "user_directed": False, "from_analysis": False,

@@ -1,6 +1,6 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)에서 위부터 안 끝난 것 (2-6까지 완료. 2-1·2-2는 사용자 준비물 필요, 그다음 2-8 검색 근거 개선 또는 2-7 내 기록 RAG. KB 키(1-7)는 맨 마지막)
+마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)에서 위부터 안 끝난 것 (2-7까지 완료. 2-1·2-2는 사용자 준비물 필요, 그다음 2-8 검색 근거 개선. KB 키(1-7)는 맨 마지막)
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
@@ -26,7 +26,7 @@
 | 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결·체결 갱신 완료 (2026-10-07), KB 조회 남음 | `e88fdd1`, `87941ce`, `9f50187` |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | 🔶 기록 화면·체결 질문·웹 배치·디자인 H안 완료, 평가는 마지막에 | `29e6203`, `4558e80`, `4fd80b8`, `b12c5e7` |
 
-서버 테스트 247개 통과, Flutter 테스트 22개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
+서버 테스트 248개 통과, Flutter 테스트 22개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
 ## 3. 지금 서버가 할 수 있는 것 (`apps/api`)
 
@@ -39,6 +39,7 @@
 | 분석: "삼성전자 사도 돼?" → 투자 AI 제안서(출처 ID) → 코드 검사 + 검증 AI(원문 다시 읽기) → 반박-수정 최대 2번 | `agents/analysis.py` |
 | 주문: "SK하이닉스 4주 사줘" → 정책 검사(코드) → 처리안(approval) → execute(앱만) → 기록. 분석에서 "이대로 주문할까요?"로도 이어짐 | `agents/order.py`, `functions/orders.py` |
 | 승인 대기·기록 | `GET /api/approvals?status=`, `/api/approvals/{id}`, `/api/history`, `/api/history/{id}` |
+| 내 기록 질문 ("이번 달에 뭐 샀지?", "왜 반려됐지?"): DB 기록으로 답, LLM은 분류만 | `agents/history.py` |
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
 | 아침 브리핑(보유 종목 공시·오늘 한도·검증 거친 매수 제안). 수동 `python -m app.briefing`, 자동 `.env` `MORNING_BRIEF_TIME` | `app/briefing.py`, `GET /api/briefings/latest` |
 | 장 마감 요약(LLM 없음, 기본 15:40 `CLOSE_SUMMARY_TIME`) + AI 회고·내일 계획(투자 AI → 검증 AI, 주문 없음, 기본 꺼짐 `CLOSE_REVIEW_TIME`, 수동 `python -m app.review`) | `app/briefing.py` `build_close`, `app/review.py`, `GET /api/briefings/latest?kind=close` |

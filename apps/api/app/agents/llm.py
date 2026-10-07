@@ -75,15 +75,20 @@ def embed_query(text: str) -> list[float]:
 
 class Understood(BaseModel):
     query: str = Field(description="가리키는 말(그거, 그 종목, 아까 거)을 실제 이름으로 바꾼 요청. 바꿀 것이 없으면 그대로")
-    intent: Literal["query", "analysis", "order", "result", "explain", "other"]
+    intent: Literal["query", "analysis", "order", "result", "explain", "history", "other"]
     query_kind: Literal["balance", "price", "orders"] | None = Field(
         default=None, description="intent가 query일 때만. balance: 잔고·보유 종목 / price: 현재가 / orders: 오늘 주문 내역"
     )
     stock_name: str | None = Field(default=None, description="요청에 나온 종목 이름이나 코드 그대로. 없으면 null")
-    side: Literal["buy", "sell"] | None = Field(default=None, description="order일 때만. 사줘 → buy, 팔아 → sell")
+    side: Literal["buy", "sell"] | None = Field(
+        default=None, description="order·history일 때만. 사줘·샀어 → buy, 팔아·팔았어 → sell. 말하지 않았으면 null")
     qty: int | None = Field(default=None, description="order일 때 사용자가 말한 주식 수. 말하지 않았으면 null")
     limit_price: int | None = Field(default=None, description="order일 때 사용자가 말한 1주 가격(원). 없으면 null")
     term: str | None = Field(default=None, description="explain일 때만. 뜻을 묻는 용어 그대로 (예: PER, 공매도)")
+    period: Literal["today", "week", "month"] | None = Field(
+        default=None, description="history일 때만. 오늘 → today, 이번 주·최근 일주일 → week, 이번 달·최근 → month. 없으면 null")
+    history_kind: Literal["orders", "rejected"] | None = Field(
+        default=None, description="history일 때만. 산 것·판 것·주문 → orders, 반려·검증에서 걸린 것 → rejected. 그 밖은 null")
 
 
 UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
@@ -96,6 +101,9 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 - order: 사거나 팔라는 지시. 예) "SK하이닉스 4주 사줘", "삼성전자 다 팔아"
 - result: 앞서 한 주문의 결과를 묻는 요청. 예) "아까 주문 체결됐어?"
 - explain: 투자·금융 용어의 뜻을 묻는 요청. 예) "PER이 뭐야?", "공매도가 뭐야", "부채비율 뜻". term에 용어만 써라
+- history: 내가 지난번에 받은 제안·검증 결과·주문 기록을 묻는 요청. 예) "지난번에 SK하이닉스 왜 반려됐지?",
+  "이번 달에 뭐 샀지?", "최근 검증에서 걸린 거 보여줘". period·history_kind·side·stock_name을 말한 대로만 채워라.
+  방금 한 주문 하나가 체결됐는지 묻는 것은 result다
 - other: 주식 앱 업무가 아닌 것
 3. query면 query_kind를 채워라. 종목이 나오면 stock_name에 사용자가 말한 그대로 써라. 지어내지 마라.
 4. order면 side, qty, limit_price를 사용자가 말한 대로만 채워라. "4주" → qty 4, "7만원에" → limit_price 70000.
