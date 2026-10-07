@@ -1,0 +1,103 @@
+"""아침 브리핑 테스트. Gemini는 가짜로 바꿔 끼운다 (비용 0)."""
+
+from datetime import date, datetime, timedelta
+
+import psycopg
+import pytest
+
+from app import briefing
+from app.agents import llm
+from app.agents.schemas import ProposalDraft, VerificationDraft
+from app.clock import KST
+from tests.conftest import LEVEL_4_QUIZ
+
+CODE, NAME = "666666", "브리핑전자"
+HELD, HELD_NAME = "666667", "보유전자"
+TODAY = datetime.now(KST).date()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def market_data(migrated):
+    """후보 1종목(오늘 공시), 보유 1종목(어제 공시). 후보는 조금, 보유 종목은 크게 출렁여 후보의 변동성 순위가 낮다."""
+    with psycopg.connect(migrated) as conn:
+        for code, name, swing in ((CODE, NAME, 100), (HELD, HELD_NAME, 5000)):
+            conn.execute("INSERT INTO stocks VALUES (%s, %s, 'KOSPI', true) ON CONFLICT DO NOTHING", (code, name))
+            for days_ago in range(70):
+                close = 50000 + (swing if days_ago % 2 else 0)
+                conn.execute("INSERT INTO stock_prices VALUES (%s, %s, %s, %s, 1000) ON CONFLICT DO NOTHING",
+                             (code, date(2026, 10, 1) - timedelta(days=days_ago), close, close * 1000))
+        conn.execute("INSERT INTO disclosures VALUES ('B1', %s, '단일판매·공급계약체결', 'https://dart/B1', %s),"
+                     " ('B2', %s, '자기주식취득결정', 'https://dart/B2', %s) ON CONFLICT DO NOTHING",
+                     (CODE, TODAY, HELD, TODAY - timedelta(days=1)))
+
+
+@pytest.fixture
+def ai(monkeypatch):
+    record = {"action": "buy", "verdicts": ["approve"], "invest": 0}
+
+    def write(context):
+        record["invest"] += 1
+        return ProposalDraft(action=record["action"],
+                             claims=[{"text": "공급계약을 맺었다", "type": "fact", "source_ids": ["dart:B1"]}],
+                             counter_arguments=["계약 규모가 작다"], risks=["손실 가능"], invalid_if=["계약 해지"])
+
+    def verify(context):
+        verdicts = record["verdicts"]
+        return VerificationDraft(verdict=verdicts.pop(0) if len(verdicts) > 1 else verdicts[0], checks=[],
+                                 risk_fit="ok", summary="공시 원문과 맞아요")
+
+    monkeypatch.setattr(llm, "embed_query", lambda text: [0.1] * 768)
+    monkeypatch.setattr(llm, "write_proposal", write)
+    monkeypatch.setattr(llm, "verify_proposal", verify)
+    return record
+
+
+def setup_user(client, user, quiz=True):
+    if quiz:
+        assert client.put("/api/profile", headers=user["headers"], json=LEVEL_4_QUIZ).status_code == 200
+    snapshot = {"cash_krw": 5_000_000, "fetched_at": datetime.now(KST).isoformat(),
+                "holdings": [{"stock_code": HELD, "stock_name": HELD_NAME, "qty": 3, "avg_price": 48000}]}
+    assert client.post("/api/snapshot", headers=user["headers"], json=snapshot).status_code == 204
+
+
+def test_briefing_with_pick(client, user, ai, migrated) -> None:
+    setup_user(client, user)
+    assert client.get("/api/briefings/latest", headers=user["headers"]).status_code == 404
+
+    content = briefing.build_briefing(migrated, user["id"])
+
+    assert [n["title"] for n in content["news"]] == ["자기주식취득결정"]  # 보유 종목 공시만
+    assert content["limits"]["clean_days"] == 0
+    [pick] = content["picks"]  # 보유 종목은 후보에서 빠진다
+    assert (pick["stock_name"], pick["verdict"], pick["last_close"], pick["worst_case_loss"]) == (NAME, "approve", 50000, 5000)
+    assert pick["claims"][0] == {"type": "사실", "text": "공급계약을 맺었다", "sources": ["단일판매·공급계약체결"]}
+    saved = client.get("/api/briefings/latest", headers=user["headers"]).json()
+    assert saved["content"]["picks"][0]["proposal_id"] == pick["proposal_id"]
+    # 제안서는 기록에 남아 근거·검증 과정을 볼 수 있다
+    assert pick["proposal_id"] in [h["proposal_id"] for h in client.get("/api/history", headers=user["headers"]).json()]
+
+
+def test_rejected_or_not_buy_is_not_picked(client, user, ai, migrated) -> None:
+    setup_user(client, user)
+    ai["verdicts"] = ["reject"]  # 2번 고쳐도 반려 → 사용자 판단 필요 → 제안하지 않음
+    content = briefing.build_briefing(migrated, user["id"])
+    assert content["picks"] == [] and content["checked"] == [{"stock_name": NAME, "action": "buy", "verdict": "user_judgement"}]
+    assert ai["invest"] == 3
+
+    ai["verdicts"], ai["action"] = ["approve"], "watch"
+    assert briefing.build_briefing(migrated, user["id"])["picks"] == []
+
+
+def test_general_mode_gets_no_picks(client, user, ai, migrated) -> None:
+    setup_user(client, user, quiz=False)
+    content = briefing.build_briefing(migrated, user["id"])
+    assert content["mode"] == "general" and content["picks"] == [] and ai["invest"] == 0
+    assert [n["title"] for n in content["news"]] == ["자기주식취득결정"]
+
+
+def test_next_run_skips_weekend_and_holidays() -> None:
+    friday_evening = datetime(2026, 10, 2, 18, 0, tzinfo=KST)  # 10/3 토, 10/4 일, 10/5 대체공휴일 → 10/6 화
+    at = briefing.time(8, 30)
+    assert briefing.seconds_until(at, friday_evening) == (datetime(2026, 10, 6, 8, 30, tzinfo=KST) - friday_evening).total_seconds()
+    thursday = datetime(2026, 10, 8, 9, 0, tzinfo=KST)  # 지났으니 다음 날인데 금요일은 한글날
+    assert briefing.seconds_until(at, thursday) == (datetime(2026, 10, 12, 8, 30, tzinfo=KST) - thursday).total_seconds()

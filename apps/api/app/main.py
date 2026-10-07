@@ -1,6 +1,7 @@
 import logging
 import threading
 from contextlib import asynccontextmanager
+from datetime import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +11,10 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from app import collect, config
+from app import briefing, collect, config
 from app.agents.graph import build_graph
 from app.db import connect
-from app.routers import approvals, auth, chat, history, orders, policy, snapshot
+from app.routers import approvals, auth, briefings, chat, history, orders, policy, snapshot
 
 
 @asynccontextmanager
@@ -32,19 +33,24 @@ async def lifespan(app: FastAPI):
         stop = threading.Event()
         if app.state.auto_collect_hour is not None:
             threading.Thread(target=collect.run_daily, args=(stop, app.state.auto_collect_hour), daemon=True).start()
+        if app.state.morning_brief_time is not None:  # 사용자마다 Gemini 호출이 생기므로 .env에서 켤 때만
+            threading.Thread(target=briefing.run_daily, args=(stop, app.state.morning_brief_time), daemon=True).start()
         yield
         stop.set()
 
 
-def create_app(database_url: str | None = None, auto_collect_hour: int | None = None) -> FastAPI:
-    """auto_collect_hour: 매일 이 시각에 분석용 데이터 수집 (None이면 안 함. 테스트는 안 함)."""
+def create_app(database_url: str | None = None, auto_collect_hour: int | None = None,
+               morning_brief_time: time | None = None) -> FastAPI:
+    """auto_collect_hour: 매일 이 시각에 분석용 데이터 수집. morning_brief_time: 거래일 이 시각에 아침 브리핑.
+    None이면 안 함 (테스트는 둘 다 안 함)."""
     app = FastAPI(title="invest-agent-api", lifespan=lifespan)
     app.state.database_url = database_url or config.DATABASE_URL
     app.state.auto_collect_hour = auto_collect_hour
+    app.state.morning_brief_time = morning_brief_time
     if config.CORS_ORIGINS:
         # 웹 개발 서버(다른 포트)에서 오는 요청 허용. 로그인은 쿠키가 아니라 Authorization 헤더라서 credentials는 끈다
         app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
-    for module in (auth, policy, chat, snapshot, approvals, history, orders):
+    for module in (auth, policy, chat, snapshot, approvals, history, orders, briefings):
         app.include_router(module.router)
 
     @app.exception_handler(RequestValidationError)
@@ -67,4 +73,7 @@ def create_app(database_url: str | None = None, auto_collect_hour: int | None = 
     return app
 
 
-app = create_app(auto_collect_hour=None if config.AUTO_COLLECT_HOUR == "off" else int(config.AUTO_COLLECT_HOUR))
+app = create_app(
+    auto_collect_hour=None if config.AUTO_COLLECT_HOUR == "off" else int(config.AUTO_COLLECT_HOUR),
+    morning_brief_time=time.fromisoformat(config.MORNING_BRIEF_TIME) if config.MORNING_BRIEF_TIME else None,
+)

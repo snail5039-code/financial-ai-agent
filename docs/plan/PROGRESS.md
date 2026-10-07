@@ -1,6 +1,6 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)의 1-1 아침 브리핑
+마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)의 1-2 종목별 대화방
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
@@ -26,7 +26,7 @@
 | 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결·체결 갱신 완료 (2026-10-07), KB 조회 남음 | `e88fdd1`, `87941ce`, `9f50187` |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | 🔶 기록 화면·체결 질문·웹 배치·디자인 H안 완료, 평가는 마지막에 | `29e6203`, `4558e80`, `4fd80b8`, `b12c5e7` |
 
-서버 테스트 229개 통과, Flutter 테스트 18개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
+서버 테스트 233개 통과, Flutter 테스트 19개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
 ## 3. 지금 서버가 할 수 있는 것 (`apps/api`)
 
@@ -40,6 +40,7 @@
 | 주문: "SK하이닉스 4주 사줘" → 정책 검사(코드) → 처리안(approval) → execute(앱만) → 기록. 분석에서 "이대로 주문할까요?"로도 이어짐 | `agents/order.py`, `functions/orders.py` |
 | 승인 대기·기록 | `GET /api/approvals?status=`, `/api/approvals/{id}`, `/api/history`, `/api/history/{id}` |
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
+| 아침 브리핑(보유 종목 공시·오늘 한도·검증 거친 매수 제안). 수동 `python -m app.briefing`, 자동 `.env` `MORNING_BRIEF_TIME` | `app/briefing.py`, `GET /api/briefings/latest` |
 | 체결 갱신(폰이 KIS 주문 내역으로 올림)·홈 링(오늘 주문 금액·1일 한도·규칙에 걸린 요청 없는 날) | `GET /api/orders/open`, `POST /api/orders/fills`, `GET /api/orders/today` (`routers/orders.py`) |
 | 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,6 +11,7 @@ import 'package:invest_client/broker/fake_broker.dart';
 import 'package:invest_client/broker/kis_mock_broker.dart';
 import 'package:invest_client/common/common.dart';
 import 'package:invest_client/features/history/history_page.dart';
+import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/secure/key_store.dart';
 
 Map<String, dynamic> order(String side, int qty, int price, {String key = 'k1', int? approved}) => {
@@ -244,5 +246,36 @@ void main() {
       expect(() => BrokerKeys(appKey: 'a', appSecret: 'b', account: '1234'), throwsFormatException);
       expect(BrokerKeys(appKey: 'a', appSecret: 'b', account: '50123456').productCode, '01'); // 8자리만 넣으면 01
     });
+  });
+
+  testWidgets('아침 브리핑: 매수 제안 카드와 주문하기', (tester) async {
+    String? asked;
+    final briefing = {
+      'brief_date': '2026-10-07', 'created_at': '2026-10-06T23:30:00Z',
+      'content': {
+        'mode': 'custom', 'news': [], 'checked': [],
+        'limits': {'daily_limit_krw': 500000, 'clean_days': 2},
+        'picks': [
+          {'stock_code': '066570', 'stock_name': 'LG전자', 'proposal_id': 'p1', 'verdict': 'approve', 'summary': '원문과 맞아요',
+           'conditions': [], 'risks': ['환율 변동'], 'last_close': 211500, 'close_date': '2026-10-06', 'worst_case_loss': 21150,
+           'claims': [{'type': '사실', 'text': '영업이익이 늘었다', 'sources': ['반기보고서']}]},
+        ],
+      },
+    };
+    expect(briefingPreview(briefing, today: true), '오늘의 매수 제안 1개가 왔어요');
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BriefingPage(briefing, onAsk: (t) => asked = t))),
+            child: const Text('열기'),
+          ),
+        ))));
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    expect(find.text('LG전자 매수 검토'), findsOneWidget);
+    expect(find.textContaining('1주가 10% 내리면 −21,150원'), findsOneWidget);
+    expect(find.textContaining('일반 모드라'), findsNothing); // 맞춤 모드 안내 문구가 없다
+    await tester.tap(find.text('주문하기'));
+    await tester.pumpAndSettle();
+    expect(asked, 'LG전자 1주 사줘'); // 평소 주문 흐름으로 (처리안 → 승인 → 폰 실행)
   });
 }

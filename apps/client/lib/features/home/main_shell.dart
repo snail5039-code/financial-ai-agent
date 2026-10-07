@@ -44,7 +44,7 @@ class _MainShellState extends State<MainShell> {
     final pages = IndexedStack(index: _tab, children: [
       // 채팅은 넓은 화면에서 목록 + 대화를 나란히 쓰므로 폭을 줄이지 않는다
       RoomsPage(conversation: _conversation, active: _tab == 0, onOpenChat: _openChat,
-          onOpenToday: () => setState(() => _tab = 1)),
+          onOpenToday: () => setState(() => _tab = 1), onAsk: _openChat),
       readable(HomePage(onAsk: _openChat, active: _tab == 1)),
       readable(HistoryPage(active: _tab == 2)),
       readable(const SettingsPage()),

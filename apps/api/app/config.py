@@ -25,6 +25,8 @@ DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY", "").strip() or None
 # 서버가 매일 이 시각(KST)에 분석용 데이터를 자동 수집한다. 시세는 영업일 다음 날 오후에 갱신된다.
 # 비우면 15시, "off"면 끈다
 AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "15"
+# 아침 브리핑 자동 실행 시각 (예: "08:30"). 비우면 안 함: 사용자마다 Gemini 호출이 생긴다
+MORNING_BRIEF_TIME = os.environ.get("MORNING_BRIEF_TIME", "").strip() or None
 
 # 개발용: 장 운영 시간 검사를 이 시각(KST, 예: "10:00")으로 한다. 비우면 실제 시계. 운영 서버에서는 비운다
 MARKET_CLOCK = os.environ.get("MARKET_CLOCK", "").strip() or None

@@ -11,14 +11,17 @@ import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
 import '../history/history_page.dart';
 import '../settings/broker_page.dart';
+import 'briefing_page.dart';
 import 'overview.dart';
 
 class RoomsPage extends StatefulWidget {
-  const RoomsPage({super.key, required this.conversation, required this.active, required this.onOpenChat, required this.onOpenToday});
+  const RoomsPage({super.key, required this.conversation, required this.active, required this.onOpenChat,
+      required this.onOpenToday, required this.onAsk});
   final Conversation conversation;
   final bool active; // 탭으로 돌아올 때마다 새로 읽는다
   final VoidCallback onOpenChat;
   final VoidCallback onOpenToday;
+  final void Function(String text) onAsk; // 브리핑의 "주문하기" → 투자 비서 대화로
 
   @override
   State<RoomsPage> createState() => _RoomsPageState();
@@ -101,6 +104,19 @@ class _RoomsPageState extends State<RoomsPage> {
       ),
       if (balance != null) _holdingsRow(balance) else _connectHint(),
       const Divider(height: 1),
+      if (o.briefing != null)
+        () {
+          final today = o.briefing!['brief_date'] == kstToday();
+          final picks = ((o.briefing!['content'] as Map)['picks'] as List).length;
+          return _room(
+            avatar: const RoomAvatar(icon: Icons.wb_sunny_outlined, color: briefingColor),
+            title: '아침 브리핑',
+            preview: briefingPreview(o.briefing!, today: today),
+            time: hhmm(o.briefing!['created_at'] as String),
+            badge: today ? picks : 0,
+            onTap: () => _push(BriefingPage(o.briefing!, onAsk: widget.onAsk)),
+          );
+        }(),
       ListenableBuilder(
         listenable: widget.conversation,
         builder: (context, _) {

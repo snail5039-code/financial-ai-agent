@@ -20,6 +20,7 @@ typedef Overview = ({
   List<Map<String, dynamic>> approvals, // 승인 필요
   List<Map<String, dynamic>> executions, // 승인했지만 폰에서 실행 전
   List<Map<String, dynamic>> history,
+  Map<String, dynamic>? briefing, // 가장 최근 아침 브리핑, 없으면 null
 });
 
 Future<Overview> loadOverview() async {
@@ -45,6 +46,10 @@ Future<Overview> loadOverview() async {
     api.get('/api/approvals?status=needs_approval'),
     api.get('/api/approvals?status=needs_execution'),
     api.get('/api/history'),
+    api.get('/api/briefings/latest').then<Object?>((value) => value, onError: (Object error) {
+      if (error is ApiError && error.status == 404) return null; // 아직 브리핑이 없음
+      throw error;
+    }),
   ]);
   List<Map<String, dynamic>> rows(Object? value) => (value as List).cast<Map<String, dynamic>>();
   return (
@@ -53,8 +58,12 @@ Future<Overview> loadOverview() async {
     approvals: rows(results[1]),
     executions: rows(results[2]),
     history: rows(results[3]),
+    briefing: results[4] as Map<String, dynamic>?,
   );
 }
+
+/// 한국 날짜 "2026-10-07" (브리핑이 오늘 것인지 볼 때)
+String kstToday() => DateTime.now().toUtc().add(const Duration(hours: 9)).toIso8601String().substring(0, 10);
 
 List<Map<String, dynamic>> holdingsOf(Map<String, dynamic> balance) => (balance['holdings'] as List).cast<Map<String, dynamic>>();
 
