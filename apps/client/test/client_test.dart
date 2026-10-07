@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:invest_client/api/api.dart';
 import 'package:invest_client/broker/broker.dart';
 import 'package:invest_client/broker/fake_broker.dart';
+import 'package:invest_client/broker/kb_broker.dart';
 import 'package:invest_client/broker/kis_mock_broker.dart';
 import 'package:invest_client/common/common.dart';
 import 'package:invest_client/features/history/history_page.dart';
@@ -315,5 +316,29 @@ void main() {
     expect(find.text('내일 기아 · 매도 검토'), findsOneWidget);
     expect(find.text('검증 사용자 판단 필요'), findsOneWidget);
     expect(find.textContaining('이러면 판단이 틀린 것: 실적 개선'), findsOneWidget);
+  });
+
+  test('KB증권: 토큰 → 현재가(IVU10140), 잔고·주문은 하지 않는다', () async {
+    final sent = <http.Request>[];
+    final broker = KbBroker(BrokerKeys(appKey: 'ak', appSecret: 'as', account: '12345678-01'), box: SecureBox.memory(),
+        client: MockClient((request) async {
+      sent.add(request);
+      if (request.url.path == '/oauth2/token') return jsonResponse({'dataBody': {'access_token': 'tok', 'expires_in': 86400}});
+      final code = (jsonDecode(request.body)['dataBody'] as Map)['shrt_cd'];
+      return jsonResponse({'dataHeader': {}, 'dataBody': code == '005930' ? {'is_nm': '삼성전자', 'now_prc': 276000} : {'msg': '종목 없음 '}});
+    }));
+    expect(await broker.price('005930'), 276000);
+    expect(await broker.price('005930'), 276000); // 토큰은 다시 받지 않는다
+    expect(sent.where((r) => r.url.path == '/oauth2/token').length, 1);
+    final token = jsonDecode(sent.first.body) as Map;
+    expect(token['dataBody'], {'appKey': 'ak', 'appSecret': 'as', 'grantType': 'client_credentials'});
+    final quote = sent[1];
+    expect((quote.url.toString(), quote.headers['Authorization'], quote.headers['appKey']),
+        ('$kbBaseUrl/api/v1/ivu10140', 'bearer tok', 'ak'));
+    expect(jsonDecode(quote.body)['dataBody'], {'excg_clsf': '1', 'shrt_cd': '005930'});
+    await expectLater(broker.price('999999'), throwsA(isA<BrokerError>().having((e) => e.message, 'message', contains('종목 없음'))));
+    await expectLater(broker.balance(), throwsA(isA<BrokerError>()));
+    await expectLater(broker.order('buy', '005930', 1, 276000), throwsA(isA<BrokerError>()));
+    expect(sent.length, 4); // 잔고·주문은 KB로 아무것도 보내지 않았다
   });
 }

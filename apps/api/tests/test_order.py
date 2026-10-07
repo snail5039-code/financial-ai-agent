@@ -591,14 +591,18 @@ def test_close_review_rewrites_until_sources_check(client, custom_user, ai, revi
     post_snapshot(client, custom_user)
     review_ai["drafts"] = [review_draft("dart:NOPE"), review_draft()]  # 첫 회고는 없는 출처를 단다
 
-    result = review.build_review(migrated, custom_user["id"])  # 장 마감 요약이 없으면 먼저 만든다
+    review.build_review(migrated, custom_user["id"])
+    place_filled_order(client, custom_user)  # 회고 뒤에 또 산다 → 다시 만들면 요약도 지금 기록으로 새로 만든다
+    review_ai["invest"], review_ai["verify"] = [], []
+    review_ai["drafts"] = [review_draft("dart:NOPE"), review_draft()]
+    result = review.build_review(migrated, custom_user["id"])
 
     # 코드 검사가 없는 출처를 잡아 검증 AI가 승인해도 반려 → 다시 쓴다
     assert len(review_ai["invest"]) == 2 and "r0: 없는 출처 ID: dart:NOPE" in review_ai["invest"][1]
     assert (result["verdict"], result["rounds"]) == ("approve", 2)
     # 투자 AI 자료: 오늘 기록·제안서·비중(코드 계산)·종가
     context = review_ai["invest"][0]
-    assert "산 금액(체결) 400,000원" in context and "주문전자 제안서" in context and "비중 40.0%" in context
+    assert "산 금액(체결) 800,000원" in context and "주문전자 제안서" in context and "비중 40.0%" in context  # 스냅샷은 그대로
     assert "수수료율 미입력이라 미확인" in context and f"price:{CODE}:2026-10-01" in context
     # 검증 AI는 투자 AI의 자료 목록이 아니라 인용한 출처만 다시 읽는다
     checked = review_ai["verify"][1]
@@ -607,7 +611,7 @@ def test_close_review_rewrites_until_sources_check(client, custom_user, ai, revi
     assert (plan["stock_name"], plan["action"]) == (NAME, "매도 검토")
     assert plan["reasons"][0]["sources"] == ["내 계좌 비중 (최근 스냅샷 × 최근 종가, 코드 계산)"]
     saved = client.get("/api/briefings/latest?kind=close", headers=custom_user["headers"]).json()["content"]
-    assert saved["bought_krw"] == 400_000 and saved["review"]["summary"] == "원문과 맞아요"  # 요약에 붙는다
+    assert saved["bought_krw"] == 800_000 and saved["review"]["summary"] == "원문과 맞아요"  # 요약에 붙는다
 
 
 def test_close_review_general_mode_and_nothing_to_review(client, user, review_ai, migrated) -> None:

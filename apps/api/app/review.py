@@ -174,11 +174,7 @@ def build_review(database_url: str, user_id: str, now: datetime | None = None) -
     """오늘 장 마감 요약에 AI 회고를 붙이고 돌려준다. 오늘 매매·보유·관심 종목이 모두 없으면 만들지 않는다 (None, 비용 없음)."""
     now = now or datetime.now(KST)
     day = now.date()
-    with connect(database_url, row_factory=dict_row) as conn:
-        has_close = conn.execute("SELECT 1 FROM briefings WHERE user_id = %s AND brief_date = %s AND kind = 'close'",
-                                 (user_id, day)).fetchone()
-    if not has_close:
-        build_close(database_url, user_id, now)
+    build_close(database_url, user_id, now)  # 요약을 지금 기록으로 다시 만든다 (그 뒤의 매매가 빠지지 않게, LLM 없음)
 
     with connect(database_url, row_factory=dict_row) as conn:
         profile = profile_summary(conn, user_id)
