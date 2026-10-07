@@ -34,9 +34,13 @@ class Conversation extends ChangeNotifier {
     return send(text);
   }
 
-  Future<void> send(String text) {
+  Future<void> send(String text) async {
     items.add(ChatItem('user', text));
     waiting = null; // 서버도 멈춰 있던 업무를 버리고 새로 시작한다
+    // "아까 주문 체결됐어?"에 지금 값으로 답하도록 체결부터 갱신한다 (열린 주문이 없으면 서버 조회 한 번)
+    busy = true; // 갱신하는 동안 두 번 보내지 않게
+    notifyListeners();
+    if (!kIsWeb) await syncFills(currentBroker.value, get: api.get, post: api.post);
     return _run(api.stream('/api/chat', {'thread_id': threadId, 'text': text, 'client': clientKind}));
   }
 

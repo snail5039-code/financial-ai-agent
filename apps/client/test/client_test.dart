@@ -220,6 +220,26 @@ void main() {
       expect(sent.where((r) => r.url.path.endsWith('order-cash')), isEmpty);
     });
 
+    test('체결 갱신: 접수된 주문의 체결 수량·평균가를 서버에 올린다', () async {
+      final b = kis((_) async => jsonResponse({'rt_cd': '0', 'output1': [
+            {'odno': '0000010734', 'sll_buy_dvsn_cd': '02', 'ord_qty': '2', 'ord_unpr': '111400',
+             'tot_ccld_qty': '2', 'avg_prvs': '111200', 'ord_tmd': '101500'},
+            {'odno': '0000010735', 'sll_buy_dvsn_cd': '02', 'ord_qty': '1', 'ord_unpr': '111400',
+             'tot_ccld_qty': '0', 'avg_prvs': '0', 'ord_tmd': '101600'},
+          ]}));
+      final posted = <Object>[];
+      await syncFills(b,
+          get: (_) async => [
+                {'idempotency_key': 'a', 'stock_code': '000270', 'broker_order_no': '0000010734', 'filled_qty': 0},
+                {'idempotency_key': 'b', 'stock_code': '000270', 'broker_order_no': '0000010735', 'filled_qty': 0},
+              ],
+          post: (path, body) async => posted.add(body));
+      expect(posted, [
+        {'fills': [{'idempotency_key': 'a', 'filled_qty': 2, 'filled_price': 111200}]}, // 아직 체결 안 된 b는 안 보낸다
+      ]);
+      expect(sent.where((r) => r.headers['tr_id'] == 'VTTC0081R').length, 1); // 같은 종목은 한 번만 조회
+    });
+
     test('계좌번호 형식이 틀리면 저장하지 않는다', () {
       expect(() => BrokerKeys(appKey: 'a', appSecret: 'b', account: '1234'), throwsFormatException);
       expect(BrokerKeys(appKey: 'a', appSecret: 'b', account: '50123456').productCode, '01'); // 8자리만 넣으면 01

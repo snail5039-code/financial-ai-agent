@@ -46,6 +46,7 @@ class _HomePageState extends State<HomePage> {
         throw ApiError(0, '지금 ${broker.name}에 연결할 수 없어요 ($error)');
       }
       await api.post('/api/snapshot', balance); // 웹에서 볼 수 있게 계좌번호 없이 올린다
+      await syncFills(broker, get: api.get, post: api.post);
     }
     final waiting = await api.get('/api/approvals?status=needs_approval') as List;
     return (balance, waiting.length);

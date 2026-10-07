@@ -184,3 +184,28 @@ Future<Map<String, dynamic>> _checkUncertain(Broker broker, Map<String, dynamic>
     };
   }
 }
+
+/// 체결 갱신 (routers/orders.py). 서버에 "접수"로 남은 오늘 주문을 증권사 주문 내역에서 다시 보고 체결 수량·평균가를 올린다.
+/// 폰이 열릴 때(홈)와 대화를 보낼 때 부른다. 보조 기능이라 실패해도 화면은 그대로 둔다
+Future<void> syncFills(
+  Broker? broker, {
+  required Future<dynamic> Function(String path) get,
+  required Future<dynamic> Function(String path, Object body) post,
+}) async {
+  if (broker == null || broker.isFake) return; // 가짜 증권사는 주문하자마자 체결이다
+  try {
+    final open = (await get('/api/orders/open') as List).cast<Map<String, dynamic>>();
+    final byCode = <String, List<BrokerOrder>>{};
+    final fills = <Map<String, dynamic>>[];
+    for (final o in open) {
+      final code = o['stock_code'] as String;
+      final orders = byCode[code] ??= await broker.todayOrders(code);
+      final match = orders.where((b) => b.orderNo == o['broker_order_no']).firstOrNull;
+      if (match == null || match.filledQty <= (o['filled_qty'] as int) || match.filledPrice == null) continue;
+      fills.add({'idempotency_key': o['idempotency_key'], 'filled_qty': match.filledQty, 'filled_price': match.filledPrice});
+    }
+    if (fills.isNotEmpty) await post('/api/orders/fills', {'fills': fills});
+  } catch (error) {
+    debugPrint('체결 갱신 실패: $error');
+  }
+}

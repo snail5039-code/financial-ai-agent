@@ -435,3 +435,49 @@ def test_result_is_only_mine(client, custom_user, ai) -> None:
     client.post("/api/auth/signup", json={"email": email, "password": "pw-other-1", "agreed_terms": True})
     token = client.post("/api/auth/login", json={"email": email, "password": "pw-other-1"}).json()["token"]
     assert result_text(client, {"headers": {"Authorization": f"Bearer {token}"}}) == "주문 기록이 없어요."
+
+
+# ---------- 체결 갱신 (접수 → 체결) ----------
+
+def place_accepted_order(client, user):
+    events = to_approval(client, user)
+    execute_events = events_of(answer(client, user, events, {"decision": "approve"}))
+    key = first(execute_events, "interrupt")["request"]["idempotency_key"]
+    accepted = {"result": {"idempotency_key": key, "status": "accepted", "broker_order_no": "0000777", "filled_qty": 0}}
+    events_of(answer(client, user, execute_events, accepted))
+    return key
+
+
+def test_fill_sync_updates_accepted_order(client, custom_user, ai) -> None:
+    headers = custom_user["headers"]
+    key = place_accepted_order(client, custom_user)
+    assert "접수됐어요. 아직 체결되지 않았어요" in result_text(client, custom_user)
+
+    [open_order] = client.get("/api/orders/open", headers=headers).json()
+    assert open_order == {"idempotency_key": key, "stock_code": CODE, "broker_order_no": "0000777", "side": "buy",
+                          "qty": 4, "filled_qty": 0}
+
+    def post(qty, price=99_500):
+        fill = {"idempotency_key": key, "filled_qty": qty, **({"filled_price": price} if price else {})}
+        return client.post("/api/orders/fills", headers=headers, json={"fills": [fill]})
+
+    assert post(1, None).status_code == 422                       # 체결 수량이 있으면 가격도
+    assert post(1).json()["updated"][0]["status"] == "partially_filled"
+    assert post(0, None).json()["updated"] == []                   # 체결 수량은 줄어들 수 없다
+    assert post(5).json()["updated"] == []                         # 주문 수량을 넘을 수 없다
+    assert post(4).json()["updated"][0]["status"] == "filled"
+    assert client.get("/api/orders/open", headers=headers).json() == []
+    assert post(4).json()["updated"] == []                         # 끝난 주문은 다시 바꾸지 않는다
+
+    text = result_text(client, custom_user)
+    assert "체결됐어요" in text and "체결 4주 × 99,500원" in text and "증권사에서 확인한 기록" in text
+
+
+def test_fill_sync_ignores_other_users_orders(client, custom_user, ai) -> None:
+    key = place_accepted_order(client, custom_user)
+    email = "fill-" + custom_user["email"]
+    client.post("/api/auth/signup", json={"email": email, "password": "pw-other-1", "agreed_terms": True})
+    other = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"email": email, "password": "pw-other-1"}).json()["token"]}
+    assert client.get("/api/orders/open", headers=other).json() == []
+    fill = {"idempotency_key": key, "filled_qty": 4, "filled_price": PRICE}
+    assert client.post("/api/orders/fills", headers=other, json={"fills": [fill]}).json()["updated"] == []

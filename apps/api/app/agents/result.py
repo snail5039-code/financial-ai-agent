@@ -1,8 +1,8 @@
 """결과 확인: "아까 주문 체결됐어?" (docs/plan/04-graph-design.md 6장).
 
 LLM 없이 DB 기록으로 답한다. 대상은 이 사용자의 가장 최근 주문 요청(정책 검사까지 간 제안), 종목을 말했으면 그 종목.
-주문 결과는 폰이 보낸 마지막 기록이다. "접수"면 그 뒤 체결 여부는 아직 모른다고 쓴다.
-ponytail: 접수 뒤 체결은 폰이 증권사 주문 내역을 다시 볼 때 갱신된다. 실시간 체결 확인이 필요하면 fetch에 주문 조회를 더한다
+주문 결과는 폰이 보낸 마지막 기록이다. 접수 뒤 체결은 폰이 열릴 때·대화를 보낼 때 증권사 주문 내역을 다시 보고
+갱신한다(routers/orders.py). 그래서 폰에서 물으면 방금 확인한 값, 웹에서 물으면 폰이 마지막으로 확인한 값이다.
 """
 
 from datetime import datetime
@@ -18,7 +18,7 @@ from app.db import connect
 SIDE_LABELS = {"buy": "매수", "sell": "매도"}
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
 ORDER_LABELS = {
-    "accepted": "접수됐어요 (체결 여부는 아직 기록되지 않았어요)",
+    "accepted": "접수됐어요. 아직 체결되지 않았어요",
     "filled": "체결됐어요",
     "partially_filled": "일부 체결됐어요",
     "failed": "실패했어요",
@@ -31,7 +31,8 @@ LATEST_SQL = """
            pc.ok AS policy_ok,
            (SELECT verdict FROM verifications v WHERE v.proposal_id = p.id ORDER BY round DESC LIMIT 1) AS verdict,
            a.status AS approval_status, a.expires_at, a.decided_at, a.decided_channel,
-           o.status AS order_status, o.broker_order_no, o.filled_qty, o.filled_price, o.message, o.created_at AS ordered_at
+           o.status AS order_status, o.broker_order_no, o.filled_qty, o.filled_price, o.message,
+           COALESCE(o.checked_at, o.created_at) AS checked_at
     FROM proposals p
     JOIN stocks s ON s.code = p.stock_code
     JOIN policy_checks pc ON pc.proposal_id = p.id
@@ -89,5 +90,5 @@ def format_result(row: dict) -> str:
             lines.append(f"- 주문번호 {row['broker_order_no']}")
         if row["message"]:
             lines.append(f"- 증권사 메시지: {row['message']}")
-        lines.append(f"(폰이 보낸 주문 결과 기록, {hhmm(row['ordered_at'])} 기준)")
+        lines.append(f"(폰이 증권사에서 확인한 기록, {hhmm(row['checked_at'])} 기준)")
     return "\n".join(lines)
