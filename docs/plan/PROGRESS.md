@@ -1,15 +1,16 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-06 · 다음 할 일: 7단계 KB 조회(KB 키 필요) 또는 투자 용어 RAG (11번 문서)
+마지막 갱신: 2026-10-07 · 다음 할 일: 아래 "8. 할 일 목록"에서 사용자가 고른 것
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
 ## 1. 새 세션에서 처음 할 일
 
 1. [AGENTS.md](../../AGENTS.md)(작업 규칙)와 이 문서를 읽는다
-2. [08-dev-order.md](08-dev-order.md)의 **7단계** 할 일과 참고 문서를 읽는다
+2. 이 문서 "8. 할 일 목록"을 보여주고 무엇부터 할지 사용자에게 고르게 한다. 고른 일의 참고 문서([08-dev-order.md](08-dev-order.md), [11-rag-expansion.md](11-rag-expansion.md) 등)를 읽는다
 3. 계획을 사용자에게 보여주고 동의를 받은 뒤 구현한다 (AGENTS.md 2장)
 4. 푸시·외부 전송·설치·약관 동의·비용 생기는 일은 **매번** 먼저 묻는다
+5. **답은 항상 한국어로** 한다 (영어로 답했다가 여러 번 지적받음)
 
 ## 2. 단계별 상태
 
@@ -22,8 +23,8 @@
 | 5 | 주문 그래프: 처리안 → 승인 → 폰 실행(execute) → 기록, 승인·기록 API | ✅ | `70ed1e3` |
 | — | 개발 환경: Flutter, Android SDK, 에뮬레이터 설치 | ✅ | `51832f9` |
 | 6 | Flutter 앱 뼈대: 화면 8종, 대화·멈춤 처리, 가짜 증권사 | ✅ | `2623ba3` + 마무리 |
-| 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결 확인 완료 (2026-10-07), KB 조회 남음 | |
-| 8 | 웹 · 기록 화면 · 마무리 · 평가 | ⬜ | |
+| 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결 확인 완료 (2026-10-07), KB 조회 남음 | `e88fdd1`, `87941ce` |
+| 8 | 웹 · 기록 화면 · 마무리 · 평가 | 🔶 기록 화면·체결 질문·웹 배치 완료, 평가는 마지막에 | `29e6203`, `4558e80`, `4fd80b8` |
 
 서버 테스트 226개 통과, Flutter 테스트 17개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
@@ -41,7 +42,7 @@
 | 계좌 스냅샷(폰이 올림, 계좌번호 없음) | `routers/snapshot.py` |
 | 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
 
-앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·설정. 증권사: KIS 모의(`broker/kis_mock_broker.dart`)로 실제 주문·체결 확인. 개발 키는 `apps/client/dev_keys.env`(git 제외, 양식 `dev_keys.example.env`)를 `--dart-define-from-file=dev_keys.env`로 넘긴다. 키가 없으면 디버그 빌드는 가짜 증권사를 쓴다.
+앱(`apps/client`, Flutter): 로그인·퀴즈·홈·대화·처리안 상세·승인 대기·기록(목록·타임라인)·설정·증권사 연결. 넓은 화면(웹)은 왼쪽 메뉴 + 대화 옆 처리안 패널. 증권사: KIS 모의(`broker/kis_mock_broker.dart`)로 실제 주문·체결 확인. 개발 키는 `apps/client/dev_keys.env`(git 제외, 양식 `dev_keys.example.env`)를 `--dart-define-from-file=dev_keys.env`로 넘긴다. 키가 없으면 디버그 빌드는 가짜 증권사를 쓴다.
 
 API 형식: [06-api-spec.md](06-api-spec.md). 멈춤 4종류 `question` / `fetch` / `approval` / `execute`의 형식은 06 문서 3장과 `agents/interrupts.py`.
 
@@ -103,7 +104,24 @@ cd apps/client && flutter run -d emulator-5554 --no-enable-impeller --dart-defin
 - ERD·S-03 퀴즈 화면 그림이 옛날 기준 (원본 `.mmd`는 최신)
 - 키 3개가 이전 대화 기록에 남음 → 공개 배포 전 재발급 권장
 
-## 7. 작업할 때 주의 (겪은 것)
+## 7. 개발 환경 상태 (2026-10-07)
+
+- 테스트 계정 `app6@test.local` (개발 DB). 비밀번호는 채팅·저장소에 없음 → 필요하면 새 계정을 만든다
+- KIS 모의계좌·Open API: 현재 HTS 아이디로 재신청 완료, 키는 `apps/client/dev_keys.env`에 있음 (값 출력 금지). 모의 잔고 약 977만 원 + 기아 2주
+- 에뮬레이터 `invest_phone`: PIN 잠금 설정됨 (사용자가 직접). NDK 28.2·CMake 설치됨
+- 서버 `.env`에 개발용 `MARKET_CLOCK=10:00`, `CORS_ORIGINS=http://localhost:5000`
+
+## 8. 할 일 목록 (우선순위 순, 사용자가 고른다)
+
+| # | 할 일 | 필요한 것 | 메모 |
+|---|---|---|---|
+| 1 | **체결 결과를 서버 기록에 반영** | 없음 | KIS 주문은 "접수"로 기록되고 체결은 나중에 일어난다. 폰이 주문 내역(VTTC0081R)을 다시 보고 서버에 갱신하는 방법(fetch에 주문 조회 추가 또는 앱이 열릴 때 동기화). 지금 "아까 주문 체결됐어?"는 "접수됐어요"로 답함 |
+| 2 | **투자 용어 RAG** | 사용자 결정: 상업적 이용 여부 | 설계는 [11-rag-expansion.md](11-rag-expansion.md) 2-2. 데이터는 **금융위원회 금융용어사전**(공공데이터포털 15160317, PDF 229개, 이용허락 제한 없음)을 기본으로, 없는 용어만 직접 쓴다. 예탁결제원 금융용어 API(15158905)는 상업적 이용 금지라 보류. 답은 LLM 없이 용어집 그대로, `explain` 요청 종류 추가. 다음 단계: PDF 내려받아(사용자 허락) 필요한 용어가 몇 개 있는지 확인 |
+| 3 | KB 잔고·시세 조회 어댑터 (7단계 나머지) | KB Open API 키·문서 | 키는 조회만. 주문 API 호출 금지 (AGENTS.md 4장) |
+| 4 | 평가 (8단계 완료 기준) | Gemini 호출 비용 소량 | 데모 시나리오 3개, Golden Set 정확도, 검증 AI 오류 주입 20개 탐지율. **기능을 다 만든 뒤 마지막에** |
+| 5 | 그 밖의 한계 | — | 6장 참고 (1등급 종목 데이터, 계좌 비례 한도, 2027 휴장일, ERD 그림, 공개 전 키 재발급) |
+
+## 9. 작업할 때 주의 (겪은 것)
 
 - 재부팅하면 Docker Desktop이 꺼져 있다 → DB 연결 실패·테스트 멈춤. 먼저 켠다
 - Windows Git Bash의 `curl`은 한글 JSON 본문을 깨뜨린다 → API 수동 확인은 Python `httpx` 스크립트로
@@ -111,6 +129,8 @@ cd apps/client && flutter run -d emulator-5554 --no-enable-impeller --dart-defin
 - 주문 장 시간 검사는 실제 시계를 쓴다 → 장이 닫힌 시간에 실제 확인할 때는 테스트처럼 `app.clock.now`를 고정한다
 - 에뮬레이터에서 Impeller(기본 그래픽)로 그리면 탭을 바꿔도 본문이 이전 화면으로 남는 현상이 있다 (앱 문제 아님). `--no-enable-impeller`로 실행하거나, 설치한 앱은 `adb shell am start -n com.investagent.invest_client/.MainActivity --ez enable-impeller false`
 - KIS 연결 점검: `python tools/kis_mock_check.py` (90070000이면 HTS 아이디 변경 등 KIS 계정 연결 문제 → 모의투자·Open API 재신청). 에뮬레이터에는 PIN 잠금이 있어야 주문 전 잠금 확인이 된다
-- 에뮬레이터 화면 조작은 `adb shell input tap/text` (한글 입력은 안 됨 → 추천 질문 칩을 누른다)
+- 에뮬레이터 화면 조작은 `adb shell input tap/text` (한글 입력은 안 됨 → 추천 질문 칩을 누른다). 생체인증·PIN 화면은 캡처하면 검게 나온다 (사용자가 직접 입력)
+- Flutter 화면에서 `setState(() => _x = _load())`처럼 Future를 돌려주면 오류가 나고 화면이 갱신되지 않는다 → `setState(() { _x = _load(); })`
+- KIS 모의: 토큰 발급은 1분에 1번, 초당 호출 수가 적다 ("초당 거래건수 초과")
 - 장이 닫힌 시간에 주문 흐름을 확인하려면 `.env`에 `MARKET_CLOCK=10:00` (주말·휴장일이면 직전 거래일로 봄, 운영에서는 비운다). 테스트는 이 값을 무시한다
 - 테스트는 `invest_test` DB를 새로 만들어 쓴다 (개발 DB `invest`는 안 건드림). Gemini는 가짜로 바꿔 끼워 비용 0
