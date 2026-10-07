@@ -32,23 +32,56 @@ def test_amount_parsing() -> None:
 
 def test_collect_prices_marks_top_by_market_cap_on_latest_day(conn, monkeypatch) -> None:
     old, new = date(2026, 10, 1), date(2026, 10, 2)
-    rows = [
-        price_row("111111", "작은회사", new, 1000, 10_000),
-        price_row("222222", "큰회사", new, 5000, 900_000),
-        price_row("333333", "어제만큰회사", old, 9000, 9_000_000),  # 최신일이 아니라 순위에서 빠진다
-        price_row("222225", "큰회사우", new, 5000, 950_000),       # 우선주: OpenDART에 없어서 빠진다
-    ]
+    rows = {
+        "KOSPI": [
+            price_row("111111", "작은회사", new, 1000, 10_000),
+            price_row("222222", "큰회사", new, 5000, 900_000),
+            price_row("333333", "어제만큰회사", old, 9000, 9_000_000),  # 최신일이 아니라 순위에서 빠진다
+            price_row("222225", "큰회사우", new, 5000, 950_000),       # 우선주: OpenDART에 없어서 빠진다
+        ],
+        "KOSDAQ": [price_row("444444", "코닥회사", new, 2000, 50_000)],
+    }
+    calls = []
 
-    def fake_daily_prices(api_key, begin, end, stock_code=None):
-        return [r for r in rows if stock_code in (None, r["stock_code"])]
+    def fake_daily_prices(api_key, begin, end, stock_code=None, market="KOSPI"):
+        calls.append(stock_code)
+        return [r for r in rows[market] if stock_code in (None, r["stock_code"])]
 
     monkeypatch.setattr(market_data, "daily_prices", fake_daily_prices)
-    monkeypatch.setattr(collect, "TARGET_COUNT", 1)
+    monkeypatch.setattr(collect, "TARGETS", {"KOSPI": 1, "KOSDAQ": 1})
 
-    assert collect.collect_prices(conn, "key", new, eligible={"111111", "222222", "333333"}) == ["222222"]
-    targets = conn.execute("SELECT code FROM stocks WHERE is_target").fetchall()
-    assert [t["code"] for t in targets] == ["222222"]
+    assert collect.collect_prices(conn, "key", new, eligible={"111111", "222222", "333333", "444444"}) == ["222222", "444444"]
+    targets = conn.execute("SELECT code, market FROM stocks WHERE is_target ORDER BY code").fetchall()
+    assert [(t["code"], t["market"]) for t in targets] == [("222222", "KOSPI"), ("444444", "KOSDAQ")]
     assert conn.execute("SELECT close FROM stock_prices WHERE stock_code = '222222'").fetchone()["close"] == 5000
+    assert calls == [None, "222222", None, "444444"]  # 처음 보는 종목은 100일치를 따로 받는다
+
+    # 다음 날: 기록이 충분한 종목은 시장 전체 시세로만 갱신한다 (종목별 호출 없음)
+    conn.execute("INSERT INTO stock_prices SELECT '222222', d::date, 5000, 900000, 180 FROM"
+                 " generate_series('2026-06-20'::date, '2026-09-30'::date, '1 day') d ON CONFLICT DO NOTHING")
+    rows["KOSPI"].append(price_row("222222", "큰회사", date(2026, 10, 5), 5100, 918_000))
+    calls.clear()
+    collect.collect_prices(conn, "key", date(2026, 10, 5), eligible={"222222", "444444"})
+    assert calls == [None, None, "444444"]  # 코닥회사는 기록이 짧아 아직 따로 받는다
+    assert conn.execute("SELECT close FROM stock_prices WHERE stock_code = '222222' AND trade_date = '2026-10-05'"
+                        ).fetchone()["close"] == 5100
+
+
+def test_risk_grade_from_exchange_disclosures(conn) -> None:
+    from app.functions.suitability import stock_risk
+    conn.execute("INSERT INTO stocks (code, name, market) VALUES ('888888', '위험회사', 'KOSDAQ') ON CONFLICT DO NOTHING")
+    conn.execute("INSERT INTO disclosures VALUES ('W1', '888888', '주권매매거래정지(풍문또는보도관련)', 'u', '2026-09-01'),"
+                 " ('W2', '888888', '기타시장안내(관리종목지정우려종목)', 'u', '2026-03-25'),"
+                 " ('W3', '888888', '내부결산시점관리종목지정ㆍ형식적상장폐지ㆍ상장적격성 실질심사사유발생', 'u', '2025-03-01'),"
+                 " ('W4', '888888', '상장폐지승인을위한의안상정결정', 'u', '2026-09-20'),"  # 이전상장 준비: 위험 아님
+                 " ('W5', '888888', '주권매매거래정지해제 (상장적격성 실질심사 대상 제외 결정)', 'u', '2026-09-10')")
+    assert collect.refresh_risk_grade(conn, "888888", date(2026, 10, 5)) == 1
+    assert stock_risk(conn, "888888") == (1, {"rcept_no": "W2", "title": "기타시장안내(관리종목지정우려종목)",
+                                              "filed_at": date(2026, 3, 25),
+                                              "later": "상장폐지승인을위한의안상정결정 (2026-09-20)"})  # 뒤에 나온 관련 공시도 함께
+    # 1년이 지나면 2등급으로 돌아온다. 풍문 거래정지는 위험 공시로 보지 않는다
+    assert collect.refresh_risk_grade(conn, "888888", date(2027, 3, 30)) == 2
+    assert stock_risk(conn, "888888") == (2, None)
 
 
 def test_collect_financials_and_disclosures(conn, monkeypatch) -> None:
@@ -69,9 +102,19 @@ def test_collect_financials_and_disclosures(conn, monkeypatch) -> None:
     monkeypatch.setattr(collect.llm, "embed_documents",
                         lambda texts: embedded.extend(texts) or [[0.1] * 768 for _ in texts])
 
-    assert collect.collect_financials(conn, "key", "999999", "C1", 2026) == 2
+    asked = []
+    monkeypatch.setattr(opendart, "major_accounts",
+                        lambda corp, year, reprt, key: asked.append((year, reprt)) or (accounts if (year, reprt) == (2025, "11011") else []))
+    assert collect.collect_financials(conn, "key", "999999", "C1", 2026) == 2 and len(asked) == 8
+    asked.clear()
+    assert collect.collect_financials(conn, "key", "999999", "C1", 2026) == 0
+    assert len(asked) == 7 and (2025, "11011") not in asked  # 이미 받은 보고서는 다시 묻지 않는다
     first = collect.collect_disclosures(conn, "key", "999999", "C1", date(2026, 10, 5))
+    since = []
+    monkeypatch.setattr(opendart, "disclosures",
+                        lambda corp, key, begin, end, kind=None: since.append((begin, kind)) or ([filing] if kind == "A" else []))
     second = collect.collect_disclosures(conn, "key", "999999", "C1", date(2026, 10, 5))
+    assert since == [("20260401", None), ("20251005", "A")]  # 목록은 마지막 공시일부터, 정기보고서는 1년치
 
     row = conn.execute("SELECT amount, prev_amount FROM financials WHERE stock_code = '999999'"
                        " AND account = '당기순이익(손실)'").fetchone()
@@ -117,3 +160,9 @@ def test_run_daily_stops_when_asked(monkeypatch) -> None:
     monkeypatch.setattr(collect, "run", fake_run)
     collect.run_daily(stop, 15)
     assert len(calls) == 2
+
+
+def test_document_without_file_has_no_sections(monkeypatch) -> None:
+    body = '<?xml version="1.0" encoding="UTF-8"?><result><status>014</status><message>파일이 존재하지 않습니다.</message></result>'
+    monkeypatch.setattr(opendart.httpx, "get", lambda *a, **k: type("R", (), {"content": body.encode()})())
+    assert opendart.document_sections("R1", "key", ("사업의 내용",)) == []  # 실패로 종목 전체를 되돌리지 않는다

@@ -70,6 +70,8 @@ def document_sections(rcept_no: str, api_key: str, wanted: tuple[str, ...]) -> l
     """공시 원문에서 제목에 wanted 글자가 들어간 큰 단원만 꺼내 (제목, 본문 글자)로 돌려준다."""
     raw = httpx.get(f"{BASE_URL}/document.xml", params={"crtfc_key": api_key, "rcept_no": rcept_no},
                     timeout=TIMEOUT_SECONDS).content
+    if b"<status>014</status>" in raw[:300]:
+        return []  # "파일이 존재하지 않습니다": 원문 파일이 없는 공시 (2026-10-07 신한지주 반기보고서). 본문 없이 넘어간다
     try:
         archive = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as error:

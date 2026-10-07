@@ -1,6 +1,6 @@
 # 진행 상황 · 이어서 하기
 
-마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)에서 위부터 안 끝난 것 (2-4b까지 완료. 1-7·2-1·2-2는 사용자 준비물 필요, 그다음 2-5 분석 대상 확대)
+마지막 갱신: 2026-10-07 · 다음 할 일: [12-todo-by-stage.md](12-todo-by-stage.md)에서 위부터 안 끝난 것 (2-5까지 완료. 2-1·2-2는 사용자 준비물 필요, 그다음 2-6 행동 기반 성향 프로필. KB 키(1-7)는 맨 마지막)
 
 새 대화(세션)에서 이어서 작업할 때 이 문서부터 읽는다. 단계별 상세 기록은 [08-dev-order.md](08-dev-order.md)의 "완료 기록"에 있다.
 
@@ -26,7 +26,7 @@
 | 7 | 증권사 연결 (KIS 모의 주문, KB 조회) | 🔶 KIS 모의 주문·체결·체결 갱신 완료 (2026-10-07), KB 조회 남음 | `e88fdd1`, `87941ce`, `9f50187` |
 | 8 | 웹 · 기록 화면 · 마무리 · 평가 | 🔶 기록 화면·체결 질문·웹 배치·디자인 H안 완료, 평가는 마지막에 | `29e6203`, `4558e80`, `4fd80b8`, `b12c5e7` |
 
-서버 테스트 242개 통과, Flutter 테스트 21개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
+서버 테스트 245개 통과, Flutter 테스트 22개(`apps/client`에서 `flutter test`) 통과 + 실제 Gemini 확인 11개(`-m gemini`).
 
 ## 3. 지금 서버가 할 수 있는 것 (`apps/api`)
 
@@ -43,7 +43,7 @@
 | 아침 브리핑(보유 종목 공시·오늘 한도·검증 거친 매수 제안). 수동 `python -m app.briefing`, 자동 `.env` `MORNING_BRIEF_TIME` | `app/briefing.py`, `GET /api/briefings/latest` |
 | 장 마감 요약(LLM 없음, 기본 15:40 `CLOSE_SUMMARY_TIME`) + AI 회고·내일 계획(투자 AI → 검증 AI, 주문 없음, 기본 꺼짐 `CLOSE_REVIEW_TIME`, 수동 `python -m app.review`) | `app/briefing.py` `build_close`, `app/review.py`, `GET /api/briefings/latest?kind=close` |
 | 체결 갱신(폰이 KIS 주문 내역으로 올림)·홈 링(오늘 주문 금액·1일 한도·규칙에 걸린 요청 없는 날) | `GET /api/orders/open`, `POST /api/orders/fills`, `GET /api/orders/today` (`routers/orders.py`) |
-| 데이터 수집: 코스피 시총 상위 30종목(우선주 제외) 종가·재무·공시 본문 임베딩, 서버가 매일 15시 자동 | `app/collect.py` |
+| 데이터 수집: 코스피 시총 상위 100 + 코스닥 50(우선주 제외) 종가·재무·공시 본문 임베딩(약 1.3만 조각), 바뀐 것만, 종목 위험등급(1등급 판별), 서버가 매일 15시 자동 | `app/collect.py` |
 
 앱(`apps/client`, Flutter, 디자인 H안 = 메신저 + 링): 탭 채팅(링 요약·보유 종목·대화방: 투자 비서/처리안/코치/종목)·오늘(링·계좌)·기록·더보기(처리안 모아보기·설정), 로그인·퀴즈·처리안 상세·증권사 연결. 넓은 화면(웹)은 왼쪽 메뉴 + 대화방 목록 + 대화(+처리안 패널). 디자인 후보 캔버스: https://claude.ai/artifact/UE2bH5mfGE7udTJnZH7oD8 (비공개). 증권사: KIS 모의(`broker/kis_mock_broker.dart`)로 실제 주문·체결 확인. 개발 키는 `apps/client/dev_keys.env`(git 제외, 양식 `dev_keys.example.env`)를 `--dart-define-from-file=dev_keys.env`로 넘긴다. 키가 없으면 디버그 빌드는 가짜 증권사를 쓴다.
 

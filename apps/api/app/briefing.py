@@ -25,7 +25,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.agents.analysis import (gather_node, invest_agent_node, route_after_verify, save_proposal, verify_agent_node,
-                                 volatility_rank, CLAIM_LABELS)
+                                 volatility_ranks, CLAIM_LABELS)
 from app.agents.query import latest_snapshot
 from app.agents.state import new_request
 from app.clock import KST
@@ -59,12 +59,12 @@ def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (
         """,
         {"days": NEWS_DAYS, "watching": list(watching)},
     ).fetchall()
-    picks = []
+    picks, ranks = [], volatility_ranks(conn)
     for row in rows:
         if row["code"] in held:
             continue
         reason = buy_block_reason(profile["mode"], profile.get("risk_level"), profile.get("flags") or [],
-                                  stock_risk_grade(row["code"]), volatility_rank(conn, row["code"]))
+                                  stock_risk_grade(conn, row["code"]), ranks.get(row["code"]))
         if reason is None:
             picks.append({"code": row["code"], "name": row["name"]})
         if len(picks) == MAX_CANDIDATES:

@@ -17,9 +17,35 @@ MIN_LEVEL_FOR_GRADE = {1: 5, 2: 3}
 MAX_VOLATILITY_RANK_FOR_BUY = {3: 1 / 3, 4: 0.8}
 
 
-def stock_risk_grade(stock_code: str) -> int:
-    # ponytail: 투자주의·경고·관리종목(1등급) 데이터가 아직 없어 모두 2등급. KRX 시장경보 데이터를 붙이면 여기서 1등급을 준다
-    return DOMESTIC_STOCK_GRADE
+# 1등급(매우 높음)으로 보는 거래소 공시 제목 (OpenDART 거래소 공시, 2026-10-07 실제 제목으로 확인).
+# 투자주의·경고·위험(시장경보)은 DART에 없고 KRX KIND에만 있어 아직 못 본다 (미확인, 10-coverage-expansion.md 2-5)
+RISK_TITLE_PATTERN = "관리종목|상장폐지|상장적격성|투자유의|투자주의환기"
+# 위험이 아닌 제목: 심사 대상 "제외" 결정, 이전상장(코스닥→코스피)을 위한 상장폐지 "의안상정", 결정 "철회"
+# (2026-10-07 실제 수집에서 알테오젠·파두가 잘못 1등급으로 잡혀 추가)
+RISK_TITLE_EXCLUDE = "제외|의안상정|철회"
+RISK_DAYS = 365  # 이 날 수 안에 위험 공시가 있으면 1등급. ponytail: "해제" 공시로 바로 풀지 않고 1년 동안 1등급으로 본다
+
+
+def stock_risk(conn, stock_code: str) -> tuple[int, dict | None]:
+    """종목 위험등급과 1등급의 근거 공시 {rcept_no, title, filed_at, later} (없으면 None). 등급은 수집 때 정해 둔 값이다.
+    later: 근거 공시 뒤에 나온 관련 공시 (예: 심사 대상 "제외" 결정). 1등급은 그대로 두되 함께 보여줘 오해하지 않게 한다."""
+    row = conn.execute(
+        "SELECT s.risk_grade, d.rcept_no, d.title, d.filed_at FROM stocks s"
+        " LEFT JOIN disclosures d ON d.rcept_no = s.risk_rcept_no WHERE s.code = %s", (stock_code,)).fetchone()
+    if row is None:
+        return DOMESTIC_STOCK_GRADE, None
+    if row["rcept_no"] is None:
+        return row["risk_grade"], None
+    later = conn.execute(
+        "SELECT title, filed_at FROM disclosures WHERE stock_code = %s AND filed_at > %s"
+        " AND regexp_replace(title, '\\s', '', 'g') ~ %s ORDER BY filed_at DESC LIMIT 1",
+        (stock_code, row["filed_at"], RISK_TITLE_PATTERN)).fetchone()
+    return row["risk_grade"], {"rcept_no": row["rcept_no"], "title": row["title"], "filed_at": row["filed_at"],
+                               "later": later and f"{later['title']} ({later['filed_at']})"}
+
+
+def stock_risk_grade(conn, stock_code: str) -> int:
+    return stock_risk(conn, stock_code)[0]
 
 
 def buy_block_reason(mode: str, risk_level: int | None, flags: list[str], grade: int,

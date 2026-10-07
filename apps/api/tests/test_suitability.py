@@ -26,8 +26,11 @@ def test_sell_and_hold_only_when_holding() -> None:
     assert allowed_actions("custom", 1, [], 2, holds_stock=False) == ["watch"]
 
 
-def test_domestic_stock_is_grade_2() -> None:
-    assert stock_risk_grade("005930") == 2
+def test_domestic_stock_is_grade_2(migrated) -> None:
+    from psycopg.rows import dict_row
+    from app.db import connect
+    with connect(migrated, row_factory=dict_row) as conn:  # 위험 공시가 없거나 모르는 종목은 원칙대로 2등급 (1등급은 test_collect)
+        assert stock_risk_grade(conn, "000000") == 2
 
 
 @pytest.mark.parametrize(

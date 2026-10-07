@@ -73,14 +73,14 @@ class _WatchlistPageState extends State<WatchlistPage> {
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: SourceText('지금은 분석 대상(코스피 시가총액 상위 30종목)만 고를 수 있어요'),
+                    child: SourceText('지금은 분석 대상(코스피 시가총액 상위 100 · 코스닥 상위 50)만 고를 수 있어요'),
                   ),
                   Expanded(
                     child: ListView(children: [
                       for (final stock in stocks.where((s) => _filter.isEmpty || (s['name'] as String).contains(_filter)))
                         ListTile(
                           title: Text(stock['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(stock['code'] as String),
+                          subtitle: Text('${stock['market'] == 'KOSDAQ' ? '코스닥' : '코스피'} · ${stock['code']}'),
                           trailing: Icon(stock['watching'] == true ? Icons.star : Icons.star_border,
                               color: stock['watching'] == true ? const Color(0xFFFFB020) : mutedText),
                           onTap: () => _toggle(stock),

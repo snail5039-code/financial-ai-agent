@@ -27,7 +27,7 @@ from app.clock import KST
 from app.db import connect
 from app.functions import metrics
 from app.functions.profile import LABELS
-from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk_grade
+from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
@@ -36,7 +36,8 @@ SEARCH_RESULTS = 4
 RECENT_DISCLOSURES = 5
 SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 
-NOT_TARGET_MESSAGE = "{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 30개 종목만 분석·주문할 수 있어요."
+NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 100개, "
+                      "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
@@ -190,20 +191,29 @@ def recent_closes(conn, code: str) -> list[dict]:
     ).fetchall()[::-1]
 
 
-def volatility_rank(conn, code: str) -> float | None:
-    """분석 대상 종목 중 이 종목의 변동성 순위 (0~1, 1이면 가장 출렁임). 계산할 수 없으면 None.
+def volatility_ranks(conn) -> dict[str, float]:
+    """분석 대상 종목마다 같은 시장(코스피·코스닥) 안의 변동성 순위 (0~1, 1이면 가장 출렁임). 계산할 수 없는 종목은 빠진다.
 
-    = 변동성이 이 종목 이하인 대상 종목 수 ÷ 변동성을 계산할 수 있는 대상 종목 수
-    ponytail: 분석할 때마다 대상 전체(30개)를 다시 계산. 종목이 많아지면 수집 때 미리 계산해 저장한다
+    = 같은 시장에서 변동성이 이 종목 이하인 대상 종목 수 ÷ 같은 시장에서 변동성을 계산할 수 있는 대상 종목 수
+    코스닥 소형주가 코스피 순위 기준을 끌어올리지 않게 시장별로 매긴다 (10-coverage-expansion.md 2-6)
     """
-    values = {}
-    for row in conn.execute("SELECT code FROM stocks WHERE is_target").fetchall():
-        value = metrics.volatility([r["close"] for r in recent_closes(conn, row["code"])], metrics.VOLATILITY_DAYS, [])["value"]
+    closes: dict[tuple[str, str], list[int]] = {}
+    for row in conn.execute(
+        "SELECT s.market, s.code, p.close FROM stocks s CROSS JOIN LATERAL"
+        " (SELECT close, trade_date FROM stock_prices WHERE stock_code = s.code ORDER BY trade_date DESC LIMIT %s) p"
+        " WHERE s.is_target ORDER BY s.code, p.trade_date", (metrics.VOLATILITY_DAYS + 1,)):
+        closes.setdefault((row["market"], row["code"]), []).append(row["close"])
+    by_market: dict[str, dict[str, float]] = {}
+    for (market, code), series in closes.items():
+        value = metrics.volatility(series, metrics.VOLATILITY_DAYS, [])["value"]
         if value is not None:
-            values[row["code"]] = value
-    if code not in values:
-        return None
-    return sum(1 for value in values.values() if value <= values[code]) / len(values)
+            by_market.setdefault(market, {})[code] = value
+    return {code: sum(1 for v in values.values() if v <= value) / len(values)
+            for values in by_market.values() for code, value in values.items()}
+
+
+def volatility_rank(conn, code: str) -> float | None:
+    return volatility_ranks(conn).get(code)
 
 
 def compute_metrics(conn, code: str) -> list[dict]:
@@ -297,10 +307,15 @@ def directed_order_text(state: InvestState) -> str:
     return f"{state['stock_name']} {state['qty']:,}주{price} {side}"
 
 
+def grade_text(state: InvestState) -> str:
+    reason = state.get("risk_reason")
+    return f"위험등급 {state['risk_grade']}등급" + (f" (1등급 근거: {reason})" if reason else "")
+
+
 def invest_context(state: InvestState) -> str:
     parts = [
         f"[요청] {state['query']}",
-        f"[종목] {state['stock_name']}({state['stock_code']}), 위험등급 {state['risk_grade']}등급",
+        f"[종목] {state['stock_name']}({state['stock_code']}), {grade_text(state)}",
         "[사용자]\n" + "\n".join(user_lines(state)),
         f"[허용 행동] {', '.join(state['allowed_actions'])}"
         + (f" (매수 제외: {state['buy_block_reason']})" if state.get("buy_block_reason") else ""),
@@ -322,7 +337,7 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
     claims = [f"{n}. ({c['type']}) {c['text']} | 출처: {', '.join(c['source_ids']) or '없음'}"
               f" | 지표: {', '.join(c['metric_ids']) or '없음'}" for n, c in enumerate(proposal["claims"])]
     return "\n\n".join([
-        f"[종목] {state['stock_name']}({state['stock_code']}), 위험등급 {state['risk_grade']}등급",
+        f"[종목] {state['stock_name']}({state['stock_code']}), {grade_text(state)}",
         "[사용자]\n" + "\n".join(user_lines(state)),
         f"[제안] 행동: {proposal['action']}"
         + (f" (사용자가 직접 지시한 주문: {directed_order_text(state)}. 경고 위주로 본다)" if state.get("user_directed") else ""),
@@ -390,6 +405,9 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
                 "SELECT c.rcept_no, c.seq FROM disclosure_chunks c JOIN disclosures d USING (rcept_no)"
                 " WHERE d.stock_code = %s ORDER BY c.embedding <=> %s::vector LIMIT %s",
                 (code, vector, SEARCH_RESULTS))]
+        grade, risk = stock_risk(conn, code)
+        if risk:
+            ids.append(f"dart:{risk['rcept_no']}")  # 1등급 근거 공시를 자료에 넣는다
         if state.get("prices"):
             ids.append(f"quote:{code}")
         if state.get("snapshot"):
@@ -398,12 +416,13 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         found_metrics = compute_metrics(conn, code)
 
     holds = bool(state.get("snapshot")) and any(h["stock_code"] == code for h in state["snapshot"]["holdings"])
-    grade = stock_risk_grade(code)
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rank = volatility_rank(conn, code)
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     return {
         "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)), "risk_grade": grade,
+        "risk_reason": risk and (f"{risk['title']} ({risk['filed_at']} 거래소 공시, 출처 dart:{risk['rcept_no']})"
+                                 + (f". 이후 관련 공시: {risk['later']}" if risk["later"] else "")),
         # 사용자가 직접 지시한 주문은 행동을 바꾸지 않는다. 성향에 안 맞으면 처리안에서 확인을 받는다 (주문 그래프)
         "allowed_actions": [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank),
         "buy_block_reason": buy_block_reason(*profile, rank),
@@ -489,6 +508,8 @@ def format_analysis(state: InvestState) -> str:
         lines.append("일반 모드라 사라·말라 판단은 하지 않고 정보만 정리했어요. 성향 퀴즈를 하면 맞춤 제안을 받을 수 있어요.")
     else:
         lines.append(f"제안: {ACTION_LABELS[proposal['action']]}")
+    if state.get("risk_reason"):
+        lines.append(f"위험등급 1등급(매우 높음): {state['risk_reason'].split(', 출처')[0]})")
 
     lines.append("\n근거")
     for claim in proposal["claims"]:

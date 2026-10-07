@@ -95,6 +95,18 @@ def test_general_mode_gets_no_picks(client, user, ai, migrated) -> None:
     assert [n["title"] for n in content["news"]] == ["자기주식취득결정"]
 
 
+def test_grade_1_stock_is_not_picked(client, user, ai, migrated) -> None:
+    setup_user(client, user)
+    with psycopg.connect(migrated) as conn:
+        conn.execute("UPDATE stocks SET risk_grade = 1, risk_rcept_no = 'B1' WHERE code = %s", (CODE,))
+    try:
+        content = briefing.build_briefing(migrated, user["id"])  # 4단계(적극투자형)는 1등급 매수 제안 불가
+        assert content["picks"] == [] and ai["invest"] == 0
+    finally:
+        with psycopg.connect(migrated) as conn:
+            conn.execute("UPDATE stocks SET risk_grade = 2, risk_rcept_no = NULL WHERE code = %s", (CODE,))
+
+
 def test_next_run_skips_weekend_and_holidays() -> None:
     friday_evening = datetime(2026, 10, 2, 18, 0, tzinfo=KST)  # 10/3 토, 10/4 일, 10/5 대체공휴일 → 10/6 화
     at = briefing.time(8, 30)

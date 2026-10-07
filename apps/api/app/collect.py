@@ -1,10 +1,13 @@
 """분석에 쓰는 데이터 모으기. 실행: uv run python -m app.collect
 
-1. 시세 (공공데이터포털): 코스피 시가총액 상위 30개를 분석 대상(stocks.is_target)으로 정하고 최근 100일 종가를 받는다
-2. 재무 (OpenDART): 대상 종목의 올해·작년 정기보고서 주요 계정
-3. 공시 (OpenDART): 최근 1년 공시 목록, 최신 정기보고서의 "사업의 내용"·"경영진단" 본문 → 조각 → 임베딩
+1. 시세 (공공데이터포털): 코스피 시가총액 상위 100개, 코스닥 상위 50개를 분석 대상(stocks.is_target)으로 정한다 (TARGETS)
+   최근 10일 시장 전체 시세(시장마다 1~2번 호출)로 매일 갱신하고, 새 대상이나 빈 날이 있는 종목만 100일치를 따로 받는다
+2. 재무 (OpenDART): 대상 종목의 올해·작년 정기보고서 주요 계정. 이미 받은 보고서는 다시 받지 않는다
+3. 공시 (OpenDART): 공시 목록은 마지막으로 받은 날부터, 최신 정기보고서의 "사업의 내용"·"경영진단" 본문 → 조각 → 임베딩
+4. 종목 위험등급: 최근 1년 거래소 공시에 관리종목·상장폐지 사유 등이 있으면 1등급 (functions/suitability.py)
 
 여러 번 실행해도 된다. 받은 값은 덮어쓰고, 이미 조각낸 공시는 건너뛴다.
+종목마다 따로 저장하므로 중간에 실패해도(호출 한도 등) 다음 실행이 받지 못한 것부터 이어 받는다.
 서버를 띄워 두면 매일 AUTO_COLLECT_HOUR시(기본 15시, KST)에 자동으로 실행한다 (app/main.py).
     --skip-prices   1단계를 건너뛰고 지금 분석 대상 종목으로만 (시세 키가 아직 안 될 때)
     --codes A,B     이 종목들만 (stocks에 이미 있어야 함)
@@ -22,11 +25,13 @@ from app import config
 from app.agents import llm
 from app.clock import KST
 from app.db import connect
+from app.functions.suitability import RISK_DAYS, RISK_TITLE_EXCLUDE, RISK_TITLE_PATTERN
 from app.functions.text import split_text
 from app.integrations import market_data, opendart
 
-TARGET_COUNT = 30
+TARGETS = {"KOSPI": 100, "KOSDAQ": 50}  # 시장별 시가총액 상위 몇 개를 분석 대상으로 (2026-10-07 결정: 150종목)
 PRICE_DAYS = 100
+RECENT_DAYS = 10  # 매일 받는 시장 전체 시세 기간 (주말·연휴를 넘겨도 최신 거래일이 들어가게)
 DISCLOSURE_DAYS = 365
 WANTED_SECTIONS = ("사업의 내용", "경영진단")
 EMBED_BATCH = 100
@@ -40,43 +45,59 @@ def amount(text: str | None) -> int | None:
 
 # ---------- 1. 시세 ----------
 
+def save_prices(conn: psycopg.Connection, rows: list[dict]) -> None:
+    for day in rows:
+        conn.execute(
+            "INSERT INTO stock_prices (stock_code, trade_date, close, market_cap, listed_shares)"
+            " VALUES (%(stock_code)s, %(trade_date)s, %(close)s, %(market_cap)s, %(listed_shares)s)"
+            " ON CONFLICT (stock_code, trade_date) DO UPDATE SET close = EXCLUDED.close,"
+            " market_cap = EXCLUDED.market_cap, listed_shares = EXCLUDED.listed_shares",
+            day,
+        )
+
+
 def collect_prices(conn: psycopg.Connection, api_key: str, today, eligible: set[str]) -> list[str]:
     """eligible: OpenDART에 회사가 있는 종목 코드. 우선주(예: 삼성전자우)는 재무·공시가 따로 없어서 뺀다."""
-    recent = market_data.daily_prices(api_key, today - timedelta(days=10), today)
-    latest = max(row["trade_date"] for row in recent)
-    top = sorted((r for r in recent if r["trade_date"] == latest and r["stock_code"] in eligible),
-                 key=lambda r: r["market_cap"], reverse=True)
-    top = top[:TARGET_COUNT]
-    print(f"[시세] {latest} 기준 시가총액 상위 {len(top)}개")
-
     conn.execute("UPDATE stocks SET is_target = false")
-    for row in top:
-        conn.execute(
-            "INSERT INTO stocks (code, name, market, is_target) VALUES (%s, %s, 'KOSPI', true)"
-            " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, is_target = true",
-            (row["stock_code"], row["stock_name"]),
-        )
-    for row in top:
-        history = market_data.daily_prices(api_key, today - timedelta(days=PRICE_DAYS), today, row["stock_code"])
-        for day in history:
+    codes = []
+    for market, count in TARGETS.items():
+        recent = market_data.daily_prices(api_key, today - timedelta(days=RECENT_DAYS), today, market=market)
+        latest, oldest = max(r["trade_date"] for r in recent), min(r["trade_date"] for r in recent)
+        top = sorted((r for r in recent if r["trade_date"] == latest and r["stock_code"] in eligible),
+                     key=lambda r: r["market_cap"], reverse=True)[:count]
+        full = 0
+        for row in top:
+            code = row["stock_code"]
             conn.execute(
-                "INSERT INTO stock_prices (stock_code, trade_date, close, market_cap, listed_shares)"
-                " VALUES (%(stock_code)s, %(trade_date)s, %(close)s, %(market_cap)s, %(listed_shares)s)"
-                " ON CONFLICT (stock_code, trade_date) DO UPDATE SET close = EXCLUDED.close,"
-                " market_cap = EXCLUDED.market_cap, listed_shares = EXCLUDED.listed_shares",
-                day,
+                "INSERT INTO stocks (code, name, market, is_target) VALUES (%s, %s, %s, true)"
+                " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, market = EXCLUDED.market, is_target = true",
+                (code, row["stock_name"], market),
             )
-        print(f"  {row['stock_name']}({row['stock_code']}) 종가 {len(history)}일")
-    conn.commit()
-    return [row["stock_code"] for row in top]
+            have = conn.execute("SELECT min(trade_date) AS first, max(trade_date) AS last FROM stock_prices"
+                                " WHERE stock_code = %s", (code,)).fetchone()
+            # 처음 보는 종목, 오래 비어 있던 종목, 기록이 짧은 종목만 100일치를 따로 받는다. 나머지는 최근 10일 시장 전체로 갱신
+            if have["last"] is None or have["last"] < oldest or have["first"] > today - timedelta(days=PRICE_DAYS - RECENT_DAYS):
+                save_prices(conn, market_data.daily_prices(api_key, today - timedelta(days=PRICE_DAYS), today, code, market))
+                full += 1
+            else:
+                save_prices(conn, [r for r in recent if r["stock_code"] == code])
+        conn.commit()
+        codes += [row["stock_code"] for row in top]
+        print(f"[시세] {market} {latest} 기준 시가총액 상위 {len(top)}개 (100일치 새로 받은 종목 {full}개)")
+    return codes
 
 
 # ---------- 2. 재무 ----------
 
 def collect_financials(conn: psycopg.Connection, api_key: str, code: str, corp_code: str, year: int) -> int:
+    """이미 받은 보고서는 건너뛴다 (정기보고서는 나온 뒤 거의 안 바뀐다). 아직 안 나온 보고서만 매일 다시 물어본다."""
+    have = {(r["bsns_year"], r["reprt_code"]) for r in conn.execute(
+        "SELECT DISTINCT bsns_year, reprt_code FROM financials WHERE stock_code = %s", (code,))}
     count = 0
     for bsns_year in (year - 1, year):
         for reprt_code in opendart.REPORT_CODES:
+            if (bsns_year, reprt_code) in have:
+                continue
             for row in opendart.major_accounts(corp_code, bsns_year, reprt_code, api_key):
                 conn.execute(
                     "INSERT INTO financials (stock_code, bsns_year, reprt_code, fs_div, account, amount, prev_amount,"
@@ -98,14 +119,18 @@ def save_disclosure(conn: psycopg.Connection, code: str, item: dict) -> None:
     conn.execute(
         "INSERT INTO disclosures (rcept_no, stock_code, title, url, filed_at) VALUES (%s, %s, %s, %s, %s)"
         " ON CONFLICT (rcept_no) DO NOTHING",
-        (item["rcept_no"], code, item["report_nm"].strip(), opendart.disclosure_url(item["rcept_no"]),
+        (item["rcept_no"], code, " ".join(item["report_nm"].split()), opendart.disclosure_url(item["rcept_no"]),
          datetime.strptime(item["rcept_dt"], "%Y%m%d").date()),
     )
 
 
 def collect_disclosures(conn: psycopg.Connection, api_key: str, code: str, corp_code: str, today) -> str:
+    """공시 목록은 마지막으로 받은 날부터 (그날 늦게 나온 공시까지 받게 그날도 다시). 정기보고서는 늘 1년치에서 최신을 찾는다
+    (지난번 임베딩이 실패한 보고서도 다시 잡히게)."""
     begin, end = f"{today - timedelta(days=DISCLOSURE_DAYS):%Y%m%d}", f"{today:%Y%m%d}"
-    items = opendart.disclosures(corp_code, api_key, begin, end)
+    last = conn.execute("SELECT max(filed_at) AS d FROM disclosures WHERE stock_code = %s", (code,)).fetchone()["d"]
+    since = f"{last:%Y%m%d}" if last and f"{last:%Y%m%d}" > begin else begin
+    items = opendart.disclosures(corp_code, api_key, since, end)
     for item in items:
         save_disclosure(conn, code, item)
 
@@ -134,6 +159,19 @@ def collect_disclosures(conn: psycopg.Connection, api_key: str, code: str, corp_
     return f"공시 {len(items)}건, {report['report_nm'].strip()} 본문 {len(chunks)}조각"
 
 
+# ---------- 4. 종목 위험등급 ----------
+
+def refresh_risk_grade(conn: psycopg.Connection, code: str, today) -> int:
+    """최근 1년 공시 중 가장 최근 위험 공시가 있으면 1등급, 없으면 2등급으로 저장한다."""
+    row = conn.execute(
+        "SELECT rcept_no FROM disclosures WHERE stock_code = %s AND filed_at >= %s AND regexp_replace(title, '\\s', '', 'g') ~ %s"
+        " AND title !~ %s ORDER BY filed_at DESC, rcept_no DESC LIMIT 1",
+        (code, today - timedelta(days=RISK_DAYS), RISK_TITLE_PATTERN, RISK_TITLE_EXCLUDE)).fetchone()
+    grade = 1 if row else 2
+    conn.execute("UPDATE stocks SET risk_grade = %s, risk_rcept_no = %s WHERE code = %s", (grade, row and row["rcept_no"], code))
+    return grade
+
+
 # ---------- 실행 ----------
 
 def run(codes: list[str] | None = None, skip_prices: bool = False) -> None:
@@ -152,15 +190,25 @@ def run(codes: list[str] | None = None, skip_prices: bool = False) -> None:
                 raise SystemExit("DATA_GO_KR_API_KEY가 비어 있습니다 (apps/api/.env)")
             codes = collect_prices(conn, config.DATA_GO_KR_API_KEY, today, set(corp_of))
 
+        failed = []
         for code in codes:
             name = conn.execute("SELECT name FROM stocks WHERE code = %s", (code,)).fetchone()
             if name is None or code not in corp_of:
                 print(f"[건너뜀] {code}: stocks 또는 OpenDART 회사 목록에 없음")
                 continue
-            financial_rows = collect_financials(conn, config.OPENDART_API_KEY, code, corp_of[code], today.year)
-            summary = collect_disclosures(conn, config.OPENDART_API_KEY, code, corp_of[code], today)
-            conn.commit()
-            print(f"[재무·공시] {name['name']}({code}) 재무 {financial_rows}줄, {summary}")
+            try:
+                financial_rows = collect_financials(conn, config.OPENDART_API_KEY, code, corp_of[code], today.year)
+                summary = collect_disclosures(conn, config.OPENDART_API_KEY, code, corp_of[code], today)
+                grade = refresh_risk_grade(conn, code, today)
+                conn.commit()
+            except Exception as error:  # 이 종목만 되돌리고 다음 종목으로. 다음 실행이 이어 받는다
+                conn.rollback()
+                failed.append(code)
+                print(f"[실패] {name['name']}({code}): {error}")
+                continue
+            print(f"[재무·공시] {name['name']}({code}) 재무 {financial_rows}줄, {summary}" + (" · 위험등급 1등급" if grade == 1 else ""))
+        if failed:
+            print(f"[실패] {len(failed)}개 종목 ({', '.join(failed)}). 다시 실행하면 이어 받는다")
 
 
 # ---------- 매일 자동 실행 ----------

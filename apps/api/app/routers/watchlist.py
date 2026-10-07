@@ -13,8 +13,8 @@ MAX_WATCH = 30
 def list_stocks(conn: Conn, user_id: UserId) -> list[dict]:
     """관심 종목을 고를 수 있는 종목 (지금은 분석 대상만). watching: 내 관심 종목인지."""
     return conn.execute(
-        "SELECT s.code, s.name, EXISTS (SELECT 1 FROM watchlist w WHERE w.user_id = %s AND w.stock_code = s.code) AS watching"
-        " FROM stocks s WHERE s.is_target ORDER BY s.name",
+        "SELECT s.code, s.name, s.market, EXISTS (SELECT 1 FROM watchlist w WHERE w.user_id = %s AND w.stock_code = s.code) AS watching"
+        " FROM stocks s WHERE s.is_target ORDER BY s.market DESC, s.name COLLATE \"C\"",
         (user_id,),
     ).fetchall()
 

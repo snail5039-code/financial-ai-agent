@@ -42,6 +42,7 @@ class InvestState(TypedDict, total=False):
     sources: dict            # 출처 ID → {kind, title, url, as_of, content}
     metrics: list            # 코드가 계산한 지표 [{metric_id, value, unit, formula, inputs}]
     risk_grade: int          # 종목 위험등급 (1 매우 높음 ~ 6)
+    risk_reason: str | None  # 1등급이면 근거 공시 (제목·날짜·출처 ID)
     allowed_actions: list    # 성향 규칙상 투자 AI가 낼 수 있는 행동
     buy_block_reason: str | None  # 매수를 뺀 이유 (투자 AI와 사용자에게 알림)
     proposal: dict | None    # 투자 AI 제안서 (최신)
@@ -71,7 +72,7 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "query": query, "history": history, "intent": None, "answer": None,
         "mode": profile["mode"], "risk_level": profile.get("risk_level"), "flags": profile.get("flags", []),
         "query_kind": None, "term": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
-        "sources": {}, "metrics": [], "risk_grade": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
+        "sources": {}, "metrics": [], "risk_grade": None, "risk_reason": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
         "side": None, "qty": None, "limit_price": None, "user_directed": False, "from_analysis": False,
         "policy_result": None, "coach_warnings": [], "confirm_required": [], "approval_id": None, "card": None,

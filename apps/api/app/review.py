@@ -20,7 +20,7 @@ from psycopg.types.json import Jsonb
 
 from app.agents import llm
 from app.agents.analysis import (ACTION_LABELS, CLAIM_LABELS, MAX_REVISIONS, VERDICT_LABELS, claim_check, load_source,
-                                 source_lines, source_time, user_lines, volatility_rank)
+                                 source_lines, source_time, user_lines, volatility_ranks)
 from app.agents.query import latest_snapshot, won
 from app.briefing import NEWS_DAYS, build_close, run_all
 from app.clock import KST
@@ -84,7 +84,7 @@ def today_text(conn, user_id: str, content: dict) -> str:
         if o["filled_qty"]:
             amount = o["filled_qty"] * o["filled_price"]
             fees.append(fee_estimate(amount, policy and policy["fee_rate_pct"]))
-            taxes += sell_tax(amount, "KOSPI") if o["side"] == "sell" else 0  # 분석 대상은 지금 코스피만
+            taxes += sell_tax(amount, "KOSPI") if o["side"] == "sell" else 0  # 코스피·코스닥 모두 0.20%
     if not content["orders"]:
         lines.append("오늘 주문 없음")
     elif fees:
@@ -183,11 +183,11 @@ def build_review(database_url: str, user_id: str, now: datetime | None = None) -
         watching = [r["stock_code"] for r in conn.execute(
             "SELECT stock_code FROM watchlist WHERE user_id = %s ORDER BY created_at", (user_id,))]
         codes = list(dict.fromkeys(held + watching))[:MAX_STOCKS]
-        stocks = []
+        stocks, ranks = [], volatility_ranks(conn)
         for row in conn.execute("SELECT code, name FROM stocks WHERE code = ANY(%s)", (codes,)).fetchall():
-            grade, holds = stock_risk_grade(row["code"]), row["code"] in held
+            grade, holds = stock_risk_grade(conn, row["code"]), row["code"] in held
             allowed = allowed_actions(profile["mode"], profile.get("risk_level"), profile.get("flags") or [], grade, holds,
-                                      volatility_rank(conn, row["code"]))
+                                      ranks.get(row["code"]))
             stocks.append({"code": row["code"], "name": row["name"], "grade": grade, "held": holds,
                            "allowed": [a for a in REVIEW_ACTIONS if a in allowed]})
         stocks.sort(key=lambda s: codes.index(s["code"]))
