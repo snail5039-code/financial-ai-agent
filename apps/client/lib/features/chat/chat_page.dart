@@ -99,7 +99,7 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
               for (final text in _c.stockName == null
-                  ? ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘', '아까 주문 체결됐어?']
+                  ? ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘', '아까 주문 체결됐어?', 'PER이 뭐야?']
                   : ['지금 사도 돼?', '현재가 알려줘', '1주 사줘', '주문 체결됐어?'])
                 ActionChip(backgroundColor: Colors.white, label: Text(text), onPressed: () => _c.send(text)),
             ]),

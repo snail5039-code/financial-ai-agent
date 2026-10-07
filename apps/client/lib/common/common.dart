@@ -103,7 +103,8 @@ AppBar topBar(String title, {List<Widget> actions = const [], Widget? avatar, St
                   Text(title, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: ink)),
                   if (subtitle != null)
-                    Text(subtitle, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: brandBlue)),
+                    Text(subtitle, overflow: TextOverflow.ellipsis, // 제목 글꼴을 물려받지 않게
+                        style: const TextStyle(inherit: false, fontSize: 12, color: brandBlue)),
                 ]),
               ),
             ]),

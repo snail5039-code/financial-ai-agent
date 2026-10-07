@@ -75,7 +75,7 @@ def embed_query(text: str) -> list[float]:
 
 class Understood(BaseModel):
     query: str = Field(description="가리키는 말(그거, 그 종목, 아까 거)을 실제 이름으로 바꾼 요청. 바꿀 것이 없으면 그대로")
-    intent: Literal["query", "analysis", "order", "result", "other"]
+    intent: Literal["query", "analysis", "order", "result", "explain", "other"]
     query_kind: Literal["balance", "price", "orders"] | None = Field(
         default=None, description="intent가 query일 때만. balance: 잔고·보유 종목 / price: 현재가 / orders: 오늘 주문 내역"
     )
@@ -83,6 +83,7 @@ class Understood(BaseModel):
     side: Literal["buy", "sell"] | None = Field(default=None, description="order일 때만. 사줘 → buy, 팔아 → sell")
     qty: int | None = Field(default=None, description="order일 때 사용자가 말한 주식 수. 말하지 않았으면 null")
     limit_price: int | None = Field(default=None, description="order일 때 사용자가 말한 1주 가격(원). 없으면 null")
+    term: str | None = Field(default=None, description="explain일 때만. 뜻을 묻는 용어 그대로 (예: PER, 공매도)")
 
 
 UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
@@ -94,6 +95,7 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 - analysis: 사도 되는지, 어떤지 판단을 묻는 요청. 예) "삼성전자 사도 돼?", "SK하이닉스 어때?"
 - order: 사거나 팔라는 지시. 예) "SK하이닉스 4주 사줘", "삼성전자 다 팔아"
 - result: 앞서 한 주문의 결과를 묻는 요청. 예) "아까 주문 체결됐어?"
+- explain: 투자·금융 용어의 뜻을 묻는 요청. 예) "PER이 뭐야?", "공매도가 뭐야", "부채비율 뜻". term에 용어만 써라
 - other: 주식 앱 업무가 아닌 것
 3. query면 query_kind를 채워라. 종목이 나오면 stock_name에 사용자가 말한 그대로 써라. 지어내지 마라.
 4. order면 side, qty, limit_price를 사용자가 말한 대로만 채워라. "4주" → qty 4, "7만원에" → limit_price 70000.

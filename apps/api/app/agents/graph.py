@@ -19,6 +19,7 @@ from app.agents.order import build_order_graph
 from app.agents.query import build_query_graph
 from app.agents.result import result_node
 from app.agents.state import Context, InvestState
+from app.glossary import explain_node
 
 GUIDE_MESSAGE = (
     "이렇게 말해 보세요.\n"
@@ -27,7 +28,8 @@ GUIDE_MESSAGE = (
     "- 오늘 주문 내역 보여줘\n"
     "- 삼성전자 사도 돼?\n"
     "- SK하이닉스 4주 사줘\n"
-    "- 아까 주문 체결됐어?"
+    "- 아까 주문 체결됐어?\n"
+    "- PER이 뭐야?"
 )
 
 
@@ -42,11 +44,13 @@ def understand_node(state: InvestState) -> dict:
                                                            or (intent == "query" and result.query_kind == "price")):
         stock_name = state["room_stock"]
     return {"query": result.query, "intent": intent, "query_kind": result.query_kind, "stock_name": stock_name,
-            "side": result.side, "qty": result.qty, "limit_price": result.limit_price, "user_directed": intent == "order"}
+            "side": result.side, "qty": result.qty, "limit_price": result.limit_price, "user_directed": intent == "order",
+            "term": result.term}
 
 
 def route_by_intent(state: InvestState) -> str:
-    return {"query": "query", "analysis": "analysis", "order": "order", "result": "result"}.get(state["intent"], "guide")
+    return {"query": "query", "analysis": "analysis", "order": "order", "result": "result",
+            "explain": "explain"}.get(state["intent"], "guide")
 
 
 def route_after_analysis(state: InvestState) -> str:
@@ -64,11 +68,12 @@ def build_graph(checkpointer: BaseCheckpointSaver):
     builder.add_node("analysis", build_analysis_graph())
     builder.add_node("order", build_order_graph())
     builder.add_node("result", result_node)
+    builder.add_node("explain", explain_node)
     builder.add_node("guide", guide_node)
 
     builder.add_edge(START, "understand")
-    builder.add_conditional_edges("understand", route_by_intent, ["query", "analysis", "order", "result", "guide"])
+    builder.add_conditional_edges("understand", route_by_intent, ["query", "analysis", "order", "result", "explain", "guide"])
     builder.add_conditional_edges("analysis", route_after_analysis, ["order", END])
-    for node in ("query", "order", "result", "guide"):
+    for node in ("query", "order", "result", "explain", "guide"):
         builder.add_edge(node, END)
     return builder.compile(checkpointer=checkpointer)
