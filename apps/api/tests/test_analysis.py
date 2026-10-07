@@ -317,3 +317,31 @@ def test_volatility_rank_among_targets(migrated) -> None:
         conn.rollback()
     assert ranks == {"R00001": 1 / 3, "R00002": 2 / 3, "R00003": 1.0}
     assert missing is None
+
+
+def test_search_chunks_filters_far_noise_and_other_stocks(migrated, monkeypatch) -> None:
+    import math
+    from psycopg.rows import dict_row
+    from app.db import connect
+
+    def vec(angle):  # 첫 두 칸만 쓰는 768차원 벡터. 각도 차이가 곧 코사인 거리
+        return str([math.cos(angle), math.sin(angle)] + [0.0] * 766)
+
+    monkeypatch.setattr(llm, "embed_query", lambda text: [1.0] + [0.0] * 767)
+    with connect(migrated, row_factory=dict_row) as conn:
+        for code in ("777001", "777002"):
+            conn.execute("INSERT INTO stocks VALUES (%s, %s, 'KOSDAQ', true) ON CONFLICT DO NOTHING", (code, f"검색{code}"))
+            conn.execute("INSERT INTO disclosures VALUES (%s, %s, '반기보고서', 'u', '2026-08-14') ON CONFLICT DO NOTHING",
+                         (f"S{code}", code))
+        chunks = [("777001", 0, "매출이 늘고 영업이익이 개선되었습니다", 0.1),     # 가깝다
+                  ("777001", 1, "주요 위험 요인은 환율과 원자재 가격입니다", 0.3),  # 1등보다 조금 멀다 (거리 0.04)
+                  ("777001", 2, "1,234 | 5,678 (9.1) 2,345 - 3,456", 0.05),      # 깨진 표 조각
+                  ("777001", 3, "회사의 연혁과 본점 소재지입니다", 1.4),           # 너무 멀다
+                  ("777002", 0, "다른 회사의 아주 가까운 문단입니다", 0.0)]        # 다른 종목
+        for code, seq, text, angle in chunks:
+            conn.execute("INSERT INTO disclosure_chunks (rcept_no, seq, section, content, embedding) VALUES (%s, %s, '본문', %s, %s::vector)",
+                         (f"S{code}", seq, text, vec(angle)))
+        assert analysis.search_chunks(conn, "777001", "검색777001", "사도 돼?") == ["dart:S777001#0", "dart:S777001#1"]
+        assert analysis.search_chunks(conn, "777003", "없음", "사도 돼?") == []
+        conn.rollback()
+    assert analysis.is_table_noise("1,234 | 5,678 (9.1)") and not analysis.is_table_noise("매출 1,234억 원으로 늘었다")

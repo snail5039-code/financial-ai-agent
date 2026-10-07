@@ -32,7 +32,13 @@ from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
 MAX_ANALYSES_PER_DAY = 20  # Gemini 비용 관리 (NFR-14)
-SEARCH_RESULTS = 4
+SEARCH_RESULTS = 6
+# 공시 본문 검색 (12-todo-by-stage.md 2-8). 요청 하나에 관점 3개를 더해 검색한다 ("사도 돼?"처럼 막연한 요청도 근거가 고르게)
+SEARCH_ASPECTS = ("실적과 수익성", "위험 요인", "사업 전망과 계획")
+SEARCH_PER_QUERY = 3      # 검색어마다 이만큼 후보
+SEARCH_MAX_DISTANCE = 0.6  # 코사인 거리. 이보다 멀면 관련 없다고 본다 (2026-10-07 측정: 관련 문단 0.33~0.56)
+SEARCH_RELATIVE_GAP = 0.05  # 그 검색어의 1등보다 이만큼 넘게 먼 문단은 쓰지 않는다 (질문마다 거리 수준이 달라 상대 기준)
+MIN_HANGUL_SHARE = 0.3      # 한글이 이보다 적은 조각은 깨진 표 조각으로 보고 근거로 쓰지 않는다
 RECENT_DISCLOSURES = 5
 SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 
@@ -256,6 +262,42 @@ def metric_line(metric: dict) -> str:
             f"(계산식: {metric['formula']}, 출처: {', '.join(metric['inputs'])})")
 
 
+# ---------- 공시 본문 검색 ----------
+
+def is_table_noise(text: str) -> bool:
+    """숫자·기호만 많은 조각 (태그를 지우며 칸이 섞인 표). 표 구조를 살리는 것은 2-8 다음 일."""
+    letters = [ch for ch in text if not ch.isspace()]
+    return not letters or sum("가" <= ch <= "힣" for ch in letters) / len(letters) < MIN_HANGUL_SHARE
+
+
+def search_chunks(conn, code: str, name: str, query: str) -> list[str]:
+    """이 종목 정기보고서 본문에서 요청·관점별로 가까운 조각의 출처 ID (최대 SEARCH_RESULTS개).
+
+    벡터 색인(HNSW)은 전체에서 가까운 것을 먼저 고르고 종목으로 걸러서, 종목이 많으면 결과가 비었다
+    (2026-10-07, 150종목에서 115종목). 그래서 이 종목 조각만 먼저 고른 뒤 거리를 정확히 잰다 (종목당 수백 개라 빠름).
+    """
+    if not conn.execute("SELECT 1 FROM disclosure_chunks c JOIN disclosures d USING (rcept_no)"
+                        " WHERE d.stock_code = %s LIMIT 1", (code,)).fetchone():
+        return []
+    picked: dict[str, float] = {}
+    for text in (query, *SEARCH_ASPECTS):
+        vector = str(llm.embed_query(f"{name} {text}"))
+        rows = conn.execute(
+            "WITH mine AS MATERIALIZED (SELECT c.rcept_no, c.seq, c.content, c.embedding FROM disclosure_chunks c"
+            " JOIN disclosures d USING (rcept_no) WHERE d.stock_code = %s)"
+            " SELECT rcept_no, seq, content, embedding <=> %s::vector AS distance FROM mine ORDER BY distance LIMIT %s",
+            (code, vector, SEARCH_PER_QUERY * 3)).fetchall()
+        rows = [r for r in rows if not is_table_noise(r["content"])]
+        if not rows:
+            continue
+        best = rows[0]["distance"]
+        for row in rows[:SEARCH_PER_QUERY]:
+            if row["distance"] <= min(SEARCH_MAX_DISTANCE, best + SEARCH_RELATIVE_GAP):
+                key = f"dart:{row['rcept_no']}#{row['seq']}"
+                picked[key] = min(picked.get(key, 1.0), row["distance"])
+    return sorted(picked, key=picked.get)[:SEARCH_RESULTS]
+
+
 # ---------- 코드 검사 (검증 AI 전에) ----------
 
 def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict]) -> list[dict]:
@@ -402,13 +444,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         ids += [f"dart:{row['rcept_no']}" for row in conn.execute(
             "SELECT rcept_no FROM disclosures WHERE stock_code = %s ORDER BY filed_at DESC LIMIT %s",
             (code, RECENT_DISCLOSURES))]
-        if conn.execute("SELECT 1 FROM disclosure_chunks c JOIN disclosures d USING (rcept_no)"
-                        " WHERE d.stock_code = %s LIMIT 1", (code,)).fetchone():
-            vector = str(llm.embed_query(f"{state['stock_name']} {state['query']}"))
-            ids += [f"dart:{row['rcept_no']}#{row['seq']}" for row in conn.execute(
-                "SELECT c.rcept_no, c.seq FROM disclosure_chunks c JOIN disclosures d USING (rcept_no)"
-                " WHERE d.stock_code = %s ORDER BY c.embedding <=> %s::vector LIMIT %s",
-                (code, vector, SEARCH_RESULTS))]
+        ids += search_chunks(conn, code, state["stock_name"], state["query"])
         grade, risk = stock_risk(conn, code)
         if risk:
             ids.append(f"dart:{risk['rcept_no']}")  # 1등급 근거 공시를 자료에 넣는다
