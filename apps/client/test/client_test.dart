@@ -292,4 +292,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(asked, 'LG전자 1주 사줘'); // 평소 주문 흐름으로 (처리안 → 승인 → 폰 실행)
   });
+
+  testWidgets('장 마감 요약: AI 회고 · 내일 계획', (tester) async {
+    final summary = {
+      'brief_date': '2026-10-07', 'created_at': '2026-10-07T06:40:00Z',
+      'content': {
+        'orders': [], 'blocked': [], 'news': [], 'bought_krw': 0, 'sold_krw': 0, 'analyses': 0,
+        'limits': {'daily_used_krw': 0, 'daily_limit_krw': 500000, 'clean_days': 2},
+        'review': {
+          'verdict': 'user_judgement', 'verdict_label': '사용자 판단 필요', 'summary': '자료가 부족해요', 'conditions': [],
+          'disagreements': ['비중 판단이 다름'], 'rounds': 3, 'general': false, 'risks': ['손실 가능'],
+          'retrospective': [{'type': '사실', 'text': '오늘 매매가 없었다', 'sources': ['장 마감 요약']}],
+          'tomorrow': [{'stock_code': '000270', 'stock_name': '기아', 'action': '매도 검토', 'invalid_if': ['실적 개선'],
+                        'reasons': [{'type': '계산', 'text': '비중 40%', 'sources': ['내 계좌 비중']}]}],
+          'sources': [{'title': '장 마감 요약', 'url': null, 'as_of': '10-07 15:40 기준'}],
+        },
+      },
+    };
+    expect(closePreview(summary, today: true), 'AI 회고와 내일 볼 것이 왔어요');
+    await tester.pumpWidget(MaterialApp(home: CloseSummaryPage(summary)));
+    await tester.scrollUntilVisible(find.textContaining('검증을 통과하지 못했어요'), 200);
+    expect(find.text('내일 기아 · 매도 검토'), findsOneWidget);
+    expect(find.text('검증 사용자 판단 필요'), findsOneWidget);
+    expect(find.textContaining('이러면 판단이 틀린 것: 실적 개선'), findsOneWidget);
+  });
 }

@@ -47,3 +47,20 @@ class VerificationDraft(BaseModel):
     risk_fit: Literal["ok", "warn", "mismatch"] = Field(description="사용자 성향과 맞는지")
     disagreements: list[str] = Field(default_factory=list, description="투자 AI와 의견이 다른 점 (사용자에게 보여줌)")
     summary: str = Field(description="한 줄 요약")
+
+
+# ---------- 장 마감 회고 · 내일 계획 (12-todo-by-stage.md 2-4b). 주문은 만들지 않는다 ----------
+
+class TomorrowItem(BaseModel):
+    stock_code: str = Field(description="[종목]에 있는 종목 코드")
+    action: Literal["watch", "buy", "sell"] = Field(description="watch 관찰 / buy 매수 검토 / sell 매도 검토. 그 종목의 허용 행동 중 하나")
+    reasons: list[Claim] = Field(min_length=1, max_length=3)
+    invalid_if: list[str] = Field(description="이 판단이 틀린 것이 되는 조건")
+
+
+class ReviewDraft(BaseModel):
+    """투자 AI가 쓰는 장 마감 회고."""
+
+    retrospective: list[Claim] = Field(min_length=1, max_length=6, description="오늘 회고: 산 이유가 맞았는지, 규칙, 분산, 비용")
+    tomorrow: list[TomorrowItem] = Field(max_length=8, description="내일 볼 것. 보유·관심 종목마다 하나")
+    risks: list[str] = Field(description="손실 가능성, 수수료·세금")

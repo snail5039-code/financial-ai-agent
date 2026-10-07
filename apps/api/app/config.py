@@ -29,6 +29,8 @@ AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "15"
 MORNING_BRIEF_TIME = os.environ.get("MORNING_BRIEF_TIME", "").strip() or None
 # 장 마감 요약 시각. LLM이 없어 비용이 없으므로 기본으로 켠다. "off"면 안 함
 CLOSE_SUMMARY_TIME = os.environ.get("CLOSE_SUMMARY_TIME", "").strip() or "15:40"
+# 장 마감 AI 회고·내일 계획 시각 (예: "15:50", 장 마감 요약 뒤). Gemini 비용이 생겨 비어 있으면 끈다
+CLOSE_REVIEW_TIME = os.environ.get("CLOSE_REVIEW_TIME", "").strip() or None
 
 # 개발용: 장 운영 시간 검사를 이 시각(KST, 예: "10:00")으로 한다. 비우면 실제 시계. 운영 서버에서는 비운다
 MARKET_CLOCK = os.environ.get("MARKET_CLOCK", "").strip() or None

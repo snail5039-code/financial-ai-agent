@@ -247,20 +247,8 @@ def metric_line(metric: dict) -> str:
 def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict]) -> list[dict]:
     """AI 없이 확실히 잡을 수 있는 것: 출처·지표 ID가 실제로 있는지, 사실·계산에 출처가 붙었는지,
     지표를 다시 계산하면 같은 값인지, 반대 근거·위험이 있는지. 하나라도 fail이면 승인하지 않는다."""
-    checks = []
     metric_ids = {m["metric_id"] for m in recomputed if m["value"] is not None}
-    for number, claim in enumerate(proposal["claims"]):
-        problems = []
-        if claim["type"] in ("fact", "calc") and not claim["source_ids"]:
-            problems.append("사실·계산 근거인데 출처가 없음")
-        if missing := [s for s in claim["source_ids"] if s not in known_sources]:
-            problems.append(f"없는 출처 ID: {', '.join(missing)}")
-        if claim["type"] == "calc" and not claim["metric_ids"]:
-            problems.append("계산 근거인데 지표 ID가 없음")
-        if unknown := [m for m in claim["metric_ids"] if m not in metric_ids]:
-            problems.append(f"없거나 계산할 수 없는 지표 ID: {', '.join(unknown)}")
-        checks.append({"target": f"claim:{number}", "result": "fail" if problems else "pass",
-                       "detail": "; ".join(problems) or "출처·지표 ID 확인", "source_ids": claim["source_ids"]})
+    checks = [claim_check(f"claim:{n}", c, known_sources, metric_ids) for n, c in enumerate(proposal["claims"])]
 
     before = {m["metric_id"]: m["value"] for m in gathered_metrics}
     changed = [m["metric_id"] for m in recomputed if before.get(m["metric_id"]) != m["value"]]
@@ -272,6 +260,22 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
                        "detail": f"{label} {len(proposal[field])}개" if proposal[field] else f"{label}가 없음",
                        "source_ids": []})
     return checks
+
+
+def claim_check(target: str, claim: dict, known_sources: dict, metric_ids: set[str] | None) -> dict:
+    """근거 하나의 출처·지표 ID 검사. metric_ids가 None이면 지표 없이 출처 원문의 숫자를 쓰는 글이다 (장 마감 회고)."""
+    problems = []
+    if claim["type"] in ("fact", "calc") and not claim["source_ids"]:
+        problems.append("사실·계산 근거인데 출처가 없음")
+    if missing := [s for s in claim["source_ids"] if s not in known_sources]:
+        problems.append(f"없는 출처 ID: {', '.join(missing)}")
+    if metric_ids is not None:
+        if claim["type"] == "calc" and not claim["metric_ids"]:
+            problems.append("계산 근거인데 지표 ID가 없음")
+        if unknown := [m for m in claim["metric_ids"] if m not in metric_ids]:
+            problems.append(f"없거나 계산할 수 없는 지표 ID: {', '.join(unknown)}")
+    return {"target": target, "result": "fail" if problems else "pass",
+            "detail": "; ".join(problems) or "출처·지표 ID 확인", "source_ids": claim["source_ids"]}
 
 
 # ---------- AI에게 넘길 글 ----------

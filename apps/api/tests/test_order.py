@@ -548,3 +548,76 @@ def test_close_summary(client, custom_user, ai, migrated) -> None:
     saved = client.get("/api/briefings/latest?kind=close", headers=headers).json()
     assert saved["kind"] == "close" and saved["content"]["bought_krw"] == 400_000
     assert client.get("/api/briefings/latest", headers=headers).status_code == 404  # 아침 브리핑과 따로
+
+
+# ---------- 장 마감 AI 회고 · 내일 계획 ----------
+
+@pytest.fixture
+def review_ai(monkeypatch):
+    record = {"invest": [], "verify": [], "drafts": []}
+
+    def write(context):
+        record["invest"].append(context)
+        return record["drafts"].pop(0) if len(record["drafts"]) > 1 else record["drafts"][0]
+
+    def verify(context):
+        record["verify"].append(context)
+        return VerificationDraft(verdict="approve", checks=[], risk_fit="ok", summary="원문과 맞아요")
+
+    monkeypatch.setattr(llm, "write_review", write)
+    monkeypatch.setattr(llm, "verify_review", verify)
+    return record
+
+
+def review_draft(source_id="today", action="sell"):
+    from app.agents.schemas import ReviewDraft
+    return ReviewDraft(
+        retrospective=[{"text": "오늘 4주를 체결했다", "type": "fact", "source_ids": [source_id]}],
+        tomorrow=[{"stock_code": CODE, "action": action, "invalid_if": ["실적 개선 공시"],
+                   "reasons": [{"text": "비중이 크다", "type": "calc", "source_ids": ["portfolio"]}]}],
+        risks=["손실 가능, 매도 시 세금 0.20%"])
+
+
+def post_snapshot(client, user, qty=4):
+    snapshot = {"cash_krw": 600_000, "fetched_at": now_iso(),
+                "holdings": [{"stock_code": CODE, "stock_name": NAME, "qty": qty, "avg_price": PRICE}]}
+    assert client.post("/api/snapshot", headers=user["headers"], json=snapshot).status_code == 204
+
+
+def test_close_review_rewrites_until_sources_check(client, custom_user, ai, review_ai, migrated) -> None:
+    from app import review
+
+    place_filled_order(client, custom_user)
+    post_snapshot(client, custom_user)
+    review_ai["drafts"] = [review_draft("dart:NOPE"), review_draft()]  # 첫 회고는 없는 출처를 단다
+
+    result = review.build_review(migrated, custom_user["id"])  # 장 마감 요약이 없으면 먼저 만든다
+
+    # 코드 검사가 없는 출처를 잡아 검증 AI가 승인해도 반려 → 다시 쓴다
+    assert len(review_ai["invest"]) == 2 and "r0: 없는 출처 ID: dart:NOPE" in review_ai["invest"][1]
+    assert (result["verdict"], result["rounds"]) == ("approve", 2)
+    # 투자 AI 자료: 오늘 기록·제안서·비중(코드 계산)·종가
+    context = review_ai["invest"][0]
+    assert "산 금액(체결) 400,000원" in context and "주문전자 제안서" in context and "비중 40.0%" in context
+    assert "수수료율 미입력이라 미확인" in context and f"price:{CODE}:2026-10-01" in context
+    # 검증 AI는 투자 AI의 자료 목록이 아니라 인용한 출처만 다시 읽는다
+    checked = review_ai["verify"][1]
+    assert "[자료]" not in checked and "[원문]" in checked and "주문전자 제안서" not in checked
+    [plan] = result["tomorrow"]
+    assert (plan["stock_name"], plan["action"]) == (NAME, "매도 검토")
+    assert plan["reasons"][0]["sources"] == ["내 계좌 비중 (최근 스냅샷 × 최근 종가, 코드 계산)"]
+    saved = client.get("/api/briefings/latest?kind=close", headers=custom_user["headers"]).json()["content"]
+    assert saved["bought_krw"] == 400_000 and saved["review"]["summary"] == "원문과 맞아요"  # 요약에 붙는다
+
+
+def test_close_review_general_mode_and_nothing_to_review(client, user, review_ai, migrated) -> None:
+    from app import review
+
+    assert review.build_review(migrated, user["id"]) is None and review_ai["invest"] == []  # 매매·보유·관심 없음 → 비용 없음
+    post_snapshot(client, user)
+    review_ai["drafts"] = [review_draft(action="sell")]
+    result = review.build_review(migrated, user["id"])
+    # 일반 모드는 판단하지 않는다: 코드가 '관찰'로 바꾼다
+    assert result["general"] and result["tomorrow"][0]["action"] == "관찰"
+    assert any("성향 규칙에 따라 주문전자은(는) '매도 검토' 대신 '관찰'" in r for r in result["risks"])
+    assert "일반 모드다" in review_ai["invest"][0]

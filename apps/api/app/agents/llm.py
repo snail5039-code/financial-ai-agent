@@ -12,7 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from pydantic import BaseModel, Field
 
 from app import config
-from app.agents.schemas import ProposalDraft, VerificationDraft
+from app.agents.schemas import ProposalDraft, ReviewDraft, VerificationDraft
 
 
 class LLMUnavailable(Exception):
@@ -148,6 +148,46 @@ def write_proposal(context: str) -> ProposalDraft:
 
 def verify_proposal(context: str) -> VerificationDraft:
     return ask(VerificationDraft, VERIFY_PROMPT, context, thinking_level="low")
+
+
+# ---------- 장 마감 회고 · 내일 계획 (12-todo-by-stage.md 2-4b) ----------
+# 분석과 같은 규칙: 투자 AI가 쓰고, 검증 AI가 출처 원문을 다시 읽고 판정한다. 주문은 만들지 않는다.
+
+REVIEW_PROMPT = """너는 한국 주식 앱의 투자 AI다. 장이 끝난 뒤 사용자의 오늘 매매를 돌아보고 내일 볼 것을 쓴다.
+
+규칙
+- retrospective(오늘 회고): 오늘 산·판 이유([자료]의 제안서 근거)가 오늘 공시·종가와 맞았는지, 한도·규칙을 지켰는지,
+  한 종목에 몰렸는지(비중), 수수료·세금 같은 비용을 본다. 오늘 매매가 없으면 그렇다고 쓴다.
+- tomorrow(내일 볼 것): [종목]마다 하나. action은 그 종목의 허용 행동 중에서만 고른다. 주문을 만들거나 수량·가격을 정하지 않는다.
+- 모든 사실(fact)·계산(calc) 근거에는 [자료]의 출처 ID를 단다. 숫자는 [자료]에 있는 값만 쓴다. 직접 계산하거나 지어내지 않는다.
+- [종목]의 위험등급·허용 행동은 앱 규칙이지 근거가 아니다. 근거(reasons)에 쓰지 않는다. 출처 ID는 그 문장이 실제로 들어 있는 자료에만 단다.
+- 사실, 계산, 추론, 의견을 구분한다. "무조건 오른다", "위험 없다" 같은 표현을 쓰지 않는다. 없는 정보는 "미확인"이라고 쓴다.
+- risks에 손실 가능성과 수수료·세금을 반드시 쓴다.
+- 검증 AI의 반박이 있으면 그 점을 고쳐서 다시 쓴다.
+- [사용자] 안내를 따른다."""
+
+REVIEW_VERIFY_PROMPT = """너는 한국 주식 앱의 검증 AI다. 투자 AI가 쓴 장 마감 회고·내일 계획을 믿지 말고 원문으로 다시 확인한다.
+
+반드시 확인할 것 (checks에 하나씩 남긴다)
+1. 사실·계산 근거마다 출처가 있고, [원문]이 그 문장을 실제로 뒷받침하는가 (target: 근거 번호 그대로)
+2. 숫자가 [원문]과 같은가
+3. 사실·추론·의견을 섞지 않았는가, 지나친 확신은 없는가
+4. 손실 가능성·수수료·세금을 빠뜨리지 않았는가 (target: risks)
+5. [사용자] 성향과 맞는가 (target: risk_fit)
+[코드 검사]에 fail이 있으면 승인하지 않는다.
+
+판정
+- approve: 문제 없음 / conditional: 조건을 지키면 괜찮음 (conditions에 조건) / reject: 고쳐야 함 (challenges에 반박)
+- user_judgement: 자료가 부족하거나 서로 맞지 않아 AI가 판단하기 어려움
+투자 AI와 생각이 다른 점은 disagreements에 쓴다. 사용자에게 그대로 보여준다."""
+
+
+def write_review(context: str) -> ReviewDraft:
+    return ask(ReviewDraft, REVIEW_PROMPT, context, thinking_level="low")
+
+
+def verify_review(context: str) -> VerificationDraft:
+    return ask(VerificationDraft, REVIEW_VERIFY_PROMPT, context, thinking_level="low")
 
 
 # ---------- 처리안 수정 ("5주만", "6만9천원에") ----------

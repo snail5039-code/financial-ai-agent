@@ -147,6 +147,7 @@ class BriefingPage extends StatelessWidget {
       ]),
     );
   }
+
 }
 
 // ---------- 장 마감 요약 (12-todo-by-stage.md 2-4): 서버 기록만 정리한 것 (LLM 없음) ----------
@@ -157,6 +158,7 @@ String closePreview(Map<String, dynamic> summary, {required bool today}) {
   final content = summary['content'] as Map<String, dynamic>;
   final orders = (content['orders'] as List).cast<Map<String, dynamic>>();
   if (!today) return '${_dateLabel(summary['brief_date'] as String)} 장 마감 요약';
+  if (content['review'] != null) return 'AI 회고와 내일 볼 것이 왔어요';
   if (orders.isEmpty) return '오늘은 주문이 없었어요';
   final filled = orders.where((o) => (o['filled_qty'] as int? ?? 0) > 0).length;
   return '오늘 주문 ${orders.length}건 · 체결 $filled건';
@@ -177,6 +179,7 @@ class CloseSummaryPage extends StatelessWidget {
     final blocked = (content['blocked'] as List).cast<Map<String, dynamic>>();
     final news = (content['news'] as List).cast<Map<String, dynamic>>();
     final limits = content['limits'] as Map<String, dynamic>;
+    final review = content['review'] as Map<String, dynamic>?;
     Widget title(String text) => Padding(
           padding: const EdgeInsets.only(top: 20, bottom: 8),
           child: Text(text, style: const TextStyle(fontFamily: displayFont, fontSize: 20)),
@@ -227,7 +230,54 @@ class CloseSummaryPage extends StatelessWidget {
           ]),
         const SizedBox(height: 16),
         const SourceText('서버에 남은 주문·검사 기록으로 만든 요약이에요. 평가손익은 장 마감 시세가 서버에 없어 자산 탭에서 확인해 주세요.'),
+        if (review != null) ..._review(review, title, card),
       ]),
     );
+  }
+
+  /// AI 회고 · 내일 계획 (2-4b): 투자 AI가 쓰고 검증 AI가 원문을 다시 확인한 것. 주문은 만들지 않는다
+  List<Widget> _review(Map<String, dynamic> review, Widget Function(String) title, Widget Function(List<Widget>) card) {
+    final verdict = review['verdict'] as String;
+    final passed = verdict == 'approve' || verdict == 'conditional';
+    Widget claim(Map<String, dynamic> c) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text('· (${c['type']}) ${c['text']}'
+              '${(c['sources'] as List).isEmpty ? '' : ' [${(c['sources'] as List).join(', ')}]'}'),
+        );
+    return [
+      title('AI 회고 · 내일 계획'),
+      card([
+        Row(children: [
+          const Expanded(child: Text('오늘 회고', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+          Tag('검증 ${review['verdict_label']}', passed ? const Color(0xFF137A33) : coachOrange),
+        ]),
+        const SizedBox(height: 8),
+        for (final c in (review['retrospective'] as List).cast<Map<String, dynamic>>()) claim(c),
+        for (final risk in (review['risks'] as List).cast<String>())
+          Text('· 위험: $risk', style: const TextStyle(color: downBlue)),
+      ]),
+      if (review['general'] == true)
+        card([const Text('일반 모드라 사라·팔라 판단은 하지 않고 볼 것만 정리했어요. 성향 퀴즈를 하면 맞춤 계획을 받을 수 있어요.',
+            style: TextStyle(color: mutedText))]),
+      for (final t in (review['tomorrow'] as List).cast<Map<String, dynamic>>())
+        card([
+          Text('내일 ${t['stock_name']} · ${t['action']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          const SizedBox(height: 6),
+          for (final c in (t['reasons'] as List).cast<Map<String, dynamic>>()) claim(c),
+          for (final x in (t['invalid_if'] as List).cast<String>())
+            Text('· 이러면 판단이 틀린 것: $x', style: const TextStyle(color: Color(0xFF8A5A00))),
+        ]),
+      card([
+        Text('검증 AI: ${review['summary']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        for (final x in (review['conditions'] as List).cast<String>()) Text('· 조건: $x'),
+        for (final x in (review['disagreements'] as List).cast<String>()) Text('· 의견 차이: $x'),
+        if (!passed) const Text('검증을 통과하지 못했어요. 참고만 하고 직접 판단해 주세요.', style: TextStyle(color: coachOrange)),
+      ]),
+      for (final src in (review['sources'] as List).cast<Map<String, dynamic>>())
+        SourceText('출처: ${src['title']}${src['as_of'] == null ? '' : ' · ${src['as_of']}'}${src['url'] == null ? '' : ' · ${src['url']}'}'),
+      const SizedBox(height: 8),
+      const SourceText('주문은 만들지 않아요. 사려면 채팅에서 직접 말해 주세요 (처리안 → 승인을 거쳐요). '
+          '투자 판단과 책임은 본인에게 있고, 손실이 날 수 있어요.'),
+    ];
   }
 }
