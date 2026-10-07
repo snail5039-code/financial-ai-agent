@@ -98,6 +98,9 @@ class KbBroker implements Broker {
     return price;
   }
 
+  @override
+  Future<Map<String, dynamic>?> intraday(String stockCode) async => null; // KB 분봉 TR(IVU10080 등)은 키를 붙일 때 확인
+
   // ---------- 아직 못 하는 것: 가짜 값 없이 실패라고 알린다 (NFR-08) ----------
 
   @override

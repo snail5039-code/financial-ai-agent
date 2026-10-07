@@ -146,6 +146,15 @@ void main() {
       }));
     }
 
+    test('장중 흐름: 1분봉을 오래된 것부터, 전일 대비 등락률과 함께', () async {
+      final b = kis((_) async => jsonResponse({'rt_cd': '0', 'output1': {'prdy_ctrt': '-1.25'}, 'output2': [
+        {'stck_cntg_hour': '094000', 'stck_prpr': '111000'}, {'stck_cntg_hour': '093900', 'stck_prpr': '111500'}]}));
+      expect(await b.intraday('000270'), {'change_pct': -1.25, 'bars': [['093900', 111500], ['094000', 111000]]});
+      expect((sent.last.url.path, sent.last.headers['tr_id']), ('/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice', 'FHKST03010200'));
+      final empty = kis((_) async => jsonResponse({'rt_cd': '0', 'output1': {}, 'output2': []}));
+      expect(await empty.intraday('000270'), isNull); // 장 시작 전
+    });
+
     test('모의투자 서버와 모의 거래 코드만 쓰고, 주문 형식이 맞다', () async {
       final b = kis((_) async => jsonResponse({'rt_cd': '0', 'msg1': '주문 전송 완료', 'output': {'ODNO': '0000117057'}}));
       final ack = await b.order('buy', '000270', 2, 113300);

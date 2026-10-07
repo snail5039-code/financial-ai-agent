@@ -146,6 +146,21 @@ class KisMockBroker implements Broker {
     return price;
   }
 
+  /// 주식당일분봉조회 (FHKST03010200, 실전·모의 같은 거래 코드). 지금 시각부터 1분봉 30개, 당일만
+  @override
+  Future<Map<String, dynamic>?> intraday(String stockCode) async {
+    final data = await _call('GET', '/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice', 'FHKST03010200', query: {
+      'FID_ETC_CLS_CODE': '', 'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': stockCode,
+      'FID_INPUT_HOUR_1': kstHhmmss(DateTime.now()), 'FID_PW_DATA_INCU_YN': 'N',
+    });
+    final bars = [
+      for (final b in ((data['output2'] as List?) ?? []).cast<Map<String, dynamic>>())
+        if (_int(b['stck_prpr']) > 0) ['${b['stck_cntg_hour']}', _int(b['stck_prpr'])],
+    ].reversed.toList(); // KIS는 최신부터 준다
+    if (bars.isEmpty) return null; // 장 시작 전
+    return {'change_pct': double.tryParse('${(data['output1'] as Map?)?['prdy_ctrt']}'), 'bars': bars};
+  }
+
   // ---------- 주문 ----------
 
   @override

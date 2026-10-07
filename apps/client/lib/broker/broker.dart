@@ -32,6 +32,10 @@ abstract class Broker {
   Future<Map<String, dynamic>> balance();
   Future<int> price(String stockCode);
 
+  /// 오늘 장중 흐름: {change_pct: 전일 대비 %, bars: [[체결시각 "HHmmss", 가격], ...] 오래된 것부터 최근 30분}.
+  /// 분석 근거로 서버에 보낸다 (출처 intraday:{종목}). 못 받으면 null (현재가만으로 분석한다)
+  Future<Map<String, dynamic>?> intraday(String stockCode);
+
   /// 마지막 잔고 조회 때 알게 된 현재가 (홈 평가금액용, 없으면 평균 매입가로 본다)
   Map<String, int> get lastPrices;
 
@@ -76,8 +80,14 @@ Future<Map<String, dynamic>> answerFetch(Broker? broker, List<dynamic> needs) as
       if (need['type'] == 'balance') answer['balance'] = await broker.balance();
       if (need['type'] == 'price') {
         final code = need['stock_code'] as String;
+        Map<String, dynamic>? flow;
+        try {
+          flow = await broker.intraday(code);
+        } catch (_) {
+          flow = null; // 장중 흐름은 덤이다. 못 받아도 현재가로 분석한다
+        }
         (answer['prices'] ??= <Map<String, dynamic>>[])
-            .add({'stock_code': code, 'price': await broker.price(code), 'as_of': nowIso()});
+            .add({'stock_code': code, 'price': await broker.price(code), 'as_of': nowIso(), 'intraday': ?flow});
       }
     }
   } catch (error) {

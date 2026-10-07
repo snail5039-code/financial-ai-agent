@@ -362,3 +362,13 @@ def test_counter_argument_source_tags() -> None:
     checks = {c["target"]: c for c in analysis.code_checks(plain, known, [], [], offered_chunks=True)}
     assert checks["body_citations"]["result"] == "warn"  # 본문을 받고도 인용하지 않으면 주의 (막지는 않음)
     assert all(c["result"] != "fail" for c in checks.values())
+
+
+def test_intraday_source_summarizes_minute_bars() -> None:
+    price = {"stock_code": "000270", "price": 111000, "as_of": "2026-10-08T09:40:00+09:00",
+             "intraday": {"change_pct": -1.25, "bars": [["091100", 112000], ["092500", 113000], ["094000", 111000]]}}
+    source = analysis.load_source(None, "intraday:000270", {"prices": [price]})
+    assert source["title"] == "오늘 장중 흐름 (앱 실시간 조회, 1분봉)" and source["as_of"] == price["as_of"]
+    assert source["content"] == ("전일 대비 -1.25%. 09:11~09:40 1분봉 3개: 112,000원 → 111,000원 (-0.89%), "
+                                 "이 사이 고가 113,000원, 저가 111,000원")
+    assert analysis.load_source(None, "intraday:000270", {"prices": [{**price, "intraday": None}]}) is None

@@ -68,6 +68,7 @@ GENERAL_MODE_GUIDE = "일반 모드다 (성향 퀴즈 안 함). 판단하지 말
 #   dart:{접수번호}         공시 (제목·접수일)          dart:{접수번호}#{조각번호}  정기보고서 본문 조각
 #   fin:{접수번호}          그 공시의 주요 재무 계정     price:{종목}:{날짜}        그날 종가·시가총액 (하루 늦은 공개 데이터)
 #   quote:{종목}            폰이 증권사에서 받은 현재가  snapshot                  폰이 보낸 내 계좌 요약
+#   intraday:{종목}         폰이 받은 오늘 1분봉 최근 30분과 전일 대비 등락률 (장중 흐름)
 
 def load_sources(conn, ids: list[str], state: InvestState) -> dict[str, dict]:
     """출처 ID → {kind, title, url, as_of, content}. 없는 ID는 결과에서 빠진다 (검증에서 '없는 출처'로 잡힘)."""
@@ -117,6 +118,8 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
         price = state["prices"][0]
         return {"kind": "price", "title": "현재가 (앱 실시간 조회)", "url": None, "as_of": price["as_of"],
                 "content": f"현재가 {won(price['price'])}"}
+    if kind == "intraday" and state.get("prices") and state["prices"][0].get("intraday"):
+        return intraday_source(state["prices"][0])
     if source_id == "snapshot" and state.get("snapshot"):
         snapshot = state["snapshot"]
         held = [h for h in snapshot["holdings"] if h["stock_code"] == state["stock_code"]]
@@ -124,6 +127,21 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
         return {"kind": "snapshot", "title": f"내 계좌 ({SOURCE_LABELS[snapshot['source']]})", "url": None,
                 "as_of": snapshot["fetched_at"], "content": f"현금 {won(snapshot['cash_krw'])}, {holding}"}
     return None
+
+
+def intraday_source(price: dict) -> dict | None:
+    """폰이 보낸 1분봉 [[HHmmss, 가격], ...] (오래된 것부터) → 장중 흐름 요약. 계산은 코드가 한다."""
+    flow = price["intraday"]
+    bars = [(str(t), int(p)) for t, p in flow.get("bars") or [] if int(p) > 0]
+    if not bars:
+        return None
+    values = [p for _, p in bars]
+    (start_time, start), (end_time, end) = bars[0], bars[-1]
+    day = f"전일 대비 {flow['change_pct']:+.2f}%. " if flow.get("change_pct") is not None else ""
+    return {"kind": "price", "title": "오늘 장중 흐름 (앱 실시간 조회, 1분봉)", "url": None, "as_of": price["as_of"],
+            "content": f"{day}{start_time[:2]}:{start_time[2:4]}~{end_time[:2]}:{end_time[2:4]} 1분봉 {len(bars)}개: "
+                       f"{won(start)} → {won(end)} ({(end - start) * 100 / start:+.2f}%), "
+                       f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}"}
 
 
 def fmt_amount(value: int | None) -> str:
@@ -483,6 +501,8 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             ids.append(f"dart:{risk['rcept_no']}")  # 1등급 근거 공시를 자료에 넣는다
         if state.get("prices"):
             ids.append(f"quote:{code}")
+            if state["prices"][0].get("intraday"):
+                ids.append(f"intraday:{code}")
         if state.get("snapshot"):
             ids.append("snapshot")
         sources = load_sources(conn, ids, state)
