@@ -33,6 +33,36 @@ def list_history(conn: Conn, user_id: UserId) -> list[dict]:
     ).fetchall()
 
 
+@router.get("/agents/proposals")
+def list_proposals(conn: Conn, user_id: UserId) -> list[dict]:
+    """투자 AI 방: 투자 AI가 쓴 제안서 (최신순). 마지막 검증 판정을 같이 준다."""
+    return conn.execute(
+        """
+        SELECT p.id AS proposal_id, p.created_at, p.stock_code, s.name AS stock_name, p.action, p.qty, p.limit_price,
+               p.user_directed, p.claims, p.counter_arguments, p.risks, p.invalid_if,
+               (SELECT verdict FROM verifications v WHERE v.proposal_id = p.id ORDER BY round DESC LIMIT 1) AS verdict
+        FROM proposals p JOIN stocks s ON s.code = p.stock_code
+        WHERE p.user_id = %s ORDER BY p.created_at DESC LIMIT 50
+        """,
+        (user_id,),
+    ).fetchall()
+
+
+@router.get("/agents/verifications")
+def list_verifications(conn: Conn, user_id: UserId) -> list[dict]:
+    """검증 AI 방: 검증 AI의 판정 (회차마다 한 줄, 최신순). 코드 검사에서 틀린(fail) 항목 수를 같이 준다."""
+    return conn.execute(
+        """
+        SELECT v.proposal_id, v.created_at, v.round, v.verdict, v.summary, v.challenges, v.conditions, v.disagreements,
+               (SELECT count(*) FROM jsonb_array_elements(v.checks) c WHERE c->>'result' = 'fail') AS failed_checks,
+               s.name AS stock_name, p.action
+        FROM verifications v JOIN proposals p ON p.id = v.proposal_id JOIN stocks s ON s.code = p.stock_code
+        WHERE p.user_id = %s ORDER BY v.created_at DESC, v.round DESC LIMIT 50
+        """,
+        (user_id,),
+    ).fetchall()
+
+
 @router.get("/history/{proposal_id}")
 def get_history(proposal_id: UUID, conn: Conn, user_id: UserId) -> dict:
     proposal = conn.execute(

@@ -123,9 +123,10 @@ class _HistoryPageState extends State<HistoryPage> {
 }
 
 class HistoryDetailPage extends StatelessWidget {
-  const HistoryDetailPage(this.proposalId, this.stockName, {super.key});
+  const HistoryDetailPage(this.proposalId, this.stockName, {super.key, this.initialTab = 0});
   final String proposalId;
   final String stockName;
+  final int initialTab; // 1: 투자 AI, 2: 검증 AI (각 AI 방에서 열 때)
 
   static const stepLabels = {
     'proposal': '투자 AI 제안',
@@ -138,32 +139,43 @@ class HistoryDetailPage extends StatelessWidget {
     'order_result': '주문 결과',
   };
 
+  /// 탭: 전체 과정 / 투자 AI(제안서) / 검증 AI(회차별 판정)
+  static const tabs = [('전체 과정', null), ('투자 AI', 'proposal'), ('검증 AI', 'verification')];
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: topBar('기록 상세'),
-        body: FutureBuilder(
-          future: api.get('/api/history/$proposalId'),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) return Center(child: Text('${snapshot.error}'));
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            final timeline = (snapshot.data['timeline'] as List).cast<Map<String, dynamic>>();
-            return ListView(padding: const EdgeInsets.all(12), children: [
-              Padding(
-                padding: const EdgeInsets.all(4),
-                child: Text(stockName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              ),
-              for (final step in timeline)
-                Card(
-                  child: ExpansionTile(
-                    leading: Text(hhmm(step['at'] as String)),
-                    title: Text(_title(step)),
-                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                    children: _details(step),
-                  ),
-                ),
-            ]);
-          },
+  Widget build(BuildContext context) => DefaultTabController(
+        length: tabs.length,
+        initialIndex: initialTab,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text('$stockName 기록'),
+            actions: topBar('').actions,
+            bottom: TabBar(tabs: [for (final (label, _) in tabs) Tab(text: label)]),
+          ),
+          body: FutureBuilder(
+            future: api.get('/api/history/$proposalId'),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return Center(child: Text('${snapshot.error}'));
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final timeline = (snapshot.data['timeline'] as List).cast<Map<String, dynamic>>();
+              return TabBarView(children: [
+                for (final (_, only) in tabs)
+                  ListView(padding: const EdgeInsets.all(12), children: [
+                    for (final step in timeline.where((s) => only == null || s['step'] == only))
+                      Card(
+                        child: ExpansionTile(
+                          initiallyExpanded: only != null, // AI 탭은 펼쳐서 바로 읽게
+                          leading: Text(hhmm(step['at'] as String)),
+                          title: Text(_title(step)),
+                          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                          children: _details(step),
+                        ),
+                      ),
+                  ]),
+              ]);
+            },
+          ),
         ),
       );
 

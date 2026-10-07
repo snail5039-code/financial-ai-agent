@@ -11,6 +11,7 @@ import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
 import '../history/history_page.dart';
 import '../settings/broker_page.dart';
+import 'agents_page.dart';
 import 'briefing_page.dart';
 import 'overview.dart';
 
@@ -145,6 +146,28 @@ class _RoomsPageState extends State<RoomsPage> {
           badge: waiting,
           onTap: () => _push(const ApprovalsPage(active: true)),
         ),
+      // 두 AI가 한 일을 따로 보는 방 (마지막 기록을 미리보기로)
+      _room(
+        avatar: const RoomAvatar(icon: Icons.lightbulb_outline, color: investAiColor),
+        title: '투자 AI',
+        preview: o.history.isEmpty
+            ? '아직 쓴 제안서가 없어요'
+            : '${o.history.first['stock_name']} · ${actionLabels[o.history.first['action']] ?? o.history.first['action']} 제안서',
+        time: o.history.isEmpty ? null : ymdHm(o.history.first['created_at'] as String),
+        onTap: () => _push(const AgentFeedPage(verifier: false)),
+      ),
+      () {
+        final checked = o.history.where((i) => i['verdict'] != null).firstOrNull;
+        return _room(
+          avatar: const RoomAvatar(icon: Icons.verified_user_outlined, color: verifyAiColor),
+          title: '검증 AI',
+          preview: checked == null
+              ? '아직 검증한 제안이 없어요'
+              : '${checked['stock_name']} · ${verdictLabels[checked['verdict']] ?? checked['verdict']}',
+          time: checked == null ? null : ymdHm(checked['created_at'] as String),
+          onTap: () => _push(const AgentFeedPage(verifier: true)),
+        );
+      }(),
       _room(
         avatar: const RoomAvatar(icon: Icons.track_changes, color: coachOrange),
         title: '코치',

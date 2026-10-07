@@ -372,6 +372,11 @@ def test_approval_lists_and_history_timeline(client, custom_user, ai) -> None:
     [item] = client.get("/api/history", headers=headers).json()
     assert (item["stock_name"], item["verdict"], item["approval_status"], item["order_status"]) == (NAME, "approve", "approved", "filled")
     assert item["policy_ok"] is True
+    [proposal] = client.get("/api/agents/proposals", headers=headers).json()
+    assert (proposal["proposal_id"], proposal["action"], proposal["verdict"]) == (item["proposal_id"], "buy", "approve")
+    assert proposal["claims"][0]["text"] == "실적이 좋아 보인다"
+    [verification] = client.get("/api/agents/verifications", headers=headers).json()
+    assert (verification["stock_name"], verification["round"], verification["failed_checks"]) == (NAME, 0, 0)
     steps = [step["step"] for step in client.get(f"/api/history/{item['proposal_id']}", headers=headers).json()["timeline"]]
     assert steps[0] == "proposal" and steps[-1] == "order_result"
     assert {"verification", "policy_check", "approval_requested", "approval_approved"} <= set(steps)
@@ -397,6 +402,8 @@ def test_other_users_cannot_see_approvals_or_history(client, custom_user, ai) ->
     assert client.get(f"/api/history/{proposal_id}", headers=other).status_code == 404
     assert client.get("/api/approvals", headers=other).json() == []
     assert client.get("/api/history", headers=other).json() == []
+    assert client.get("/api/agents/proposals", headers=other).json() == []
+    assert client.get("/api/agents/verifications", headers=other).json() == []
 
 
 # ---------- 결과 확인 ("아까 주문 체결됐어?") ----------
