@@ -18,9 +18,11 @@ class ChatItem {
 }
 
 class Conversation extends ChangeNotifier {
-  Conversation({this.threadId, this.waiting});
+  Conversation({this.threadId, this.waiting, this.stockCode, this.stockName});
 
   String? threadId;
+  final String? stockCode; // 종목 대화방이면 그 종목 (없으면 투자 비서)
+  final String? stockName;
   final items = <ChatItem>[];
   String? progress; // "투자 AI 분석 중" 같은 진행 단계
   bool busy = false;
@@ -41,7 +43,20 @@ class Conversation extends ChangeNotifier {
     busy = true; // 갱신하는 동안 두 번 보내지 않게
     notifyListeners();
     if (!kIsWeb) await syncFills(currentBroker.value, get: api.get, post: api.post);
-    return _run(api.stream('/api/chat', {'thread_id': threadId, 'text': text, 'client': clientKind}));
+    return _run(api.stream('/api/chat', {
+      'thread_id': threadId, 'text': text, 'client': clientKind,
+      if (threadId == null && stockCode != null) 'stock_code': stockCode,
+    }));
+  }
+
+  /// 종목 대화방: 이 종목의 최근 대화를 불러온다 (처리안 카드는 다시 그리지 않고 글만)
+  Future<void> loadRoom() async {
+    final room = await api.get('/api/chat/rooms/$stockCode') as Map<String, dynamic>;
+    threadId = room['thread_id'] as String?;
+    items
+      ..clear()
+      ..addAll([for (final m in (room['messages'] as List).cast<Map<String, dynamic>>()) ChatItem(m['role'] as String, m['text'] as String)]);
+    notifyListeners();
   }
 
   /// 지금 기다리는 멈춤에 답한다. shown: 대화에 보여줄 사용자 말

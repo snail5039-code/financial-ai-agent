@@ -36,7 +36,12 @@ def understand_node(state: InvestState) -> dict:
     intent = result.intent
     if intent == "query" and result.query_kind is None:
         intent = "other"  # 무엇을 조회할지 모르면 할 수 있는 일을 안내한다
-    return {"query": result.query, "intent": intent, "query_kind": result.query_kind, "stock_name": result.stock_name,
+    stock_name = result.stock_name
+    # 종목 대화방에서 "지금 사도 돼?"처럼 종목을 말하지 않으면 그 방의 종목으로 본다 (잔고·주문 내역 조회는 종목이 없다)
+    if stock_name is None and state.get("room_stock") and (intent in ("analysis", "order", "result")
+                                                           or (intent == "query" and result.query_kind == "price")):
+        stock_name = state["room_stock"]
+    return {"query": result.query, "intent": intent, "query_kind": result.query_kind, "stock_name": stock_name,
             "side": result.side, "qty": result.qty, "limit_price": result.limit_price, "user_directed": intent == "order"}
 
 

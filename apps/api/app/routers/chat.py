@@ -55,6 +55,7 @@ class ChatRequest(BaseModel):
     thread_id: UUID | None = None  # 없으면 새 대화
     text: str = Field(min_length=1, max_length=1000)
     client: Literal["app", "web"]
+    stock_code: str | None = Field(default=None, pattern=r"^[0-9A-Z]{6}$")  # 새 대화를 종목 방에서 시작할 때
 
 
 class ResumeRequest(BaseModel):
@@ -147,14 +148,20 @@ def run_graph(request: Request, graph_input, thread_id: UUID, client: str) -> St
 def chat(body: ChatRequest, request: Request, conn: Conn, user_id: UserId) -> StreamingResponse:
     """새 요청. 같은 대화에 멈춘 업무가 있었다면 버리고 새로 시작한다."""
     if body.thread_id is None:
-        thread_id = conn.execute("INSERT INTO threads (user_id) VALUES (%s) RETURNING id", (user_id,)).fetchone()["id"]
+        if body.stock_code and not conn.execute("SELECT 1 FROM stocks WHERE code = %s", (body.stock_code,)).fetchone():
+            raise HTTPException(404, "종목을 찾을 수 없어요")
+        thread_id = conn.execute("INSERT INTO threads (user_id, stock_code) VALUES (%s, %s) RETURNING id",
+                                 (user_id, body.stock_code)).fetchone()["id"]
     else:
         thread_id = body.thread_id
         own_thread(conn, user_id, thread_id)
+    room = conn.execute("SELECT s.name FROM threads t JOIN stocks s ON s.code = t.stock_code WHERE t.id = %s",
+                        (thread_id,)).fetchone()
 
     graph_input = {
         **new_request(body.text, recent_history(conn, thread_id), profile_summary(conn, user_id)),
         "user_id": str(user_id), "thread_id": str(thread_id), "client": body.client,
+        "room_stock": room and room["name"],
     }
     conn.execute(
         "INSERT INTO messages (thread_id, role, text, client) VALUES (%s, 'user', %s, %s)",
@@ -189,6 +196,23 @@ def resume(body: ResumeRequest, request: Request, conn: Conn, user_id: UserId) -
 
     return run_graph(request, Command(resume={**answer.model_dump(mode="json", exclude_none=True), "client": client}),
                      body.thread_id, client)
+
+
+@router.get("/chat/rooms/{stock_code}")
+def stock_room(stock_code: str, conn: Conn, user_id: UserId) -> dict:
+    """종목 대화방: 이 종목 방의 가장 최근 대화와 메시지 (없으면 thread_id가 null). 이어서 보내면 같은 대화에 쌓인다."""
+    stock = conn.execute("SELECT code, name FROM stocks WHERE code = %s", (stock_code,)).fetchone()
+    if stock is None:
+        raise HTTPException(404, "종목을 찾을 수 없어요")
+    thread = conn.execute(
+        "SELECT id FROM threads WHERE user_id = %s AND stock_code = %s ORDER BY created_at DESC LIMIT 1",
+        (user_id, stock_code),
+    ).fetchone()
+    messages = [] if thread is None else conn.execute(
+        "SELECT role, text, created_at FROM (SELECT * FROM messages WHERE thread_id = %s ORDER BY created_at DESC LIMIT 50) m"
+        " ORDER BY created_at", (thread["id"],),
+    ).fetchall()
+    return {"stock_code": stock["code"], "stock_name": stock["name"], "thread_id": thread and thread["id"], "messages": messages}
 
 
 @router.get("/chat/pending")

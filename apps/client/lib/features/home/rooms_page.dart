@@ -5,6 +5,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../api/api.dart';
 import '../../common/common.dart';
 import '../approvals/approvals_page.dart';
 import '../chat/chat_page.dart';
@@ -184,9 +185,21 @@ class _RoomsPageState extends State<RoomsPage> {
           preview: '${actionLabels[item['action']] ?? item['action']}'
               '${item['qty'] == null ? '' : ' ${comma(item['qty'] as int)}주'} · ${finalResult(item)}',
           time: ymdHm(item['created_at'] as String),
-          onTap: () => _push(HistoryDetailPage(item['proposal_id'] as String, item['stock_name'] as String)),
+          onTap: () => _openStockRoom(item['stock_code'] as String, item['stock_name'] as String),
         ),
     ]);
+  }
+
+  /// 종목 대화방: 그 종목의 최근 대화를 불러와 이어서 한다
+  Future<void> _openStockRoom(String code, String name) async {
+    final room = Conversation(stockCode: code, stockName: name);
+    try {
+      await room.loadRoom();
+    } on ApiError catch (error) {
+      if (mounted) showError(context, error);
+      return;
+    }
+    if (mounted) await _push(ChatPage(room));
   }
 
   static String _short(String name) => name.length <= 2 ? name : name.substring(0, 2);

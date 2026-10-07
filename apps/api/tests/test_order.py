@@ -503,3 +503,24 @@ def test_today_rings(client, custom_user, ai, migrated) -> None:
         conn.execute("UPDATE policies SET max_order_krw = 100000 WHERE user_id = %s", (custom_user["id"],))
     to_approval(client, custom_user)
     assert client.get("/api/orders/today", headers=headers).json()["clean_days"] == 0
+
+
+# ---------- 종목 대화방 ----------
+
+def test_stock_room_remembers_stock(client, custom_user, ai) -> None:
+    headers = custom_user["headers"]
+    assert client.get(f"/api/chat/rooms/{CODE}", headers=headers).json() == {
+        "stock_code": CODE, "stock_name": NAME, "thread_id": None, "messages": []}
+    place_filled_order(client, custom_user)
+    # 종목 방에서는 종목을 말하지 않아도 그 종목으로 본다 (가짜 understand는 종목 이름이 없으면 stock_name=None)
+    events = events_of(client.post("/api/chat", headers=headers,
+                                   json={"text": "체결됐어?", "client": "app", "stock_code": CODE}))
+    assert "주문전자(555555) 4주 매수" in first(events, "message")["text"]
+    room = client.get(f"/api/chat/rooms/{CODE}", headers=headers).json()
+    assert room["thread_id"] == first(events, "done")["thread_id"]
+    assert [m["role"] for m in room["messages"]] == ["user", "assistant"]
+    # 같은 방에 이어서 보내면 같은 대화에 쌓인다
+    events_of(client.post("/api/chat", headers=headers, json={"text": "체결됐어?", "client": "app", "thread_id": room["thread_id"]}))
+    assert len(client.get(f"/api/chat/rooms/{CODE}", headers=headers).json()["messages"]) == 4
+    assert client.get("/api/chat/rooms/999999", headers=headers).status_code == 404
+    assert client.post("/api/chat", headers=headers, json={"text": "x", "client": "app", "stock_code": "999999"}).status_code == 404

@@ -37,12 +37,16 @@ class _ChatPageState extends State<ChatPage> {
 
   static const _background = Color(0xFFEAF3FA);
 
+  static String _short(String name) => name.length <= 2 ? name : name.substring(0, 2);
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: _background,
-        appBar: topBar('투자 비서',
-            avatar: const RoomAvatar(text: 'AI', color: brandBlue, size: 36),
-            subtitle: '검증 AI와 함께 확인해요',
+        appBar: topBar(_c.stockName ?? '투자 비서',
+            avatar: _c.stockName == null
+                ? const RoomAvatar(text: 'AI', color: brandBlue, size: 36)
+                : RoomAvatar(text: _short(_c.stockName!), color: const Color(0xFFFFF5F4), foreground: const Color(0xFFA3241B), size: 36),
+            subtitle: _c.stockName == null ? '검증 AI와 함께 확인해요' : '이 방에서는 종목 이름을 빼고 말해도 돼요',
             actions: [
           IconButton(tooltip: '새 대화', icon: const Icon(Icons.add_comment_outlined), onPressed: _newChat),
         ]),
@@ -94,7 +98,9 @@ class _ChatPageState extends State<ChatPage> {
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: mutedText)),
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
-              for (final text in ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘', '아까 주문 체결됐어?'])
+              for (final text in _c.stockName == null
+                  ? ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘', '아까 주문 체결됐어?']
+                  : ['지금 사도 돼?', '현재가 알려줘', '1주 사줘', '주문 체결됐어?'])
                 ActionChip(backgroundColor: Colors.white, label: Text(text), onPressed: () => _c.send(text)),
             ]),
           ]),
