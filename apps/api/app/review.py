@@ -12,19 +12,17 @@
 """
 
 import argparse
-import json
 from datetime import datetime, timedelta
 
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from app.agents import llm
 from app.agents.analysis import (ACTION_LABELS, CLAIM_LABELS, MAX_REVISIONS, VERDICT_LABELS, claim_check, load_source,
                                  source_lines, source_time, user_lines, volatility_ranks)
-from app.agents.query import latest_snapshot, won
+from app.agents.query import latest_close, latest_snapshot, won
 from app.briefing import NEWS_DAYS, build_close, run_all
 from app.clock import KST
-from app.db import connect
+from app.db import connect, jsonb
 from app.functions.orders import fee_estimate, sell_tax
 from app.functions.suitability import allowed_actions, stock_risk_grade
 from app.routers.policy import profile_summary
@@ -104,8 +102,7 @@ def portfolio_text(conn, snapshot: dict) -> str:
     """종목 비중 = 평가금액 ÷ (현금 + 평가금액 합). 평가금액 = 수량 × 최근 종가 (종가가 없으면 평균 매입가)."""
     rows = []
     for h in snapshot["holdings"]:
-        close = conn.execute("SELECT close, trade_date FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
-                             (h["stock_code"],)).fetchone()
+        close = latest_close(conn, h["stock_code"])
         price, basis = (close["close"], f"{close['trade_date']} 종가") if close else (h["avg_price"], "평균 매입가")
         rows.append((h, h["qty"] * price, basis))
     total = snapshot["cash_krw"] + sum(value for _, value, _ in rows)
@@ -193,13 +190,12 @@ def build_review(database_url: str, user_id: str, now: datetime | None = None) -
         stocks.sort(key=lambda s: codes.index(s["code"]))
         proposal_ids = [str(r["id"]) for r in conn.execute(
             "SELECT DISTINCT p.id FROM proposals p JOIN approvals a ON a.proposal_id = p.id JOIN orders o ON o.approval_id = a.id"
-            " WHERE p.user_id = %s AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date = %s", (user_id, day))]
+            " WHERE p.user_id = %s AND o.created_at::date = %s", (user_id, day))]
         if not stocks and not proposal_ids:
             return None
         ids = ["today", *(f"proposal:{p}" for p in proposal_ids)] + (["portfolio"] if snapshot else [])
         for s in stocks:
-            latest = conn.execute("SELECT trade_date FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
-                                  (s["code"],)).fetchone()
+            latest = latest_close(conn, s["code"])
             if latest:
                 ids.append(f"price:{s['code']}:{latest['trade_date']}")
             ids += [f"dart:{r['rcept_no']}" for r in conn.execute(
@@ -254,7 +250,7 @@ def build_review(database_url: str, user_id: str, now: datetime | None = None) -
     with connect(database_url) as conn:
         conn.execute("UPDATE briefings SET content = content || jsonb_build_object('review', %s::jsonb)"
                      " WHERE user_id = %s AND brief_date = %s AND kind = 'close'",
-                     (Jsonb(review, dumps=lambda obj: json.dumps(obj, default=str)), user_id, day))
+                     (jsonb(review), user_id, day))
     return review
 
 

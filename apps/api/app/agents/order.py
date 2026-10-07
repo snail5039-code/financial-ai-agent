@@ -14,7 +14,6 @@
 - 주문은 서버가 내지 않는다. execute 멈춤으로 폰에 부탁하고, 폰이 증권사에 주문한 결과를 받아 기록한다
 """
 
-import json
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -22,7 +21,6 @@ from decimal import Decimal
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from app import clock
 from app.agents import llm
@@ -31,13 +29,12 @@ from app.agents.analysis import (
     verify_agent_node, with_titles,
 )
 from app.agents.interrupts import pause
-from app.agents.query import end_if_answered, find_stock_node, won
+from app.agents.query import SIDE_LABELS, end_if_answered, find_stock_node, latest_close, won
 from app.agents.state import Context, InvestState
-from app.db import audit, connect
+from app.db import audit, connect, jsonb
 from app.functions import orders
 from app.functions.behavior import behavior
 
-SIDE_LABELS = {"buy": "매수", "sell": "매도"}
 RESULT_LABELS = {
     "accepted": "주문이 접수됐어요", "filled": "주문이 체결됐어요", "partially_filled": "주문이 일부 체결됐어요",
     "failed": "주문이 실패했어요", "unknown_checked": "응답이 불확실해 주문 내역을 확인했어요",
@@ -80,8 +77,7 @@ def set_price_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     if state.get("prices"):
         return {"limit_price": state["prices"][0]["price"]}
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-        last = conn.execute("SELECT close FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
-                            (state["stock_code"],)).fetchone()
+        last = latest_close(conn, state["stock_code"])
     if last is None:
         return {"answer": "주문 가격을 정할 수 없어요. '7만원에'처럼 가격을 말해 주세요."}
     return {"limit_price": last["close"]}
@@ -99,12 +95,13 @@ def closes_of(conn, codes: list[str]) -> dict[str, int]:
 
 def five_day_rank(conn, code: str) -> tuple[float | None, Decimal | None]:
     """최근 5거래일 상승률과, 분석 대상 안에서 그 순위 (0~1, 1이면 가장 많이 오름)."""
-    returns = {}
-    for row in conn.execute("SELECT code FROM stocks WHERE is_target").fetchall():
-        closes = [r["close"] for r in conn.execute(
-            "SELECT close FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 6", (row["code"],))]
-        if len(closes) == 6:
-            returns[row["code"]] = (Decimal(closes[0]) / closes[5] - 1) * 100
+    closes: dict[str, list[int]] = {}  # 종목 → 최근 6거래일 종가 (최신부터). 대상 전체를 쿼리 한 번으로
+    for row in conn.execute(
+        "SELECT s.code, p.close FROM stocks s CROSS JOIN LATERAL"
+        " (SELECT close, trade_date FROM stock_prices WHERE stock_code = s.code ORDER BY trade_date DESC LIMIT 6) p"
+        " WHERE s.is_target ORDER BY s.code, p.trade_date DESC"):
+        closes.setdefault(row["code"], []).append(row["close"])
+    returns = {c: (Decimal(v[0]) / v[5] - 1) * 100 for c, v in closes.items() if len(v) == 6}
     if code not in returns:
         return None, None
     rank = sum(1 for value in returns.values() if value <= returns[code]) / len(returns)
@@ -181,12 +178,8 @@ def save_policy_check(conn, proposal_id: str, result: dict) -> None:
     conn.execute(
         "INSERT INTO policy_checks (proposal_id, ok, rules) VALUES (%s, %s, %s)"
         " ON CONFLICT (proposal_id) DO UPDATE SET ok = EXCLUDED.ok, rules = EXCLUDED.rules, created_at = now()",
-        (proposal_id, result["ok"], Jsonb(result["rules"], dumps=json_dumps)),
+        (proposal_id, result["ok"], jsonb(result["rules"])),
     )
-
-
-def json_dumps(value) -> str:
-    return json.dumps(value, default=str, ensure_ascii=False)
 
 
 def blocked_node(state: InvestState, runtime: Runtime[Context]) -> dict:
@@ -222,13 +215,13 @@ def prepare_approval_node(state: InvestState, runtime: Runtime[Context]) -> dict
                          (state["qty"], state["limit_price"], proposal_id))
             conn.execute("UPDATE approvals SET status = 'pending', card = %s, expires_at = %s, decided_at = NULL,"
                          " decided_channel = NULL WHERE id = %s",
-                         (Jsonb(state["card"], dumps=json_dumps), expires_at, approval_id))
+                         (jsonb(state["card"]), expires_at, approval_id))
             event = "approval_renewed"
         else:
             proposal_id = save_proposal(conn, state)
             approval_id = str(conn.execute(
                 "INSERT INTO approvals (proposal_id, expires_at, card) VALUES (%s, %s, %s) RETURNING id",
-                (proposal_id, expires_at, Jsonb(state["card"], dumps=json_dumps)),
+                (proposal_id, expires_at, jsonb(state["card"])),
             ).fetchone()[0])
             event = "approval_requested"
         save_policy_check(conn, proposal_id, state["policy_result"])

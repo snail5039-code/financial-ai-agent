@@ -68,6 +68,12 @@ const verdictColors = {
   'user_judgement': Colors.grey,
 };
 const sideLabels = {'buy': '매수', 'sell': '매도'};
+// 서버와 같은 말을 쓴다 (apps/api/app/agents/analysis.py ACTION_LABELS의 '관찰'). 매수·매도는 직접 지시 주문도 있어 '검토'를 붙이지 않는다
+const actionLabels = {'buy': '매수', 'sell': '매도', 'hold': '보유', 'watch': '관찰'};
+// 주문 상태 (orders.status). 처리안 목록·기록·장 마감 요약이 같이 쓴다
+const orderLabels = {
+  'accepted': '접수 (체결 전)', 'filled': '체결', 'partially_filled': '일부 체결', 'failed': '실패', 'unknown_checked': '확인 필요',
+};
 
 /// 성향 모드. 일반 모드면 모든 화면 위에 배지를 띄운다. 로그인·퀴즈·설정에서 갱신한다
 final profileMode = ValueNotifier<String>('general');

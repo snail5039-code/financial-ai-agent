@@ -10,9 +10,6 @@ import 'approval_detail_page.dart';
 
 const tabs = [('needs_approval', '승인 필요'), ('needs_execution', '실행 필요'), ('closed', '만료·거절')];
 const statusLabels = {'rejected': '거절', 'expired': '만료', 'approved': '승인'};
-const orderLabels = {
-  'accepted': '접수', 'filled': '체결', 'partially_filled': '일부 체결', 'failed': '실패', 'unknown_checked': '확인 필요',
-};
 
 class ApprovalsPage extends StatelessWidget {
   const ApprovalsPage({super.key, required this.active});

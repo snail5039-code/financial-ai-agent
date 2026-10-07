@@ -11,12 +11,11 @@ from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
 from app import clock
-from app.agents.query import search_stocks, won
+from app.agents.analysis import VERDICT_LABELS
+from app.agents.query import SIDE_LABELS, stock_codes, won
 from app.agents.state import Context, InvestState
 from app.db import connect
 
-SIDE_LABELS = {"buy": "매수", "sell": "매도"}
-VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
 ORDER_LABELS = {
     "accepted": "접수됐어요. 아직 체결되지 않았어요",
     "filled": "체결됐어요",
@@ -49,11 +48,9 @@ def hhmm(value: datetime) -> str:
 
 def result_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-        codes = None
-        if state.get("stock_name"):
-            codes = [stock["code"] for stock in search_stocks(conn, state["stock_name"].strip())]
-            if not codes:
-                return {"answer": f"'{state['stock_name']}' 종목을 찾지 못했어요."}
+        codes = stock_codes(conn, state.get("stock_name"))
+        if codes == []:
+            return {"answer": f"'{state['stock_name']}' 종목을 찾지 못했어요."}
         row = conn.execute(LATEST_SQL, {"user_id": state["user_id"], "codes": codes}).fetchone()
     if row is None:
         target = f"{state['stock_name']} " if codes else ""

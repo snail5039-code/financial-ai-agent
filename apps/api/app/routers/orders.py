@@ -16,7 +16,6 @@ from app.routers.auth import UserId
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 OPEN_STATUSES = ("accepted", "partially_filled", "unknown_checked")
-TODAY_KST = "date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'"
 
 
 class Fill(Strict):
@@ -45,9 +44,9 @@ def today(conn: Conn, user_id: UserId) -> dict:
     row = conn.execute(
         """
         SELECT pol.max_daily_krw,
-               (now() AT TIME ZONE 'Asia/Seoul')::date - (COALESCE(
+               current_date - COALESCE(
                    (SELECT max(pc.created_at) FROM policy_checks pc JOIN proposals p ON p.id = pc.proposal_id
-                    WHERE p.user_id = u.id AND NOT pc.ok), u.created_at) AT TIME ZONE 'Asia/Seoul')::date AS clean_days
+                    WHERE p.user_id = u.id AND NOT pc.ok), u.created_at)::date AS clean_days
         FROM users u JOIN policies pol ON pol.user_id = u.id WHERE u.id = %s
         """,
         (user_id,),
@@ -58,10 +57,10 @@ def today(conn: Conn, user_id: UserId) -> dict:
 @router.get("/open")
 def open_orders(conn: Conn, user_id: UserId) -> list[dict]:
     return conn.execute(
-        f"""
+        """
         SELECT o.idempotency_key, p.stock_code, o.broker_order_no, o.side, o.qty, o.filled_qty
         FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id
-        WHERE p.user_id = %s AND o.status = ANY(%s) AND o.broker_order_no IS NOT NULL AND o.created_at >= {TODAY_KST}
+        WHERE p.user_id = %s AND o.status = ANY(%s) AND o.broker_order_no IS NOT NULL AND o.created_at >= date_trunc('day', now())
         ORDER BY o.created_at
         """,
         (user_id, list(OPEN_STATUSES)),

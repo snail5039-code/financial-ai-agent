@@ -145,7 +145,7 @@ def put_profile(body: QuizAnswers, conn: Conn, user_id: UserId) -> dict:
     """
     taken_today = conn.execute(
         "SELECT count(*) AS n FROM audit_logs WHERE user_id = %s AND event = 'profile_updated'"
-        " AND created_at >= date_trunc('day', now())",  # 연결 시간대가 서울이라 오늘 0시(KST)
+        " AND created_at >= date_trunc('day', now())",
         (user_id,),
     ).fetchone()["n"]
     if taken_today >= MAX_QUIZ_PER_DAY:

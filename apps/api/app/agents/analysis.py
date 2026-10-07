@@ -22,7 +22,7 @@ from psycopg.types.json import Jsonb
 
 from app.agents import llm
 from app.agents.interrupts import pause
-from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_node, latest_snapshot, won
+from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_node, latest_close, latest_snapshot, won
 from app.agents.state import Context, InvestState
 from app.clock import KST
 from app.db import connect
@@ -468,8 +468,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     code = state["stock_code"]
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         ids = []
-        latest = conn.execute("SELECT trade_date FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
-                              (code,)).fetchone()
+        latest = latest_close(conn, code)
         if latest:
             ids.append(f"price:{code}:{latest['trade_date']}")
         basis = financial_basis(conn, code)

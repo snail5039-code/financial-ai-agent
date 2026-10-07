@@ -168,10 +168,6 @@ class CloseSummaryPage extends StatelessWidget {
   const CloseSummaryPage(this.summary, {super.key});
   final Map<String, dynamic> summary;
 
-  static const statusLabels = {
-    'accepted': '접수 (체결 전)', 'filled': '체결', 'partially_filled': '일부 체결', 'failed': '실패', 'unknown_checked': '확인 필요',
-  };
-
   @override
   Widget build(BuildContext context) {
     final content = summary['content'] as Map<String, dynamic>;
@@ -208,7 +204,7 @@ class CloseSummaryPage extends StatelessWidget {
           card([
             Text('${o['stock_name']} ${comma(o['qty'] as int)}주 ${sideLabels[o['side']]} · ${won(o['price'] as int)}',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('${statusLabels[o['status']] ?? o['status']}'
+            Text('${orderLabels[o['status']] ?? o['status']}'
                 '${(o['filled_qty'] as int? ?? 0) > 0 ? ' ${comma(o['filled_qty'] as int)}주 × ${won(o['filled_price'] as int)}' : ''}'
                 ' · ${hhmm(o['created_at'] as String)}'),
             if (o['broker_order_no'] != null) SourceText('주문번호 ${o['broker_order_no']}'),

@@ -15,21 +15,19 @@
 """
 
 import argparse
-import json
 import logging
 import threading
 from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from app.agents.analysis import (gather_node, invest_agent_node, route_after_verify, save_proposal, verify_agent_node,
                                  volatility_ranks, with_titles, CLAIM_LABELS)
-from app.agents.query import latest_snapshot
+from app.agents.query import latest_close, latest_snapshot
 from app.agents.state import new_request
 from app.clock import KST
-from app.db import connect
+from app.db import connect, jsonb
 from app.functions.orders import KRX_HOLIDAYS, WORST_CASE_DROP_PCT
 from app.functions.suitability import buy_block_reason, stock_risk_grade
 from app.routers.orders import today as today_summary
@@ -52,7 +50,7 @@ def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (
         """
         SELECT s.code, s.name FROM stocks s
         LEFT JOIN (SELECT stock_code, max(filed_at) AS latest FROM disclosures
-                   WHERE filed_at >= (now() AT TIME ZONE 'Asia/Seoul')::date - %(days)s GROUP BY stock_code) d
+                   WHERE filed_at >= current_date - %(days)s GROUP BY stock_code) d
                ON d.stock_code = s.code
         WHERE s.is_target AND (d.latest IS NOT NULL OR s.code = ANY(%(watching)s))
         ORDER BY s.code = ANY(%(watching)s) DESC, d.latest DESC NULLS LAST, s.code
@@ -86,8 +84,7 @@ def analyze(database_url: str, base: dict, code: str, name: str) -> dict:
 
 def pick_entry(conn, state: dict, proposal_id: str) -> dict:
     proposal, verification, sources = state["proposal"], state["verifications"][-1], state["sources"]
-    close = conn.execute("SELECT close, trade_date FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
-                         (state["stock_code"],)).fetchone()
+    close = latest_close(conn, state["stock_code"])
     return {
         "stock_code": state["stock_code"], "stock_name": state["stock_name"], "proposal_id": proposal_id,
         "verdict": verification["verdict"], "summary": verification["summary"], "conditions": verification["conditions"],
@@ -98,6 +95,16 @@ def pick_entry(conn, state: dict, proposal_id: str) -> dict:
         # 1주 기준 최악의 경우 (처리안과 같은 기준)
         "worst_case_loss": close and close["close"] * WORST_CASE_DROP_PCT // 100,
     }
+
+
+def save_briefing(database_url: str, user_id: str, day, kind: str, content: dict) -> None:
+    """그날의 아침 브리핑(morning)·장 마감 요약(close)을 저장한다. 다시 만들면 덮어쓴다."""
+    with connect(database_url) as conn:
+        conn.execute(
+            "INSERT INTO briefings (user_id, brief_date, kind, content) VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
+            (user_id, day, kind, jsonb(content)),
+        )
 
 
 def build_briefing(database_url: str, user_id: str, now: datetime | None = None) -> dict:
@@ -145,16 +152,8 @@ def build_briefing(database_url: str, user_id: str, now: datetime | None = None)
         "checked": checked,  # 분석했지만 제안하지 않은 것도 남긴다 (왜 비었는지 보이게)
         "snapshot_at": snapshot and snapshot["fetched_at"].isoformat(),
     }
-    with connect(database_url) as conn:
-        conn.execute(
-            "INSERT INTO briefings (user_id, brief_date, kind, content) VALUES (%s, %s, 'morning', %s)"
-            " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
-            (user_id, now.date(), Jsonb(content, dumps=lambda obj: json.dumps(obj, default=str))),
-        )
+    save_briefing(database_url, user_id, now.date(), "morning", content)
     return content
-
-
-TODAY = "(now() AT TIME ZONE 'Asia/Seoul')::date"
 
 
 def build_close(database_url: str, user_id: str, now: datetime | None = None) -> dict:
@@ -162,35 +161,35 @@ def build_close(database_url: str, user_id: str, now: datetime | None = None) ->
     now = now or datetime.now(KST)
     with connect(database_url, row_factory=dict_row) as conn:
         orders = conn.execute(
-            f"""
+            """
             SELECT s.name AS stock_name, o.side, o.qty, o.price, o.status, o.filled_qty, o.filled_price, o.broker_order_no,
                    o.created_at
             FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id
             JOIN stocks s ON s.code = p.stock_code
-            WHERE p.user_id = %s AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY} ORDER BY o.created_at
+            WHERE p.user_id = %s AND o.created_at::date = current_date ORDER BY o.created_at
             """,
             (user_id,),
         ).fetchall()
         blocked = conn.execute(
-            f"""
+            """
             SELECT s.name AS stock_name, p.action, pc.rules FROM policy_checks pc JOIN proposals p ON p.id = pc.proposal_id
             JOIN stocks s ON s.code = p.stock_code
-            WHERE p.user_id = %s AND NOT pc.ok AND (pc.created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY}
+            WHERE p.user_id = %s AND NOT pc.ok AND pc.created_at::date = current_date
             ORDER BY pc.created_at
             """,
             (user_id,),
         ).fetchall()
-        analyses = conn.execute(f"SELECT count(*) AS n FROM proposals WHERE user_id = %s"
-                                f" AND (created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY}", (user_id,)).fetchone()["n"]
+        analyses = conn.execute("SELECT count(*) AS n FROM proposals WHERE user_id = %s"
+                                " AND created_at::date = current_date", (user_id,)).fetchone()["n"]
         snapshot = latest_snapshot(conn, user_id)
         held = [h["stock_code"] for h in snapshot["holdings"]] if snapshot else []
         watching = [r["stock_code"] for r in conn.execute("SELECT stock_code FROM watchlist WHERE user_id = %s", (user_id,))]
         news = conn.execute(
-            f"""
+            """
             SELECT s.name AS stock_name, d.title, d.url, d.filed_at,
                    CASE WHEN d.stock_code = ANY(%(held)s) THEN '보유' ELSE '관심' END AS why
             FROM disclosures d JOIN stocks s ON s.code = d.stock_code
-            WHERE d.stock_code = ANY(%(codes)s) AND d.filed_at = {TODAY} ORDER BY s.name
+            WHERE d.stock_code = ANY(%(codes)s) AND d.filed_at = current_date ORDER BY s.name
             """,
             {"held": held, "codes": held + watching},
         ).fetchall()
@@ -208,12 +207,7 @@ def build_close(database_url: str, user_id: str, now: datetime | None = None) ->
         "limits": limits,
         "snapshot_at": snapshot and snapshot["fetched_at"].isoformat(),
     }
-    with connect(database_url) as conn:
-        conn.execute(
-            "INSERT INTO briefings (user_id, brief_date, kind, content) VALUES (%s, %s, 'close', %s)"
-            " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
-            (user_id, now.date(), Jsonb(content, dumps=lambda obj: json.dumps(obj, default=str))),
-        )
+    save_briefing(database_url, user_id, now.date(), "close", content)
     return content
 
 

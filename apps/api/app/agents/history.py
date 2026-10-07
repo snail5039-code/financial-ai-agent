@@ -8,8 +8,8 @@ from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
 from app.agents.analysis import ACTION_LABELS, VERDICT_LABELS
-from app.agents.query import search_stocks, won
-from app.agents.result import ORDER_LABELS, SIDE_LABELS, hhmm
+from app.agents.query import SIDE_LABELS, stock_codes, won
+from app.agents.result import ORDER_LABELS, hhmm
 from app.agents.state import Context, InvestState
 from app.db import connect
 
@@ -28,7 +28,7 @@ HISTORY_SQL = """
     LEFT JOIN LATERAL (SELECT * FROM orders WHERE approval_id = a.id ORDER BY created_at LIMIT 1) o ON true
     WHERE p.user_id = %(user_id)s
       AND p.created_at >= CASE WHEN %(interval)s::interval IS NULL
-                               THEN date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'
+                               THEN date_trunc('day', now())  -- 연결 시간대가 서울 (db.connect)
                                ELSE now() - %(interval)s::interval END
       AND (%(codes)s::text[] IS NULL OR p.stock_code = ANY(%(codes)s))
       AND (%(side)s::text IS NULL OR p.action = %(side)s)
@@ -42,11 +42,9 @@ def history_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     period_label, interval = PERIODS[state.get("period") or "month"]
     kind = state.get("history_kind")
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-        codes = None
-        if state.get("stock_name"):
-            codes = [stock["code"] for stock in search_stocks(conn, state["stock_name"].strip())]
-            if not codes:
-                return {"answer": f"'{state['stock_name']}' 종목을 찾지 못했어요."}
+        codes = stock_codes(conn, state.get("stock_name"))
+        if codes == []:
+            return {"answer": f"'{state['stock_name']}' 종목을 찾지 못했어요."}
         rows = conn.execute(HISTORY_SQL, {"user_id": state["user_id"], "interval": interval, "codes": codes,
                                           "side": state.get("side"), "kind": kind, "limit": MAX_ITEMS + 1}).fetchall()
     target = " ".join(filter(None, [period_label, rows[0]["stock_name"] if codes and rows else state.get("stock_name"),

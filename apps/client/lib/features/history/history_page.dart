@@ -6,11 +6,7 @@ import '../../api/api.dart';
 import '../../common/common.dart';
 import '../approvals/approval_detail_page.dart';
 
-const orderLabels = {
-  'accepted': '주문 접수', 'filled': '체결', 'partially_filled': '일부 체결', 'failed': '주문 실패', 'unknown_checked': '확인 필요',
-};
 const approvalLabels = {'pending': '승인 대기', 'approved': '승인 · 실행 전', 'rejected': '거절', 'expired': '만료'};
-const actionLabels = {'buy': '매수', 'sell': '매도', 'hold': '보유', 'watch': '관망'};
 
 /// 한 건의 최종 결과: 주문 결과 > 승인 상태 > 정책 차단 > 분석만
 String finalResult(Map<String, dynamic> item) {

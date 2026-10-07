@@ -34,6 +34,12 @@ SYNC_MESSAGE = "최근 30분 안에 동기화된 계좌 정보가 없어요. 폰
 
 # ---------- 답 문장 만들기 (계산만 하는 함수) ----------
 
+def latest_close(conn, code: str) -> dict | None:
+    """가장 최근 종가 {close, trade_date} (금융위원회 시세, 하루 늦은 값). 없으면 None. dict_row 연결로 부른다."""
+    return conn.execute("SELECT close, trade_date FROM stock_prices WHERE stock_code = %s ORDER BY trade_date DESC LIMIT 1",
+                        (code,)).fetchone()
+
+
 def won(amount: int) -> str:
     return f"{amount:,}원"
 
@@ -80,6 +86,11 @@ def search_stocks(conn, name: str) -> list[dict]:
     ).fetchall()
 
 
+def stock_codes(conn, name: str | None) -> list[str] | None:
+    """종목 이름(또는 코드) → 후보 코드. 이름이 없으면 None(종목으로 좁히지 않음), 못 찾으면 빈 목록."""
+    return None if not name else [stock["code"] for stock in search_stocks(conn, name.strip())]
+
+
 def latest_snapshot(conn, user_id: str) -> dict | None:
     return conn.execute(
         "SELECT cash_krw, holdings, fetched_at FROM account_snapshots WHERE user_id = %s"
@@ -119,8 +130,7 @@ def get_market_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         if kind == "price":
             # 웹은 실시간 현재가가 없어서 서버의 전일 종가(공개 데이터)로 답한다
             with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-                last = conn.execute("SELECT trade_date, close FROM stock_prices WHERE stock_code = %s"
-                                    " ORDER BY trade_date DESC LIMIT 1", (state["stock_code"],)).fetchone()
+                last = latest_close(conn, state["stock_code"])
             if last is None:
                 return {"answer": WEB_PRICE_MESSAGE}
             return {"answer": f"{state['stock_name']}({state['stock_code']}) 최근 종가 {won(last['close'])} "
@@ -160,7 +170,7 @@ def read_orders_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             " JOIN approvals a ON a.id = o.approval_id"
             " JOIN proposals p ON p.id = a.proposal_id"
             " LEFT JOIN stocks s ON s.code = p.stock_code"
-            " WHERE p.user_id = %s AND o.created_at >= date_trunc('day', now())"  # 연결 시간대가 서울
+            " WHERE p.user_id = %s AND o.created_at >= date_trunc('day', now())"
             " ORDER BY o.created_at",
             (state["user_id"],),
         ).fetchall()
