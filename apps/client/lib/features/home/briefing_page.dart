@@ -148,3 +148,86 @@ class BriefingPage extends StatelessWidget {
     );
   }
 }
+
+// ---------- 장 마감 요약 (12-todo-by-stage.md 2-4): 서버 기록만 정리한 것 (LLM 없음) ----------
+
+const closeColor = Color(0xFF4C5BD4);
+
+String closePreview(Map<String, dynamic> summary, {required bool today}) {
+  final content = summary['content'] as Map<String, dynamic>;
+  final orders = (content['orders'] as List).cast<Map<String, dynamic>>();
+  if (!today) return '${_dateLabel(summary['brief_date'] as String)} 장 마감 요약';
+  if (orders.isEmpty) return '오늘은 주문이 없었어요';
+  final filled = orders.where((o) => (o['filled_qty'] as int? ?? 0) > 0).length;
+  return '오늘 주문 ${orders.length}건 · 체결 $filled건';
+}
+
+class CloseSummaryPage extends StatelessWidget {
+  const CloseSummaryPage(this.summary, {super.key});
+  final Map<String, dynamic> summary;
+
+  static const statusLabels = {
+    'accepted': '접수 (체결 전)', 'filled': '체결', 'partially_filled': '일부 체결', 'failed': '실패', 'unknown_checked': '확인 필요',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final content = summary['content'] as Map<String, dynamic>;
+    final orders = (content['orders'] as List).cast<Map<String, dynamic>>();
+    final blocked = (content['blocked'] as List).cast<Map<String, dynamic>>();
+    final news = (content['news'] as List).cast<Map<String, dynamic>>();
+    final limits = content['limits'] as Map<String, dynamic>;
+    Widget title(String text) => Padding(
+          padding: const EdgeInsets.only(top: 20, bottom: 8),
+          child: Text(text, style: const TextStyle(fontFamily: displayFont, fontSize: 20)),
+        );
+    Widget card(List<Widget> children) => Card(
+          color: Colors.white,
+          child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)),
+        );
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3F4FD),
+      appBar: topBar('장 마감 요약',
+          avatar: const RoomAvatar(icon: Icons.nights_stay_outlined, color: closeColor, size: 36),
+          subtitle: '${_dateLabel(summary['brief_date'] as String)} · ${hhmm(summary['created_at'] as String)} 작성'),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        card([
+          Text('오늘 산 금액 ${won(content['bought_krw'] as int)} · 판 금액 ${won(content['sold_krw'] as int)}',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text('1일 한도 ${won(limits['daily_used_krw'] as int)} / ${won(limits['daily_limit_krw'] as int)} 사용'),
+          Text('분석·제안 ${content['analyses']}번 · 규칙에 걸린 요청 없이 ${limits['clean_days']}일째',
+              style: const TextStyle(color: Color(0xFF137A33))),
+        ]),
+        title('오늘 주문'),
+        if (orders.isEmpty) card([const Text('오늘은 주문이 없었어요', style: TextStyle(color: mutedText))]),
+        for (final o in orders)
+          card([
+            Text('${o['stock_name']} ${comma(o['qty'] as int)}주 ${sideLabels[o['side']]} · ${won(o['price'] as int)}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${statusLabels[o['status']] ?? o['status']}'
+                '${(o['filled_qty'] as int? ?? 0) > 0 ? ' ${comma(o['filled_qty'] as int)}주 × ${won(o['filled_price'] as int)}' : ''}'
+                ' · ${hhmm(o['created_at'] as String)}'),
+            if (o['broker_order_no'] != null) SourceText('주문번호 ${o['broker_order_no']}'),
+          ]),
+        if (blocked.isNotEmpty) ...[
+          title('규칙에 걸린 요청'),
+          for (final b in blocked)
+            card([
+              Text('${b['stock_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('걸린 규칙: ${(b['rules'] as List).join(', ')}', style: const TextStyle(color: coachOrange)),
+            ]),
+        ],
+        title('오늘 공시 (보유·관심)'),
+        if (news.isEmpty) card([const Text('오늘 나온 공시가 없어요', style: TextStyle(color: mutedText))]),
+        for (final n in news)
+          card([
+            Text('[${n['why']}] ${n['stock_name']} · ${n['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            SourceText('DART 공시 · ${n['filed_at']} · ${n['url']}'),
+          ]),
+        const SizedBox(height: 16),
+        const SourceText('서버에 남은 주문·검사 기록으로 만든 요약이에요. 평가손익은 장 마감 시세가 서버에 없어 자산 탭에서 확인해 주세요.'),
+      ]),
+    );
+  }
+}

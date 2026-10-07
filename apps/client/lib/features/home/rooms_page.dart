@@ -121,6 +121,14 @@ class _RoomsPageState extends State<RoomsPage> {
             onTap: () => _push(BriefingPage(o.briefing!, onAsk: widget.onAsk)),
           );
         }(),
+      if (o.close != null)
+        _room(
+          avatar: const RoomAvatar(icon: Icons.nights_stay_outlined, color: closeColor),
+          title: '장 마감 요약',
+          preview: closePreview(o.close!, today: o.close!['brief_date'] == kstToday()),
+          time: hhmm(o.close!['created_at'] as String),
+          onTap: () => _push(CloseSummaryPage(o.close!)),
+        ),
       ListenableBuilder(
         listenable: widget.conversation,
         builder: (context, _) {

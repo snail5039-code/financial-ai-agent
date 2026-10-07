@@ -22,6 +22,7 @@ typedef Overview = ({
   List<Map<String, dynamic>> history,
   Map<String, dynamic>? briefing, // 가장 최근 아침 브리핑, 없으면 null
   List<Map<String, dynamic>> watchlist, // 관심 종목
+  Map<String, dynamic>? close, // 가장 최근 장 마감 요약, 없으면 null
 });
 
 Future<Overview> loadOverview() async {
@@ -52,6 +53,10 @@ Future<Overview> loadOverview() async {
       throw error;
     }),
     api.get('/api/watchlist'),
+    api.get('/api/briefings/latest?kind=close').then<Object?>((value) => value, onError: (Object error) {
+      if (error is ApiError && error.status == 404) return null;
+      throw error;
+    }),
   ]);
   List<Map<String, dynamic>> rows(Object? value) => (value as List).cast<Map<String, dynamic>>();
   return (
@@ -62,6 +67,7 @@ Future<Overview> loadOverview() async {
     history: rows(results[3]),
     briefing: results[4] as Map<String, dynamic>?,
     watchlist: rows(results[5]),
+    close: results[6] as Map<String, dynamic>?,
   );
 }
 

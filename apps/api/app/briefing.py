@@ -7,7 +7,11 @@
      투자 AI가 매수 검토라고 하고 검증 AI가 승인·조건부 승인한 것만 싣는다.
      주문은 만들지 않는다 (승인 만료 10분이라 장 전에 만료됨). 앱의 "주문하기"가 평소 주문 흐름을 시작한다.
 
-실행: uv run python -m app.briefing [--email 사용자]   (자동 실행은 .env MORNING_BRIEF_TIME, 기본 꺼짐)
+장 마감 요약 (12-todo-by-stage.md 2-4, build_close): LLM 없이 서버 기록만 정리한다 (비용 없음).
+  오늘 주문·체결, 오늘 한도 사용, 오늘 규칙에 걸린 요청, 오늘 분석 수, 보유·관심 종목 오늘 공시
+
+실행: uv run python -m app.briefing [--close] [--email 사용자]
+자동: .env MORNING_BRIEF_TIME(기본 꺼짐, Gemini 비용), CLOSE_SUMMARY_TIME(기본 15:40, 비용 없음)
 """
 
 import argparse
@@ -143,24 +147,88 @@ def build_briefing(database_url: str, user_id: str, now: datetime | None = None)
     }
     with connect(database_url) as conn:
         conn.execute(
-            "INSERT INTO briefings (user_id, brief_date, content) VALUES (%s, %s, %s)"
-            " ON CONFLICT (user_id, brief_date) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
+            "INSERT INTO briefings (user_id, brief_date, kind, content) VALUES (%s, %s, 'morning', %s)"
+            " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
             (user_id, now.date(), Jsonb(content, dumps=lambda obj: json.dumps(obj, default=str))),
         )
     return content
 
 
-def run_all(database_url: str | None = None, email: str | None = None) -> int:
-    """브리핑을 만든다 (email이 없으면 모든 사용자). 만든 수를 돌려준다. 한 사람이 실패해도 다음 사람은 만든다."""
+TODAY = "(now() AT TIME ZONE 'Asia/Seoul')::date"
+
+
+def build_close(database_url: str, user_id: str, now: datetime | None = None) -> dict:
+    """장 마감 요약. 숫자는 모두 서버 기록이다. 평가손익은 서버에 장 마감 시세가 없어 넣지 않는다 (앱 자산 탭에서 실시간)."""
+    now = now or datetime.now(KST)
+    with connect(database_url, row_factory=dict_row) as conn:
+        orders = conn.execute(
+            f"""
+            SELECT s.name AS stock_name, o.side, o.qty, o.price, o.status, o.filled_qty, o.filled_price, o.broker_order_no,
+                   o.created_at
+            FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id
+            JOIN stocks s ON s.code = p.stock_code
+            WHERE p.user_id = %s AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY} ORDER BY o.created_at
+            """,
+            (user_id,),
+        ).fetchall()
+        blocked = conn.execute(
+            f"""
+            SELECT s.name AS stock_name, p.action, pc.rules FROM policy_checks pc JOIN proposals p ON p.id = pc.proposal_id
+            JOIN stocks s ON s.code = p.stock_code
+            WHERE p.user_id = %s AND NOT pc.ok AND (pc.created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY}
+            ORDER BY pc.created_at
+            """,
+            (user_id,),
+        ).fetchall()
+        analyses = conn.execute(f"SELECT count(*) AS n FROM proposals WHERE user_id = %s"
+                                f" AND (created_at AT TIME ZONE 'Asia/Seoul')::date = {TODAY}", (user_id,)).fetchone()["n"]
+        snapshot = latest_snapshot(conn, user_id)
+        held = [h["stock_code"] for h in snapshot["holdings"]] if snapshot else []
+        watching = [r["stock_code"] for r in conn.execute("SELECT stock_code FROM watchlist WHERE user_id = %s", (user_id,))]
+        news = conn.execute(
+            f"""
+            SELECT s.name AS stock_name, d.title, d.url, d.filed_at,
+                   CASE WHEN d.stock_code = ANY(%(held)s) THEN '보유' ELSE '관심' END AS why
+            FROM disclosures d JOIN stocks s ON s.code = d.stock_code
+            WHERE d.stock_code = ANY(%(codes)s) AND d.filed_at = {TODAY} ORDER BY s.name
+            """,
+            {"held": held, "codes": held + watching},
+        ).fetchall()
+        limits = today_summary(conn, user_id)
+
+    filled = [o for o in orders if o["filled_qty"]]
+    content = {
+        "orders": [{**o, "created_at": o["created_at"].isoformat()} for o in orders],
+        "bought_krw": sum(o["filled_qty"] * o["filled_price"] for o in filled if o["side"] == "buy"),
+        "sold_krw": sum(o["filled_qty"] * o["filled_price"] for o in filled if o["side"] == "sell"),
+        "blocked": [{"stock_name": b["stock_name"], "action": b["action"],
+                     "rules": [r["label"] for r in b["rules"] if not r["ok"]]} for b in blocked],
+        "analyses": analyses,
+        "news": [{**n, "filed_at": str(n["filed_at"])} for n in news],
+        "limits": limits,
+        "snapshot_at": snapshot and snapshot["fetched_at"].isoformat(),
+    }
+    with connect(database_url) as conn:
+        conn.execute(
+            "INSERT INTO briefings (user_id, brief_date, kind, content) VALUES (%s, %s, 'close', %s)"
+            " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
+            (user_id, now.date(), Jsonb(content, dumps=lambda obj: json.dumps(obj, default=str))),
+        )
+    return content
+
+
+def run_all(database_url: str | None = None, email: str | None = None, build=build_briefing) -> int:
+    """build(아침 브리핑·장 마감 요약)를 만든다 (email이 없으면 모든 사용자). 만든 수를 돌려준다.
+    한 사람이 실패해도 다음 사람은 만든다."""
     with connect(database_url, row_factory=dict_row) as conn:
         users = conn.execute("SELECT id FROM users WHERE %s::text IS NULL OR email = %s", (email, email)).fetchall()
     made = 0
     for user in users:
         try:
-            build_briefing(database_url, str(user["id"]))
+            build(database_url, str(user["id"]))
             made += 1
         except Exception:
-            logging.getLogger(__name__).exception("아침 브리핑 실패: %s", user["id"])
+            logging.getLogger(__name__).exception("%s 실패: %s", build.__name__, user["id"])
     return made
 
 
@@ -174,13 +242,15 @@ def seconds_until(at: time, now: datetime) -> float:
     return (target - now).total_seconds()
 
 
-def run_daily(stop: threading.Event, at: time) -> None:
+def run_daily(stop: threading.Event, at: time, build=build_briefing) -> None:
     """서버가 켜져 있는 동안 거래일마다 at 시각에 만든다."""
     while not stop.wait(seconds_until(at, datetime.now(KST))):
-        run_all()
+        run_all(build=build)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="아침 브리핑 만들기 (Gemini 호출이 생긴다)")
+    parser = argparse.ArgumentParser(description="아침 브리핑(Gemini 호출이 생긴다) 또는 장 마감 요약 만들기")
     parser.add_argument("--email", help="이 사용자만")
-    print(f"만든 브리핑: {run_all(email=parser.parse_args().email)}개")
+    parser.add_argument("--close", action="store_true", help="장 마감 요약 (LLM 없음)")
+    args = parser.parse_args()
+    print(f"만든 것: {run_all(email=args.email, build=build_close if args.close else build_briefing)}개")

@@ -524,3 +524,27 @@ def test_stock_room_remembers_stock(client, custom_user, ai) -> None:
     assert len(client.get(f"/api/chat/rooms/{CODE}", headers=headers).json()["messages"]) == 4
     assert client.get("/api/chat/rooms/999999", headers=headers).status_code == 404
     assert client.post("/api/chat", headers=headers, json={"text": "x", "client": "app", "stock_code": "999999"}).status_code == 404
+
+
+# ---------- 장 마감 요약 ----------
+
+def test_close_summary(client, custom_user, ai, migrated) -> None:
+    from app import briefing
+
+    headers = custom_user["headers"]
+    place_filled_order(client, custom_user)                    # 체결 4주 × 100,000
+    place_accepted_order(client, custom_user)                  # 접수만
+    with psycopg.connect(migrated) as conn:                    # 1회 한도를 낮춰 규칙에 걸리게
+        conn.execute("UPDATE policies SET max_order_krw = 100000 WHERE user_id = %s", (custom_user["id"],))
+    to_approval(client, custom_user)
+    assert client.get("/api/briefings/latest?kind=close", headers=headers).status_code == 404
+
+    content = briefing.build_close(migrated, custom_user["id"])
+
+    assert [o["status"] for o in content["orders"]] == ["filled", "accepted"]
+    assert (content["bought_krw"], content["sold_krw"], content["analyses"]) == (400_000, 0, 3)
+    [blocked] = content["blocked"]
+    assert blocked["stock_name"] == NAME and blocked["rules"]  # 걸린 규칙 이름
+    saved = client.get("/api/briefings/latest?kind=close", headers=headers).json()
+    assert saved["kind"] == "close" and saved["content"]["bought_krw"] == 400_000
+    assert client.get("/api/briefings/latest", headers=headers).status_code == 404  # 아침 브리핑과 따로
