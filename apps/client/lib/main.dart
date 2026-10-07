@@ -35,7 +35,7 @@ class InvestApp extends StatelessWidget {
     return MaterialApp(
       title: '투자 에이전트',
       navigatorKey: navigatorKey,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo),
+      theme: appTheme(),
       home: FutureBuilder(
         future: _loggedIn(),
         builder: (context, snapshot) => switch (snapshot.data) {

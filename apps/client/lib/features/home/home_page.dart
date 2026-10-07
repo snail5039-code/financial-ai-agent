@@ -1,151 +1,111 @@
-// S-05 홈: 계좌 요약, 보유 종목, 승인 대기 건수, 대화 바로가기
-// 앱은 증권사(지금은 가짜)에서 직접 읽고 서버에 스냅샷(계좌번호 없음)을 올린다. 웹은 서버 스냅샷을 본다.
+// 오늘 탭 (S-05 홈, 디자인 H안): 큰 링, 계좌 요약, 보유 종목, 바로 물어보기
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../api/api.dart';
-import '../../broker/broker.dart';
-import '../settings/broker_page.dart';
 import '../../common/common.dart';
+import '../settings/broker_page.dart';
+import 'overview.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onAsk, required this.active});
   final void Function(String text) onAsk;
-  final bool active; // 홈 탭으로 돌아올 때마다 새로 읽는다
+  final bool active; // 탭으로 돌아올 때마다 새로 읽는다
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  Future<(Map<String, dynamic>?, int)>? _data;
-  final _input = TextEditingController();
+  late Future<Overview> _data = loadOverview();
 
-  @override
-  void initState() {
-    super.initState();
-    _data = _load();
-  }
+  void _reload() => setState(() { _data = loadOverview(); });
 
   @override
   void didUpdateWidget(HomePage old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) setState(() { _data = _load(); });
-  }
-
-  Future<(Map<String, dynamic>?, int)> _load() async {
-    Map<String, dynamic>? balance;
-    final broker = currentBroker.value;
-    if (kIsWeb) {
-      balance = await api.get('/api/snapshot') as Map<String, dynamic>;
-    } else if (broker != null) {
-      try {
-        balance = await broker.balance();
-      } catch (error) {
-        throw ApiError(0, '지금 ${broker.name}에 연결할 수 없어요 ($error)');
-      }
-      await api.post('/api/snapshot', balance); // 웹에서 볼 수 있게 계좌번호 없이 올린다
-      await syncFills(broker, get: api.get, post: api.post);
-    }
-    final waiting = await api.get('/api/approvals?status=needs_approval') as List;
-    return (balance, waiting.length);
+    if (widget.active && !old.active) _reload();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: topBar('홈'),
+        appBar: topBar('오늘'),
         body: FutureBuilder(
           future: _data,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() { _data = _load(); }));
+            if (snapshot.hasError) return ErrorRetry(snapshot.error!, _reload);
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            final (balance, waitingCount) = snapshot.data!;
-            return RefreshIndicator(
-              onRefresh: () async => setState(() { _data = _load(); }),
-              child: _body(balance, waitingCount),
-            );
+            return RefreshIndicator(onRefresh: () async => _reload(), child: _body(snapshot.data!));
           },
         ),
       );
 
-  Widget _body(Map<String, dynamic>? balance, int waitingCount) {
-    if (balance == null) {
-      // 증권사 연결 전 (앱만)
-      return ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('증권사를 연결하면 잔고를 볼 수 있어요'),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: () async {
-            await Navigator.of(context).push(pageRoute(const BrokerPage()));
-            setState(() { _data = _load(); });
-          },
-          child: const Text('증권사 연결'),
-        ),
-      ]);
-    }
-    final broker = currentBroker.value;
-    final holdings = (balance['holdings'] as List).cast<Map<String, dynamic>>();
-    final cash = balance['cash_krw'] as int;
-    int priceOf(Map<String, dynamic> h) => broker?.lastPrices[h['stock_code']] ?? h['avg_price'] as int;
-    final total = cash + holdings.fold<int>(0, (sum, h) => sum + priceOf(h) * (h['qty'] as int));
-    final source = kIsWeb ? '폰 동기화 ${hhmm(balance['fetched_at'] as String)} 기준'
-        : '${broker!.name}${broker.isFake ? '(가짜 데이터)' : ''} · ${hhmm(balance['fetched_at'] as String)} 기준';
-
+  Widget _body(Overview o) {
+    final balance = o.balance;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('총 평가금액'),
-            Text(won(total), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('현금 ${won(cash)} · 오늘 손익 미확인'),
-            SourceText(source),
-          ]),
-        ),
-      ),
-      if (waitingCount > 0)
+      RingsCard(overview: o, big: true),
+      if (balance == null)
         Card(
-          color: Colors.amber.withValues(alpha: 0.15),
           child: ListTile(
-            leading: const Icon(Icons.fact_check),
-            title: Text('승인 대기 $waitingCount건'),
-            subtitle: const Text('승인 대기 탭에서 확인해 주세요'),
+            title: Text(kIsWeb ? '폰 앱을 열면 잔고가 여기에 보여요' : '증권사를 연결하면 잔고를 볼 수 있어요'),
+            trailing: kIsWeb ? null : const Icon(Icons.chevron_right),
+            onTap: kIsWeb
+                ? null
+                : () async {
+                    await Navigator.of(context).push(pageRoute(const BrokerPage()));
+                    _reload();
+                  },
           ),
-        ),
-      const SizedBox(height: 8),
-      const Text('보유 종목', style: TextStyle(fontWeight: FontWeight.bold)),
-      if (holdings.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('보유 종목이 없어요')),
-      for (final h in holdings) _holdingTile(h, priceOf(h)),
+        )
+      else ...[
+        Row(children: [
+          Expanded(child: _stat('예수금 (결제 전 포함)', won(balance['cash_krw'] as int))),
+          const SizedBox(width: 10),
+          Expanded(child: _stat('주식 평가금', won(totals(balance).value))),
+        ]),
+        Padding(padding: const EdgeInsets.only(left: 4, top: 2), child: SourceText(sourceOf(balance))),
+        const SizedBox(height: 16),
+        const Text('보유 종목', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        if (holdingsOf(balance).isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('보유 종목이 없어요')),
+        for (final h in holdingsOf(balance)) _holding(h),
+      ],
       const SizedBox(height: 16),
-      Wrap(spacing: 8, children: [
-        for (final text in ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘'])
+      const Text('이렇게 물어보세요', style: TextStyle(fontWeight: FontWeight.bold, color: mutedText)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final text in ['잔고 보여줘', '삼성전자 사도 돼?', '아까 주문 체결됐어?'])
           ActionChip(label: Text(text), onPressed: () => widget.onAsk(text)),
       ]),
-      TextField(
-        controller: _input,
-        decoration: const InputDecoration(hintText: '무엇이든 물어보세요', suffixIcon: Icon(Icons.send)),
-        onSubmitted: (text) {
-          if (text.trim().isEmpty) return;
-          _input.clear();
-          widget.onAsk(text.trim());
-        },
-      ),
     ]);
   }
 
-  Widget _holdingTile(Map<String, dynamic> h, int price) {
+  Widget _stat(String label, String value) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12, color: mutedText)),
+            FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+          ]),
+        ),
+      );
+
+  Widget _holding(Map<String, dynamic> h) {
     final avg = h['avg_price'] as int;
-    final rate = avg == 0 ? 0.0 : (price - avg) * 100 / avg;
+    final qty = h['qty'] as int;
+    final price = priceOf(h);
+    final gain = (price - avg) * qty;
+    final name = h['stock_name'] as String;
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(h['stock_name'] as String),
-      subtitle: Text('${comma(h['qty'] as int)}주 · 평균 ${won(avg)}'),
+      leading: RoomAvatar(text: name.length <= 2 ? name : name.substring(0, 2), color: softGray, foreground: ink, size: 44),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text('${comma(qty)}주 · 평균 ${won(avg)}'),
       trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text(won(price)),
-        Text('${rate > 0 ? '+' : ''}${rate.toStringAsFixed(1)}%', style: TextStyle(color: changeColor(rate))),
+        Text(won(price * qty), style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text('${gain > 0 ? '+' : ''}${comma(gain)}원 (${rateText(gain, avg * qty)})',
+            style: TextStyle(fontSize: 12, color: changeColor(gain), fontWeight: FontWeight.bold)),
       ]),
+      onTap: () => widget.onAsk('$name 더 사도 돼?'),
     );
   }
 }

@@ -23,7 +23,7 @@ class ApprovalsPage extends StatelessWidget {
         length: tabs.length,
         child: Scaffold(
           appBar: AppBar(
-            title: topBar('승인 대기').title,
+            title: topBar('처리안').title,
             actions: topBar('').actions,
             bottom: TabBar(tabs: [for (final (_, label) in tabs) Tab(text: label)]),
           ),

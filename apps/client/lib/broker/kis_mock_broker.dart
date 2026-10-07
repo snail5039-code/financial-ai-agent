@@ -12,8 +12,9 @@ import 'broker.dart';
 
 const kisMockBaseUrl = 'https://openapivts.koreainvestment.com:29443';
 const _timeout = Duration(seconds: 10);
-// 모의투자는 초당 호출 수가 적다 ("초당 거래건수를 초과" 오류). 호출 사이를 이만큼 띄운다
-const _minGap = Duration(milliseconds: 550);
+// 모의투자는 초당 호출 수가 적다 ("초당 거래건수를 초과" 오류). 호출 시작 사이를 이만큼 띄운다.
+// 550ms로는 채팅 목록 읽기와 대화 조회가 겹칠 때 걸렸다 (2026-10-07). tools/kis_mock_check.py도 1.1초 간격
+const _minGap = Duration(milliseconds: 1000);
 
 class KisMockBroker implements Broker {
   KisMockBroker(this.keys, {http.Client? client, SecureBox? box})

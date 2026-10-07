@@ -1,4 +1,4 @@
-// S-06 대화: 메시지, 진행 단계, 질문 선택 버튼, 처리안 카드
+// S-06 대화 (디자인 H안의 투자 비서 방): 메신저 말풍선, 진행 단계, 질문 선택 버튼, 처리안 카드
 
 import 'package:flutter/material.dart';
 
@@ -35,9 +35,15 @@ class _ChatPageState extends State<ChatPage> {
         _c.items.clear();
       });
 
+  static const _background = Color(0xFFEAF3FA);
+
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: topBar('대화', actions: [
+        backgroundColor: _background,
+        appBar: topBar('투자 비서',
+            avatar: const RoomAvatar(text: 'AI', color: brandBlue, size: 36),
+            subtitle: '검증 AI와 함께 확인해요',
+            actions: [
           IconButton(tooltip: '새 대화', icon: const Icon(Icons.add_comment_outlined), onPressed: _newChat),
         ]),
         body: ListenableBuilder(
@@ -79,42 +85,69 @@ class _ChatPageState extends State<ChatPage> {
       );
 
   Widget _suggestions() => Center(
-        child: Wrap(spacing: 8, children: [
-          for (final text in ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘'])
-            ActionChip(label: Text(text), onPressed: () => _c.send(text)),
-        ]),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const RoomAvatar(text: 'AI', color: brandBlue, size: 64),
+            const SizedBox(height: 12),
+            const Text('말로 물어보면 분석하고, 주문은 승인해야만 나가요',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: mutedText)),
+            const SizedBox(height: 16),
+            Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+              for (final text in ['잔고 보여줘', '삼성전자 사도 돼?', '기아 2주 사줘', '아까 주문 체결됐어?'])
+                ActionChip(backgroundColor: Colors.white, label: Text(text), onPressed: () => _c.send(text)),
+            ]),
+          ]),
+        ),
       );
 
-  Widget _progress(String label) => Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(children: [
-          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(width: 8),
-          Text('$label…', style: const TextStyle(color: Colors.grey)),
-        ]),
+  /// 가운데 작은 알림 줄 (진행 단계, 증권사 확인 중 등)
+  Widget _notice(String text, {bool spinning = false}) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(color: const Color(0xFFD7E6F2), borderRadius: BorderRadius.circular(999)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (spinning) ...[
+              const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: brandBlue)),
+              const SizedBox(width: 8),
+            ],
+            Flexible(child: Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF4F5B66)))),
+          ]),
+        ),
       );
+
+  Widget _progress(String label) => _notice('$label…', spinning: true);
 
   Widget _bubble(ChatItem item) {
-    final scheme = Theme.of(context).colorScheme;
+    if (item.role == 'info') return _notice(item.text);
     final mine = item.role == 'user';
-    final color = switch (item.role) {
-      'user' => scheme.primaryContainer,
-      'error' => Colors.red.withValues(alpha: 0.12),
-      'info' => scheme.surfaceContainerHighest,
-      _ => scheme.surfaceContainer,
-    };
     final interrupt = item.interrupt;
+    final isCard = interrupt?['kind'] == 'approval';
+    final color = switch (item.role) {
+      'user' => brandBlue,
+      'error' => const Color(0xFFFFE4E0),
+      _ => Colors.white,
+    };
+    const r = Radius.circular(18);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        constraints: const BoxConstraints(maxWidth: 520),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-        child: interrupt?['kind'] == 'approval'
+        padding: isCard ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: BoxConstraints(maxWidth: isCard ? 340 : 480),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: isCard
+              ? BorderRadius.circular(20)
+              : BorderRadius.only(topLeft: r, topRight: r, bottomLeft: mine ? r : const Radius.circular(4),
+                  bottomRight: mine ? const Radius.circular(4) : r),
+        ),
+        child: isCard
             ? _approvalCard(interrupt!)
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(item.text, style: item.role == 'info' ? const TextStyle(color: Colors.grey) : null),
+                Text(item.text, style: TextStyle(fontSize: 15, height: 1.45, color: mine ? Colors.white : ink)),
                 if (interrupt?['choices'] != null)
                   Wrap(spacing: 8, children: [
                     for (final choice in (interrupt!['choices'] as List).cast<Map<String, dynamic>>())
@@ -139,51 +172,91 @@ class _ChatPageState extends State<ChatPage> {
         ? setState(() => _panel = interrupt)
         : Navigator.of(context).push(pageRoute(ApprovalDetailPage(card: card, conversation: open ? _c : null, interrupt: interrupt)));
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final verdict = card['verdict'] as String;
+    final ok = verdict == 'approve' && !needsConfirm; // 확인할 위험이 있으면 노란 띠
+    final expires = open ? ' · ${hhmm(interrupt['expires_at'] as String)}까지' : '';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('주문 처리안$expires', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: brandBlue)),
+          const SizedBox(height: 2),
+          Text('${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          Text('지정가 ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}',
+              style: const TextStyle(fontSize: 14, color: mutedText)),
+          if (card['worst_case_loss'] != null)
+            Text('10% 내리면 −${won(card['worst_case_loss'] as int)}', style: const TextStyle(fontSize: 14, color: downBlue)),
+          if (open) const Text('바꾸려면 "2주만"처럼 입력하세요', style: TextStyle(fontSize: 12, color: mutedText)),
+        ]),
+      ),
+      Container(
+        color: ok ? const Color(0xFFE6F6EC) : const Color(0xFFFFF8E6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(children: [
+          Icon(ok ? Icons.verified_outlined : Icons.info_outline, size: 16,
+              color: ok ? const Color(0xFF137A33) : const Color(0xFF8A5A00)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('검증 AI ${verdictLabels[verdict] ?? verdict}${needsConfirm ? ' · 확인이 필요한 위험이 있어요' : ''}',
+                style: TextStyle(fontSize: 13, color: ok ? const Color(0xFF0E5A27) : const Color(0xFF6B4600))),
+          ),
+        ]),
+      ),
       Row(children: [
-        const Text('처리안', style: TextStyle(fontWeight: FontWeight.bold)),
-        const Spacer(),
-        VerdictTag(card['verdict'] as String),
-      ]),
-      const SizedBox(height: 4),
-      Text('${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      Text('지정가 ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}'),
-      if (needsConfirm) const Text('확인이 필요한 위험이 있어요', style: TextStyle(color: Colors.orange)),
-      if (open) Text('${hhmm(interrupt['expires_at'] as String)}까지 · 바꾸려면 "2주만"처럼 입력하세요',
-          style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, children: [
-        OutlinedButton(onPressed: detail, child: const Text('자세히')),
-        if (open) OutlinedButton(
-          onPressed: () => _c.answer({'decision': 'reject'}, shown: '거절'),
-          child: const Text('거절'),
-        ),
-        if (open) FilledButton(
+        if (open) ...[
+          Expanded(child: _cardButton('거절', mutedText, () => _c.answer({'decision': 'reject'}, shown: '거절'))),
+          const SizedBox(height: 48, child: VerticalDivider(width: 1)),
+        ],
+        Expanded(child: _cardButton('자세히', open ? mutedText : brandBlue, detail)),
+        if (open) ...[
+          const SizedBox(height: 48, child: VerticalDivider(width: 1)),
           // 확인이 필요한 위험이 있으면 상세 화면에서 내용을 보고 확인해야 승인할 수 있다
-          onPressed: needsConfirm ? detail : () => _c.answer({'decision': 'approve'}, shown: '승인'),
-          child: const Text('승인'),
-        ),
+          Expanded(child: _cardButton('승인', brandBlue, needsConfirm ? detail : () => _c.answer({'decision': 'approve'}, shown: '승인'))),
+        ],
       ]),
     ]);
   }
 
+  Widget _cardButton(String label, Color color, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: 48,
+          child: Center(child: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color))),
+        ),
+      );
+
   Widget _inputBar() {
     final kind = _c.waiting?['kind'];
     final hint = kind == 'question' ? '답을 입력하세요' : kind == 'approval' ? '수정할 내용 (예: 2주만)' : '무엇이든 물어보세요';
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _input,
-              decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder()),
-              onSubmitted: (_) => _submit(),
+    return Container(
+      color: Colors.white,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
+          child: Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _input,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  filled: true,
+                  fillColor: softGray,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
             ),
-          ),
-          IconButton(icon: const Icon(Icons.send), onPressed: _c.busy ? null : _submit),
-        ]),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              tooltip: '보내기',
+              style: IconButton.styleFrom(backgroundColor: brandBlue, minimumSize: const Size(46, 46)),
+              icon: const Icon(Icons.arrow_upward, color: Colors.white),
+              onPressed: _c.busy ? null : _submit,
+            ),
+          ]),
+        ),
       ),
     );
   }

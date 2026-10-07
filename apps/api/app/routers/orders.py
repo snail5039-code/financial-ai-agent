@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 
 from app.agents.interrupts import MAX_KRW, Strict
 from app.db import Conn, audit
+from app.functions.orders import TODAY_ORDERED_SQL
 from app.routers.auth import UserId
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -32,6 +33,26 @@ class Fill(Strict):
 
 class Fills(Strict):
     fills: list[Fill] = Field(max_length=50)
+
+
+@router.get("/today")
+def today(conn: Conn, user_id: UserId) -> dict:
+    """홈의 링: 오늘 주문 금액 / 1일 한도, 규칙에 걸린 요청 없이 지난 날 수 (한국 날짜 기준).
+
+    clean_days: 마지막으로 정책 검사에 걸린 날(없으면 가입한 날)부터 오늘까지의 날 수. 오늘 걸렸으면 0
+    """
+    used = int(conn.execute(TODAY_ORDERED_SQL, (user_id,)).fetchone()["total"])
+    row = conn.execute(
+        """
+        SELECT pol.max_daily_krw,
+               (now() AT TIME ZONE 'Asia/Seoul')::date - (COALESCE(
+                   (SELECT max(pc.created_at) FROM policy_checks pc JOIN proposals p ON p.id = pc.proposal_id
+                    WHERE p.user_id = u.id AND NOT pc.ok), u.created_at) AT TIME ZONE 'Asia/Seoul')::date AS clean_days
+        FROM users u JOIN policies pol ON pol.user_id = u.id WHERE u.id = %s
+        """,
+        (user_id,),
+    ).fetchone()
+    return {"daily_used_krw": used, "daily_limit_krw": row["max_daily_krw"], "clean_days": row["clean_days"]}
 
 
 @router.get("/open")

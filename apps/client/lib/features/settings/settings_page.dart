@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/api.dart';
 import '../../common/common.dart';
+import '../approvals/approvals_page.dart';
 import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
 import 'broker_page.dart';
@@ -114,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: topBar('설정'),
+        appBar: topBar('더보기'),
         body: FutureBuilder(
           future: _data,
           builder: (context, snapshot) {
@@ -122,6 +123,16 @@ class _SettingsPageState extends State<SettingsPage> {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             final (profile, policy) = snapshot.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.fact_check_outlined, color: brandBlue),
+                  title: const Text('처리안 모아보기', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('승인 필요 · 실행 필요 · 만료·거절'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(pageRoute(const ApprovalsPage(active: true))),
+                ),
+              ),
+              const SizedBox(height: 16),
               _profileSection(profile),
               const Divider(height: 32),
               _policySection(policy),

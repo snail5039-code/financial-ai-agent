@@ -24,6 +24,15 @@ HOT_RANK = 0.9                                     # 최근 5거래일 상승률
 CONCENTRATION_SHARE = Decimal("0.8")               # 주문 후 비중이 한도의 80%를 넘으면 분산 안내
 
 
+# 오늘 주문한 금액 (docs/plan/07-database.md 4장). 1일 한도 검사와 홈의 "오늘 한도" 링이 같이 쓴다. SUM은 numeric이라 int로
+TODAY_ORDERED_SQL = (
+    "SELECT COALESCE(SUM(o.qty * o.price), 0) AS total FROM orders o"
+    " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
+    " WHERE p.user_id = %s AND o.status IN ('accepted', 'filled', 'partially_filled')"
+    " AND o.created_at >= date_trunc('day', now())"
+)
+
+
 def floor_won(value: Decimal) -> int:
     return int(value.to_integral_value(rounding=ROUND_DOWN))
 

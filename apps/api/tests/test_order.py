@@ -481,3 +481,18 @@ def test_fill_sync_ignores_other_users_orders(client, custom_user, ai) -> None:
     assert client.get("/api/orders/open", headers=other).json() == []
     fill = {"idempotency_key": key, "filled_qty": 4, "filled_price": PRICE}
     assert client.post("/api/orders/fills", headers=other, json={"fills": [fill]}).json()["updated"] == []
+
+
+def test_today_rings(client, custom_user, ai, migrated) -> None:
+    headers = custom_user["headers"]
+    place_filled_order(client, custom_user)
+    today = client.get("/api/orders/today", headers=headers).json()
+    [(limit,)] = db(migrated, "SELECT max_daily_krw FROM policies WHERE user_id = %s", custom_user["id"])
+    assert today == {"daily_used_krw": 400_000, "daily_limit_krw": limit, "clean_days": 0}  # 오늘 가입
+    with psycopg.connect(migrated) as conn:  # 사흘 전에 가입했고 그 뒤로 규칙에 걸린 적 없음
+        conn.execute("UPDATE users SET created_at = now() - interval '3 days' WHERE id = %s", (custom_user["id"],))
+    assert client.get("/api/orders/today", headers=headers).json()["clean_days"] == 3
+    with psycopg.connect(migrated) as conn:  # 1회 한도를 낮춰서 오늘 규칙에 걸리게
+        conn.execute("UPDATE policies SET max_order_krw = 100000 WHERE user_id = %s", (custom_user["id"],))
+    to_approval(client, custom_user)
+    assert client.get("/api/orders/today", headers=headers).json()["clean_days"] == 0

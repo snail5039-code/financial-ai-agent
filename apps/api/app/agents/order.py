@@ -116,12 +116,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     holdings = snapshot["holdings"] if snapshot else []
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         policy = conn.execute("SELECT * FROM policies WHERE user_id = %s", (state["user_id"],)).fetchone()
-        today_ordered = int(conn.execute(  # 오늘 주문한 금액 (docs/plan/07-database.md 4장). SUM은 numeric이라 정수로
-            "SELECT COALESCE(SUM(o.qty * o.price), 0) AS total FROM orders o"
-            " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
-            " WHERE p.user_id = %s AND o.status IN ('accepted', 'filled', 'partially_filled')"
-            " AND o.created_at >= date_trunc('day', now())", (state["user_id"],),
-        ).fetchone()["total"])
+        today_ordered = int(conn.execute(orders.TODAY_ORDERED_SQL, (state["user_id"],)).fetchone()["total"])
         recent_trades = conn.execute(
             "SELECT count(*) AS n FROM orders o JOIN approvals a ON a.id = o.approval_id"
             " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s AND p.stock_code = %s"
