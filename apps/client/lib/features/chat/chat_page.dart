@@ -187,9 +187,14 @@ class _ChatPageState extends State<ChatPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('주문 처리안$expires', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: brandBlue)),
           const SizedBox(height: 2),
-          Text('${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}',
+          Text('${card['stock_name']} ${comma(card['qty'] as int)}주 ${sideLabels[card['side']]}'
+              '${card['order_change'] == null ? '' : ' 주문 ${orderChangeLabels[card['order_change']]}'}',
               style: const TextStyle(fontFamily: displayFont, fontSize: 22)),
-          Text('지정가 ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}',
+          Text(switch (card['order_change']) {
+                'cancel' => '미체결 주문 취소 · 지정가 ${won(card['limit_price'] as int)} · 주문번호 ${card['original_order_no']}',
+                'modify' => '지정가 ${won(card['original_price'] as int)} → ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}',
+                _ => '지정가 ${won(card['limit_price'] as int)} · 예상 ${won(card['amount'] as int)}',
+              },
               style: const TextStyle(fontSize: 14, color: mutedText)),
           if (card['worst_case_loss'] != null)
             Text('10% 내리면 −${won(card['worst_case_loss'] as int)}', style: const TextStyle(fontSize: 14, color: downBlue)),

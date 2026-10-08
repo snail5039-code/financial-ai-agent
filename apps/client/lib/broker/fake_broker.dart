@@ -98,6 +98,11 @@ class FakeBroker implements Broker {
     return (orderNo: orderNo, filledQty: qty, filledPrice: price);
   }
 
+  /// 가짜 증권사는 주문하자마자 체결이라 정정·취소할 주문이 없다
+  @override
+  Future<String> revise(String orderNo, String stockCode, int? price) async =>
+      throw BrokerError('$fakeBrokerName 주문은 바로 체결돼서 정정·취소할 수 없어요');
+
   @override
   Future<List<BrokerOrder>> todayOrders(String stockCode) async =>
       [for (final o in _orders) if (stockCode.isEmpty || o.stockCode == stockCode) o];

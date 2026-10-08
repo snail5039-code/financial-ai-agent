@@ -31,7 +31,7 @@ MAX_STOCKS = 8         # 내일 계획을 쓰는 종목 수 (보유 먼저, 그�
 DISCLOSURES_PER_STOCK = 3
 REVIEW_ACTIONS = ("watch", "buy", "sell")
 STATUS_LABELS = {"accepted": "접수(체결 전)", "filled": "체결", "partially_filled": "일부 체결", "failed": "실패",
-                 "unknown_checked": "확인 필요"}
+                 "unknown_checked": "확인 필요", "cancelled": "취소됨", "replaced": "정정됨"}
 
 # ---------- 출처 ----------
 # 분석의 출처 ID(price:, dart:)에 더해

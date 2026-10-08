@@ -48,6 +48,7 @@ def understand_node(state: InvestState) -> dict:
         stock_name = state["room_stock"]
     return {"query": result.query, "intent": intent, "query_kind": result.query_kind, "stock_name": stock_name,
             "side": result.side, "qty": result.qty, "limit_price": result.limit_price, "user_directed": intent == "order",
+            "order_change": result.order_change if intent == "order" else None, "target_order": None,
             "term": result.term, "period": result.period, "history_kind": result.history_kind}
 
 

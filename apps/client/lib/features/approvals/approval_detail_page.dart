@@ -97,7 +97,10 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         // 1. 주문 요약
         Text('${card['stock_name']} (${card['stock_code']})', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        Text('${comma(card['qty'] as int)}주 $side · 지정가 ${won(card['limit_price'] as int)}', style: const TextStyle(fontSize: 16)),
+        Text('${comma(card['qty'] as int)}주 $side · 지정가 ${won(card['limit_price'] as int)}'
+            '${card['order_change'] == null ? '' : ' · 주문 ${orderChangeLabels[card['order_change']]}'}'
+            '${card['order_change'] == 'modify' ? ' (원래 ${won(card['original_price'] as int)})' : ''}',
+            style: const TextStyle(fontSize: 16)),
         _row('예상 금액', won(card['amount'] as int)),
         _row('수수료 추정', card['fee'] == null ? '수수료율 미입력' : won(card['fee'] as int)),
         if (card['side'] == 'sell') _row('세금 (0.20%)', won(card['tax'] as int)),

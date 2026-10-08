@@ -84,6 +84,8 @@ class Understood(BaseModel):
         default=None, description="order·history일 때만. 사줘·샀어 → buy, 팔아·팔았어 → sell. 말하지 않았으면 null")
     qty: int | None = Field(default=None, description="order일 때 사용자가 말한 주식 수. 말하지 않았으면 null")
     limit_price: int | None = Field(default=None, description="order일 때 사용자가 말한 1주 가격(원). 없으면 null")
+    order_change: Literal["cancel", "modify"] | None = Field(
+        default=None, description="order일 때만. 이미 낸 주문을 취소 → cancel, 가격을 바꿔 정정 → modify. 새 주문이면 null")
     term: str | None = Field(default=None, description="explain일 때만. 뜻을 묻는 용어 그대로 (예: PER, 공매도)")
     period: Literal["today", "week", "month"] | None = Field(
         default=None, description="history일 때만. 오늘 → today, 이번 주·최근 일주일 → week, 이번 달·최근 → month. 없으면 null")
@@ -98,7 +100,8 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 2. 요청을 하나로 분류하라.
 - query: 읽기만 하는 조회. 잔고, 보유 종목, 현재가, 오늘 주문 내역. 예) "잔고 보여줘", "삼성전자 얼마야?"
 - analysis: 사도 되는지, 어떤지 판단을 묻는 요청. 예) "삼성전자 사도 돼?", "SK하이닉스 어때?"
-- order: 사거나 팔라는 지시. 예) "SK하이닉스 4주 사줘", "삼성전자 다 팔아"
+- order: 사거나 팔라는 지시, 또는 이미 낸 주문의 취소·정정 지시. 예) "SK하이닉스 4주 사줘", "삼성전자 다 팔아",
+  "현대건설 주문 취소해줘", "아까 주문 10만5천원으로 바꿔줘"
 - result: 앞서 한 주문의 결과를 묻는 요청. 예) "아까 주문 체결됐어?"
 - explain: 투자·금융 용어의 뜻을 묻는 요청. 예) "PER이 뭐야?", "공매도가 뭐야", "부채비율 뜻". term에 용어만 써라
 - history: 내가 지난번에 받은 제안·검증 결과·주문 기록을 묻는 요청. 예) "지난번에 SK하이닉스 왜 반려됐지?",
@@ -108,6 +111,7 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 3. query면 query_kind를 채워라. 종목이 나오면 stock_name에 사용자가 말한 그대로 써라. 지어내지 마라.
 4. order면 side, qty, limit_price를 사용자가 말한 대로만 채워라. "4주" → qty 4, "7만원에" → limit_price 70000.
    금액으로 말했거나("100만원어치") 말하지 않은 값은 null로 둔다. 추측하지 마라.
+   이미 낸 주문을 취소하라면 order_change=cancel, 가격을 바꾸라면 order_change=modify와 바꿀 가격(limit_price)을 채워라.
 
 최근 대화:
 {history}"""

@@ -31,7 +31,7 @@ def test_db_url() -> str:
 
 @pytest.fixture(scope="session")
 def migrated(test_db_url: str) -> str:
-    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql", "003_quiz_modes.sql", "004_market_data.sql", "005_analysis.sql", "006_financials_cumulative.sql", "007_orders.sql", "008_order_fills.sql", "009_briefings.sql", "010_stock_rooms.sql", "011_glossary.sql", "012_watchlist.sql", "013_close_summary.sql", "014_risk_grade.sql", "015_news.sql"]
+    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql", "003_quiz_modes.sql", "004_market_data.sql", "005_analysis.sql", "006_financials_cumulative.sql", "007_orders.sql", "008_order_fills.sql", "009_briefings.sql", "010_stock_rooms.sql", "011_glossary.sql", "012_watchlist.sql", "013_close_summary.sql", "014_risk_grade.sql", "015_news.sql", "016_order_changes.sql"]
     return test_db_url
 
 

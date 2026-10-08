@@ -188,6 +188,28 @@ class KisMockBroker implements Broker {
     return (orderNo: '$orderNo', filledQty: 0, filledPrice: null);
   }
 
+  /// 주식주문(정정취소) VTTC0013U. 원래 주문의 주문조직번호가 필요해서 오늘 주문 내역에서 먼저 찾는다.
+  /// 남은 수량 전부(QTY_ALL_ORD_YN=Y)를 취소(02)하거나 지정가로 정정(01)한다
+  @override
+  Future<String> revise(String orderNo, String stockCode, int? price) async {
+    final branch = await _orderBranch(orderNo, stockCode);
+    final data = await _call('POST', '/uapi/domestic-stock/v1/trading/order-rvsecncl', 'VTTC0013U', body: {
+      'CANO': keys.cano, 'ACNT_PRDT_CD': keys.productCode, 'KRX_FWDG_ORD_ORGNO': branch, 'ORGN_ODNO': orderNo,
+      'ORD_DVSN': '00', 'RVSE_CNCL_DVSN_CD': price == null ? '02' : '01', 'ORD_QTY': '0',
+      'ORD_UNPR': '${price ?? 0}', 'QTY_ALL_ORD_YN': 'Y', 'EXCG_ID_DVSN_CD': 'KRX',
+    });
+    final newNo = (data['output'] as Map?)?['ODNO'];
+    if (newNo == null) throw BrokerError('KIS가 정정·취소 주문번호를 주지 않았어요');
+    return '$newNo';
+  }
+
+  Future<String> _orderBranch(String orderNo, String stockCode) async {
+    final data = await _dailyOrders(stockCode);
+    final row = (data['output1'] as List? ?? []).cast<Map<String, dynamic>>().where((r) => '${r['odno']}' == orderNo).firstOrNull;
+    if (row == null) throw BrokerError('오늘 주문 내역에서 주문번호 $orderNo를 찾지 못했어요');
+    return '${row['ord_gno_brno']}';
+  }
+
   @override
   Future<int> buyingPower() async {
     // 매수가능조회는 종목을 받지만 주문가능현금(ord_psbl_cash)은 종목과 상관없다. 시장가(01) 기준으로 묻는다
@@ -198,17 +220,21 @@ class KisMockBroker implements Broker {
     return _int((data['output'] as Map?)?['ord_psbl_cash']);
   }
 
-  @override
-  Future<List<BrokerOrder>> todayOrders(String stockCode) async {
+  /// 주식일별주문체결조회 VTTC0081R, 오늘 것만. 모의는 한 번에 15건이라 종목으로 거른다
+  Future<Map<String, dynamic>> _dailyOrders(String stockCode) {
     final kst = DateTime.now().toUtc().add(const Duration(hours: 9));
     final today = '${kst.year}${kst.month.toString().padLeft(2, '0')}${kst.day.toString().padLeft(2, '0')}';
-    // 모의는 한 번에 15건. 종목으로 걸러서 오늘 것만 받는다
-    final data = await _call('GET', '/uapi/domestic-stock/v1/trading/inquire-daily-ccld', 'VTTC0081R', query: {
+    return _call('GET', '/uapi/domestic-stock/v1/trading/inquire-daily-ccld', 'VTTC0081R', query: {
       'CANO': keys.cano, 'ACNT_PRDT_CD': keys.productCode, 'INQR_STRT_DT': today, 'INQR_END_DT': today,
       'SLL_BUY_DVSN_CD': '00', 'PDNO': stockCode, 'CCLD_DVSN': '00', 'INQR_DVSN': '00', 'INQR_DVSN_1': '',
       'INQR_DVSN_3': '00', 'ORD_GNO_BRNO': '', 'ODNO': '', 'EXCG_ID_DVSN_CD': 'KRX',
       'CTX_AREA_FK100': '', 'CTX_AREA_NK100': '',
     });
+  }
+
+  @override
+  Future<List<BrokerOrder>> todayOrders(String stockCode) async {
+    final data = await _dailyOrders(stockCode);
     return [
       for (final r in (data['output1'] as List? ?? []).cast<Map<String, dynamic>>())
         (

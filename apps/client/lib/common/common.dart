@@ -68,6 +68,7 @@ const verdictColors = {
   'user_judgement': Colors.grey,
 };
 const sideLabels = {'buy': '매수', 'sell': '매도'};
+const orderChangeLabels = {'cancel': '취소', 'modify': '정정'};
 // 서버와 같은 말을 쓴다 (apps/api/app/agents/analysis.py ACTION_LABELS의 '관찰'). 매수·매도는 직접 지시 주문도 있어 '검토'를 붙이지 않는다
 const actionLabels = {'buy': '매수', 'sell': '매도', 'hold': '보유', 'watch': '관찰'};
 // 주문 상태 (orders.status). 처리안 목록·기록·장 마감 요약이 같이 쓴다

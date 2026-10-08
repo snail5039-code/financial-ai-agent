@@ -233,6 +233,29 @@ void main() {
       expect(sent.where((r) => r.url.path.endsWith('order-cash')), isEmpty);
     });
 
+    test('정정·취소: 주문조직번호를 찾아 남은 수량 전부를 취소하고, 다시 실행해도 두 번 보내지 않는다', () async {
+      final b = kis((request) async {
+        if (request.url.path.endsWith('order-rvsecncl')) return jsonResponse({'rt_cd': '0', 'output': {'ODNO': '0000020001'}});
+        return jsonResponse({'rt_cd': '0', 'output1': [
+          {'odno': '0000010734', 'ord_gno_brno': '06010', 'sll_buy_dvsn_cd': '02', 'ord_qty': '4', 'ord_unpr': '106800',
+           'tot_ccld_qty': '0', 'avg_prvs': '0', 'ord_tmd': '092600'},
+        ]});
+      });
+      final journal = OrderJournal(SecureBox.memory());
+      final request = {'idempotency_key': 'c1', 'stock_code': '000720', 'side': 'buy', 'qty': 4, 'limit_price': 106800,
+                       'order_change': 'cancel', 'original_order_no': '0000010734'};
+      final result = await executeOrder(b, request, journal: journal, unlock: () async => true);
+      expect(result['status'], 'accepted');
+      expect(result['broker_order_no'], '0000020001');
+      final revise = sent.singleWhere((r) => r.url.path.endsWith('order-rvsecncl'));
+      expect(revise.headers['tr_id'], 'VTTC0013U');
+      final body = jsonDecode(revise.body) as Map<String, dynamic>;
+      expect([body['KRX_FWDG_ORD_ORGNO'], body['ORGN_ODNO'], body['RVSE_CNCL_DVSN_CD'], body['QTY_ALL_ORD_YN']],
+          ['06010', '0000010734', '02', 'Y']);
+      expect(await executeOrder(b, request, journal: journal, unlock: () async => true), result);
+      expect(sent.where((r) => r.url.path.endsWith('order-rvsecncl')).length, 1);
+    });
+
     test('체결 갱신: 접수된 주문의 체결 수량·평균가를 서버에 올린다', () async {
       final b = kis((_) async => jsonResponse({'rt_cd': '0', 'output1': [
             {'odno': '0000010734', 'sll_buy_dvsn_cd': '02', 'ord_qty': '2', 'ord_unpr': '111400',

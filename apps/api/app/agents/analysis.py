@@ -413,6 +413,13 @@ def source_lines(sources: dict) -> list[str]:
 
 def directed_order_text(state: InvestState) -> str:
     side = {"buy": "매수", "sell": "매도"}[state["side"]]
+    target = state.get("target_order")
+    if state.get("order_change") == "cancel":
+        return (f"이미 낸 {state['stock_name']} {side} 주문(미체결 {target['qty']:,}주, 지정가 {won(target['price'])})의 취소. "
+                f"취소하는 근거와, 취소하면 놓치는 것(반대 근거)을 쓴다")
+    if state.get("order_change") == "modify":
+        return (f"이미 낸 {state['stock_name']} {side} 주문(미체결 {target['qty']:,}주)의 지정가를 "
+                f"{won(target['price'])}에서 {won(state['limit_price'])}으로 정정")
     price = f" {won(state['limit_price'])}" if state.get("limit_price") else ""
     return f"{state['stock_name']} {state['qty']:,}주{price} {side}"
 

@@ -53,6 +53,8 @@ class InvestState(TypedDict, total=False):
     side: str | None         # buy / sell
     qty: int | None          # 주식 수
     limit_price: int | None  # 1주 지정가 (말하지 않으면 현재가)
+    order_change: str | None # 3-1: None 새 주문 / cancel 미체결 주문 취소 / modify 가격 정정
+    target_order: dict | None  # 취소·정정할 원래 주문 {id, broker_order_no, side, qty(남은 수량), price}
     term: str | None         # explain일 때 뜻을 묻는 용어
     period: str | None       # history: today / week / month (없으면 최근 30일)
     history_kind: str | None # history: orders / rejected (없으면 제안·주문 전부)
@@ -76,7 +78,8 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "query_kind": None, "term": None, "period": None, "history_kind": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
         "sources": {}, "metrics": [], "risk_grade": None, "risk_reason": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
-        "side": None, "qty": None, "limit_price": None, "user_directed": False, "from_analysis": False,
+        "side": None, "qty": None, "limit_price": None, "order_change": None, "target_order": None,
+        "user_directed": False, "from_analysis": False,
         "policy_result": None, "coach_warnings": [], "confirm_required": [], "approval_id": None, "card": None,
         "expires_at": None, "decision": None,
     }

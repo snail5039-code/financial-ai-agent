@@ -60,7 +60,8 @@ def open_orders(conn: Conn, user_id: UserId) -> list[dict]:
         """
         SELECT o.idempotency_key, p.stock_code, o.broker_order_no, o.side, o.qty, o.filled_qty
         FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id
-        WHERE p.user_id = %s AND o.status = ANY(%s) AND o.broker_order_no IS NOT NULL AND o.created_at >= date_trunc('day', now())
+        WHERE p.user_id = %s AND o.kind <> 'cancel' AND o.status = ANY(%s) AND o.broker_order_no IS NOT NULL
+          AND o.created_at >= date_trunc('day', now())
         ORDER BY o.created_at
         """,
         (user_id, list(OPEN_STATUSES)),

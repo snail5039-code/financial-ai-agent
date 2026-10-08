@@ -26,8 +26,9 @@ SOURCE_LABELS = {"app": "앱 실시간 조회", "server": "폰 동기화"}
 SIDE_LABELS = {"buy": "매수", "sell": "매도"}
 STATUS_LABELS = {
     "accepted": "접수", "filled": "체결", "partially_filled": "일부 체결",
-    "failed": "실패", "unknown_checked": "확인 필요",
+    "failed": "실패", "unknown_checked": "확인 필요", "cancelled": "취소됨", "replaced": "정정됨",
 }
+KIND_LABELS = {"new": "", "cancel": "취소 요청 ", "modify": "정정 "}
 WEB_PRICE_MESSAGE = "웹에서는 실시간 현재가를 볼 수 없고, 이 종목은 서버에 종가 자료도 없어요. 폰 앱에서 확인해 주세요."
 SYNC_MESSAGE = "최근 30분 안에 동기화된 계좌 정보가 없어요. 폰 앱을 열어 동기화해 주세요."
 
@@ -68,7 +69,8 @@ def format_orders(rows: list[dict]) -> str:
         return "오늘 주문 내역이 없어요."
     return "\n".join(
         f"- {row['created_at']:%H:%M} {row['stock_name'] or row['stock_code']} "
-        f"{SIDE_LABELS[row['side']]} {row['qty']:,}주 × {won(row['price'])} · {STATUS_LABELS[row['status']]}"
+        f"{KIND_LABELS[row.get('kind') or 'new']}{SIDE_LABELS[row['side']]} {row['qty']:,}주 × {won(row['price'])}"
+        f" · {STATUS_LABELS[row['status']]}"
         for row in rows
     )
 
@@ -165,7 +167,7 @@ def make_answer_node(state: InvestState) -> dict:
 def read_orders_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rows = conn.execute(
-            "SELECT o.created_at, p.stock_code, s.name AS stock_name, o.side, o.qty, o.price, o.status"
+            "SELECT o.created_at, p.stock_code, s.name AS stock_name, o.side, o.qty, o.price, o.status, o.kind"
             " FROM orders o"
             " JOIN approvals a ON a.id = o.approval_id"
             " JOIN proposals p ON p.id = a.proposal_id"

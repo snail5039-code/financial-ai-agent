@@ -683,3 +683,72 @@ def test_history_questions(client, custom_user, ai, monkeypatch) -> None:
     client.post("/api/auth/signup", json={"email": email, "password": PASSWORD, "agreed_terms": True})
     headers = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"email": email, "password": PASSWORD}).json()["token"]}
     assert answer_of().startswith("최근 30일 제안·주문 기록이 없어요")
+
+
+# ---------- 정정·취소 (3-1) ----------
+
+def change_understand(query: str, history: list) -> llm.Understood:
+    if "취소" in query:
+        return llm.Understood(query=query, intent="order", stock_name=NAME, order_change="cancel")
+    if "정정" in query:
+        return llm.Understood(query=query, intent="order", stock_name=NAME, order_change="modify", limit_price=98_000)
+    return understand(query, history)
+
+
+def test_cancel_open_order_goes_through_ai_and_closes_original(client, custom_user, ai, migrated, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", change_understand)
+    place_accepted_order(client, custom_user)
+    card, request, message = run_change(client, custom_user, "주문전자 주문 취소해줘")
+
+    assert card["order_change"] == "cancel" and card["original_order_no"] == "0000777" and card["amount"] == 0
+    assert [r["rule"] for r in card["policy"]] == ["market_hours"]  # 취소는 한도를 보지 않는다
+    assert "취소" in ai["invest"][-1].split("[사용자 지시 주문]")[-1] and ai["verify"]  # 투자 AI → 검증 AI를 거쳤다
+    assert request["order_change"] == "cancel" and request["original_order_no"] == "0000777" and request["qty"] == 4
+    assert message.startswith("취소 요청이 접수됐어요")
+    rows = db(migrated, "SELECT o.kind, o.status FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                        " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s ORDER BY o.created_at", custom_user["id"])
+    assert rows == [("new", "cancelled"), ("cancel", "accepted")]
+    used = client.get("/api/orders/today", headers=custom_user["headers"]).json()["daily_used_krw"]
+    assert used == 0  # 체결 없이 취소된 주문은 1일 한도에 세지 않는다
+    assert client.get("/api/orders/open", headers=custom_user["headers"]).json() == []
+
+
+def test_modify_open_order_price_rechecks_limits(client, custom_user, ai, migrated, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", change_understand)
+    place_accepted_order(client, custom_user)
+    card, request, message = run_change(client, custom_user, "주문전자 주문 98000원으로 정정해줘")
+
+    assert card["order_change"] == "modify" and card["original_price"] == PRICE and card["limit_price"] == 98_000
+    daily = next(r for r in card["policy"] if r["rule"] == "max_daily")
+    assert daily["actual"] == 4 * 98_000  # 원래 주문 금액을 빼고 정정 후 금액으로 본다
+    assert request["order_change"] == "modify" and request["limit_price"] == 98_000
+    rows = db(migrated, "SELECT o.kind, o.status, o.price FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                        " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s ORDER BY o.created_at", custom_user["id"])
+    assert rows == [("new", "replaced", PRICE), ("modify", "accepted", 98_000)]
+    assert client.get("/api/orders/today", headers=custom_user["headers"]).json()["daily_used_krw"] == 4 * 98_000
+
+
+def test_cancel_failed_at_broker_keeps_original_open(client, custom_user, ai, migrated, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", change_understand)
+    place_accepted_order(client, custom_user)
+    run_change(client, custom_user, "주문전자 주문 취소해줘", broker_status="failed")
+    rows = db(migrated, "SELECT o.kind, o.status FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                        " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s ORDER BY o.created_at", custom_user["id"])
+    assert rows == [("new", "accepted"), ("cancel", "failed")]
+
+
+def test_cancel_without_open_order(client, custom_user, ai, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", change_understand)
+    events = chat(client, custom_user, "주문전자 주문 취소해줘")
+    assert "취소할 주문전자 주문이 없어요" in first(events, "message")["text"]
+
+
+def run_change(client, user, text, broker_status="accepted"):
+    events = to_approval(client, user, text)
+    card = first(events, "interrupt")["card"]
+    execute_events = events_of(answer(client, user, events, {"decision": "approve"}))
+    execute = first(execute_events, "interrupt")
+    result = {"result": {"idempotency_key": execute["request"]["idempotency_key"], "status": broker_status,
+                         "broker_order_no": "0000888"}}
+    message = first(events_of(answer(client, user, execute_events, result)), "message")["text"]
+    return card, execute["request"], message

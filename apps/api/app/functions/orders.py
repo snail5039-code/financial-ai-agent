@@ -26,10 +26,12 @@ CONCENTRATION_SHARE = Decimal("0.8")               # 주문 후 비중이 한도
 
 # 오늘 매수한 금액 (docs/plan/07-database.md 4장). 1일 한도 검사와 홈의 "오늘 한도" 링이 같이 쓴다. SUM은 numeric이라 int로
 # 매도는 1일 한도에 넣지 않는다: 위험을 줄이는 주문이고, 한도 때문에 못 팔면 오히려 위험을 떠안는다 (2026-10-08 사용자 결정)
+# 취소·정정된 원래 주문은 체결된 수량만 센다. 취소 주문 행은 세지 않는다 (3-1)
 TODAY_ORDERED_SQL = (
-    "SELECT COALESCE(SUM(o.qty * o.price), 0) AS total FROM orders o"
-    " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
-    " WHERE p.user_id = %s AND p.action = 'buy' AND o.status IN ('accepted', 'filled', 'partially_filled')"
+    "SELECT COALESCE(SUM(o.price * CASE WHEN o.status IN ('cancelled', 'replaced') THEN o.filled_qty ELSE o.qty END), 0)"
+    " AS total FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
+    " WHERE p.user_id = %s AND p.action = 'buy' AND o.kind <> 'cancel'"
+    " AND o.status IN ('accepted', 'filled', 'partially_filled', 'cancelled', 'replaced')"
     " AND o.created_at >= date_trunc('day', now())"
 )
 
@@ -86,11 +88,20 @@ def rule(name: str, label: str, limit, actual, ok: bool) -> dict:
 
 def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_krw: int,
                  snapshot: dict | None, closes: dict[str, int], stock_code: str, now: datetime,
-                 inputs: list[str]) -> dict:
-    """PolicyResult (05-schemas.md 6장): 규칙마다 통과 여부. 하나라도 걸리면 처리안 전에 막는다."""
+                 inputs: list[str], change: str | None = None, replacing_krw: int = 0) -> dict:
+    """PolicyResult (05-schemas.md 6장): 규칙마다 통과 여부. 하나라도 걸리면 처리안 전에 막는다.
+
+    change: None 새 주문 / "cancel" 미체결 주문 취소 / "modify" 가격 정정. 정정은 원래 주문 금액(replacing_krw)을 바꾸는 것이라
+    1일 한도·현금은 그 차이로 본다. 취소는 위험을 늘리지 않아 장 운영 시간만 본다 (3-1)
+    """
     amount = order_amount(qty, price)
+    hours = rule("market_hours", "장 운영 시간 (휴장일 제외 평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}",
+                 is_market_open(now))
+    if change == "cancel":
+        return {"ok": hours["ok"], "rules": [hours], "weight_after": None}
+    today_ordered_krw -= replacing_krw
     rules = [
-        rule("market_hours", "장 운영 시간 (휴장일 제외 평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}", is_market_open(now)),
+        hours,
         rule("max_order", "1회 주문 한도", policy["max_order_krw"], amount, amount <= policy["max_order_krw"]),
     ]
     if side == "buy":  # 1일 한도는 매수만 (위 TODAY_ORDERED_SQL 설명)
@@ -102,7 +113,7 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
 
     held_qty, position_value, total_value = account_values(snapshot, stock_code, price, closes)
     if side == "buy":
-        rules.append(rule("cash", "현금", snapshot["cash_krw"], amount, amount <= snapshot["cash_krw"]))
+        rules.append(rule("cash", "현금", snapshot["cash_krw"], amount - replacing_krw, amount - replacing_krw <= snapshot["cash_krw"]))
     else:
         rules.append(rule("holdings", "보유 수량", held_qty, qty, qty <= held_qty))
     weight = metrics.weight_after_order(position_value, total_value, amount, side, inputs)

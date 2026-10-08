@@ -1,6 +1,7 @@
 """주문 그래프 (docs/plan/04-graph-design.md 5장).
 
     find_stock → check_target → order_values → get_account → set_price
+                              └ (정정·취소) find_order ┘
       → gather → invest_agent ⇄ verify_agent (가벼운 분석: 경고 위주)
       → policy ─┬─ 위반 → blocked (기록하고 막음)
                 └─ 통과 → prepare_approval → approval ─┬─ 승인 → execute ─┬─ 결과 → 기록
@@ -12,6 +13,8 @@
 - 사용자가 직접 지시한 주문은 검증 AI가 반려해도 막지 않고, 처리안에 "확인 필요"로 올려 확인을 받는다 (2026-10-06 결정).
   정책 위반(한도·현금·장 시간)은 확인과 상관없이 막는다
 - 주문은 서버가 내지 않는다. execute 멈춤으로 폰에 부탁하고, 폰이 증권사에 주문한 결과를 받아 기록한다
+- 정정·취소(3-1)도 새 주문과 같은 길(투자 AI → 검증 AI → 정책 검사 → 처리안 → 승인 → 폰 실행)을 간다.
+  오늘 낸 이 종목의 미체결 주문(가장 최근)을 대상으로, 남은 수량 전부를 취소하거나 지정가를 바꾼다 (2026-10-08 사용자 결정)
 """
 
 import re
@@ -35,6 +38,8 @@ from app.db import audit, connect, jsonb
 from app.functions import orders
 from app.functions.behavior import behavior
 
+CHANGE_LABELS = {"cancel": "취소", "modify": "정정"}
+OPEN_STATUSES = ("accepted", "partially_filled", "unknown_checked")
 RESULT_LABELS = {
     "accepted": "주문이 접수됐어요", "filled": "주문이 체결됐어요", "partially_filled": "주문이 일부 체결됐어요",
     "failed": "주문이 실패했어요", "unknown_checked": "응답이 불확실해 주문 내역을 확인했어요",
@@ -68,6 +73,32 @@ def order_values_node(state: InvestState) -> dict:
     if not 1 <= qty <= orders.MAX_QTY:
         return {"answer": f"수량은 1주부터 {orders.MAX_QTY:,}주까지 주문할 수 있어요."}
     return {"side": side, "qty": qty}
+
+
+def find_order_node(state: InvestState, runtime: Runtime[Context]) -> dict:
+    """정정·취소할 원래 주문: 오늘 낸 이 종목의 아직 다 체결되지 않은 주문 중 가장 최근 것. 정정 가격이 없으면 묻는다."""
+    with connect(runtime.context.database_url, row_factory=dict_row) as conn:
+        row = conn.execute(
+            "SELECT o.id, o.broker_order_no, o.side, o.qty - o.filled_qty AS qty, o.price FROM orders o"
+            " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
+            " WHERE p.user_id = %s AND p.stock_code = %s AND o.kind <> 'cancel' AND o.status = ANY(%s)"
+            " AND o.broker_order_no IS NOT NULL AND o.filled_qty < o.qty AND o.created_at >= date_trunc('day', now())"
+            " ORDER BY o.created_at DESC LIMIT 1",
+            (state["user_id"], state["stock_code"], list(OPEN_STATUSES)),
+        ).fetchone()
+    change = CHANGE_LABELS[state["order_change"]]
+    if row is None:
+        return {"answer": f"{change}할 {state['stock_name']} 주문이 없어요. 오늘 낸 주문 중 아직 체결되지 않은 것만 {change}할 수 있어요."}
+    target = {**row, "id": str(row["id"])}
+    price = target["price"]
+    if state["order_change"] == "modify":
+        price = state.get("limit_price") or parse_qty(pause(
+            "question", text=f"{state['stock_name']} 주문(지정가 {won(target['price'])})을 얼마로 바꿀까요?", choices=None).get("text"))
+        if not price or price <= 0:
+            return {"answer": "바꿀 가격을 알아듣지 못했어요. '105,000원으로'처럼 다시 말해 주세요."}
+        if price == target["price"]:
+            return {"answer": f"지금 주문 가격과 같아요 ({won(price)}). 정정하지 않았어요."}
+    return {"target_order": target, "side": target["side"], "qty": target["qty"], "limit_price": price}
 
 
 def set_price_node(state: InvestState, runtime: Runtime[Context]) -> dict:
@@ -126,8 +157,10 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         hot_rank, five_day_return = five_day_rank(conn, code)
         habits = behavior(conn, state["user_id"]) if "frequent_trading" in state["flags"] else None
 
+    change, target = state.get("order_change"), state.get("target_order")
     result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.market_now(),
-                                 ["snapshot"] if snapshot else [])
+                                 ["snapshot"] if snapshot else [], change=change,
+                                 replacing_krw=target["qty"] * target["price"] if change == "modify" else 0)
     amount = orders.order_amount(qty, price)
     fee = orders.fee_estimate(amount, policy["fee_rate_pct"])
     tax = orders.sell_tax(amount, market) if side == "sell" else 0
@@ -136,15 +169,15 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         if side == "sell" and held and held["avg_price"] else None
     losers = [h["stock_name"] for h in holdings
               if h["stock_code"] != code and closes.get(h["stock_code"], h["avg_price"]) < h["avg_price"]]
-    warnings = orders.coach_warnings(side, recent_trades, hot_rank, five_day_return, "chases_hot_stocks" in state["flags"],
-                                     result["weight_after"], policy["max_weight_pct"], gain_pct, losers,
-                                     (fee or 0) + tax, hot_buys_habit="hot_buys" in state["flags"],
-                                     monthly_fills=habits and habits["fills"])
+    warnings = [] if change == "cancel" else orders.coach_warnings(  # 취소는 새로 사고팔지 않으니 행동 코치가 없다
+        side, recent_trades, hot_rank, five_day_return, "chases_hot_stocks" in state["flags"],
+        result["weight_after"], policy["max_weight_pct"], gain_pct, losers,
+        (fee or 0) + tax, hot_buys_habit="hot_buys" in state["flags"], monthly_fills=habits and habits["fills"])
 
     confirm = []
     if state["mode"] != "custom":
         confirm.append("성향 퀴즈를 하지 않은 일반 모드라 내 성향에 맞는지 확인하지 않은 주문이에요.")
-    elif side == "buy" and state.get("buy_block_reason"):
+    elif side == "buy" and state.get("buy_block_reason") and change != "cancel":
         confirm.append(f"성향보다 위험한 주문이에요: {state['buy_block_reason']}.")
     verification = state["verifications"][-1]
     if verification["verdict"] in ("reject", "user_judgement"):
@@ -165,7 +198,11 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "risks": [with_titles(x, state["sources"]) for x in state["proposal"]["risks"]],
         "policy": result["rules"], "warnings": warnings, "confirm_required": confirm,
         "broker": BROKER, "mode": MODE, "user_directed": state["user_directed"],
+        "order_change": change, "original_order_no": target and target["broker_order_no"],
+        "original_price": target and target["price"],
     }
+    if change == "cancel":  # 취소는 돈이 새로 나가지 않는다
+        card |= {"amount": 0, "fee": 0, "tax": 0, "worst_case_loss": None}
     return {"policy_result": {**result, "weight_after": card["weight_after"]}, "coach_warnings": warnings,
             "confirm_required": confirm, "card": card}
 
@@ -234,10 +271,19 @@ def format_card(card: dict) -> str:
     """처리안을 글로 (앱·웹 화면은 card 값을 직접 그린다)."""
     side = SIDE_LABELS[card["side"]]
     fee = f"{card['fee']:,}원" if card["fee"] is not None else "수수료율 미입력"
-    lines = [
-        f"[처리안 · 모의투자] {card['stock_name']}({card['stock_code']}) {card['qty']:,}주 {side} · 지정가 {won(card['limit_price'])}",
-        f"예상 금액 {won(card['amount'])} · 수수료 추정 {fee}" + (f" · 세금 {won(card['tax'])}" if card["side"] == "sell" else ""),
-    ]
+    change = card.get("order_change")
+    if change:
+        what = (f"지정가 {won(card['original_price'])} → {won(card['limit_price'])}" if change == "modify"
+                else f"지정가 {won(card['limit_price'])}")
+        lines = [f"[처리안 · 모의투자] {card['stock_name']}({card['stock_code']}) {side} 주문 {CHANGE_LABELS[change]}"
+                 f" · 미체결 {card['qty']:,}주 · {what} (주문번호 {card['original_order_no']})"]
+        if change == "modify":
+            lines.append(f"정정 후 금액 {won(card['amount'])} · 수수료 추정 {fee}")
+    else:
+        lines = [
+            f"[처리안 · 모의투자] {card['stock_name']}({card['stock_code']}) {card['qty']:,}주 {side} · 지정가 {won(card['limit_price'])}",
+            f"예상 금액 {won(card['amount'])} · 수수료 추정 {fee}" + (f" · 세금 {won(card['tax'])}" if card["side"] == "sell" else ""),
+        ]
     if card["weight_after"] is not None:
         lines.append(f"주문 후 이 종목 비중 {card['weight_after']}%")
     if card["worst_case_loss"]:
@@ -308,6 +354,8 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "approval_id": state["approval_id"], "stock_code": state["stock_code"], "side": state["side"],
         "qty": state["qty"], "limit_price": state["limit_price"], "approved_price": state["limit_price"],
         "max_price_drift_pct": orders.MAX_PRICE_DRIFT_PCT, "idempotency_key": state["approval_id"],
+        **({"order_change": state["order_change"], "original_order_no": state["target_order"]["broker_order_no"]}
+           if state.get("order_change") else {}),
     }
     result = pause("execute", request=request, text="폰 앱에서 가격을 다시 확인하고 실행해 주세요.")["result"]
     with connect(runtime.context.database_url) as conn:
@@ -317,12 +365,17 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             return {"limit_price": result["current_price"]}  # 새 가격으로 다시 검사·승인 (FR-26)
         conn.execute(  # 같은 idempotency_key 결과가 또 오면 무시한다 (중복 주문 기록 방지)
             "INSERT INTO orders (approval_id, idempotency_key, broker, mode, side, qty, price, broker_order_no, status,"
-            " filled_qty, filled_price, message) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            " filled_qty, filled_price, message, kind, original_order_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (idempotency_key) DO NOTHING",
             (state["approval_id"], result["idempotency_key"], BROKER, MODE, state["side"], state["qty"],
              state["limit_price"], result.get("broker_order_no"), result["status"], result.get("filled_qty", 0),
-             result.get("filled_price"), result.get("message")),
+             result.get("filled_price"), result.get("message"), state.get("order_change") or "new",
+             state["target_order"]["id"] if state.get("target_order") else None),
         )
+        if state.get("order_change") and result["status"] == "accepted":  # 증권사가 받아 줬을 때만 원래 주문을 닫는다
+            conn.execute("UPDATE orders SET status = %s WHERE id = %s",
+                         ("cancelled" if state["order_change"] == "cancel" else "replaced", state["target_order"]["id"]))
         audit(conn, state["user_id"], "order_result", {"approval_id": state["approval_id"], **result})
     return {"answer": format_result(state, result)}
 
@@ -332,8 +385,12 @@ def route_after_execute(state: InvestState) -> str:
 
 
 def format_result(state: InvestState, result: dict) -> str:
-    head = f"{RESULT_LABELS[result['status']]} (모의투자)"
+    change = state.get("order_change")
+    head = (f"{CHANGE_LABELS[change]} {'요청이 접수됐어요' if result['status'] == 'accepted' else RESULT_LABELS[result['status']]}"
+            if change else RESULT_LABELS[result["status"]]) + " (모의투자)"
     order = f"{state['stock_name']} {state['qty']:,}주 {SIDE_LABELS[state['side']]} · 지정가 {won(state['limit_price'])}"
+    if change:
+        order += f" {CHANGE_LABELS[change]} (원래 주문번호 {state['target_order']['broker_order_no']})"
     lines = [head, order]
     if result.get("filled_qty"):
         lines.append(f"체결 {result['filled_qty']:,}주 × {won(result['filled_price'])}")
@@ -348,6 +405,12 @@ def format_result(state: InvestState, result: dict) -> str:
 
 def route_start(state: InvestState) -> str:
     return "order_values" if state.get("from_analysis") else "find_stock"
+
+
+def route_after_target(state: InvestState) -> str:
+    if state.get("answer"):
+        return END
+    return "find_order" if state.get("order_change") else "order_values"
 
 
 def route_after_values(state: InvestState) -> str:
@@ -370,6 +433,7 @@ def build_order_graph():
     builder = StateGraph(InvestState, context_schema=Context)
     for name, node in [
         ("find_stock", find_stock_node), ("check_target", check_target_node), ("order_values", order_values_node),
+        ("find_order", find_order_node),
         ("get_account", get_account_node), ("set_price", set_price_node), ("gather", gather_node),
         ("invest_agent", invest_agent_node), ("verify_agent", verify_agent_node), ("policy", policy_node),
         ("blocked", blocked_node), ("prepare_approval", prepare_approval_node), ("approval", approval_node),
@@ -379,7 +443,8 @@ def build_order_graph():
 
     builder.add_conditional_edges(START, route_start, ["order_values", "find_stock"])
     builder.add_conditional_edges("find_stock", end_if_answered("check_target"), ["check_target", END])
-    builder.add_conditional_edges("check_target", end_if_answered("order_values"), ["order_values", END])
+    builder.add_conditional_edges("check_target", route_after_target, ["order_values", "find_order", END])
+    builder.add_conditional_edges("find_order", end_if_answered("get_account"), ["get_account", END])
     builder.add_conditional_edges("order_values", route_after_values, ["set_price", "get_account", END])
     builder.add_conditional_edges("get_account", end_if_answered("set_price"), ["set_price", END])
     builder.add_conditional_edges("set_price", route_after_price, ["policy", "gather", END])

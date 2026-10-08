@@ -42,6 +42,10 @@ abstract class Broker {
   /// 지정가 주문. 접수되면 주문번호. 거절이면 BrokerError, 그 밖의 예외(시간 초과 등)는 "접수됐는지 모름"
   Future<({String orderNo, int filledQty, int? filledPrice})> order(String side, String stockCode, int qty, int price);
 
+  /// 미체결 주문 정정·취소 (3-1). price가 null이면 남은 수량 전부 취소, 있으면 남은 수량 전부를 그 지정가로 정정.
+  /// 접수되면 증권사가 준 새 주문번호. 거절이면 BrokerError, 그 밖의 예외는 "접수됐는지 모름"
+  Future<String> revise(String orderNo, String stockCode, int? price);
+
   /// 오늘 이 종목 주문 내역 (응답이 불확실할 때 다시 주문하지 않고 먼저 확인한다, FR-28). 빈 문자열이면 전체 종목
   Future<List<BrokerOrder>> todayOrders(String stockCode);
 
@@ -123,6 +127,7 @@ Future<Map<String, dynamic>> executeOrder(
   DateTime Function() now = DateTime.now,
 }) async {
   final key = request['idempotency_key'] as String;
+  if (request['order_change'] != null) return _revise(broker, request, unlock: unlock, journal: journal);
   final code = request['stock_code'] as String;
   final side = request['side'] as String;
   final qty = request['qty'] as int;
@@ -171,6 +176,39 @@ Future<Map<String, dynamic>> executeOrder(
   } catch (_) {
     // 시간 초과·연결 끊김: 접수됐을 수도 있으니 다시 주문하지 않고 내역부터 확인한다 (FR-28)
     return _finish(journal, key, await _checkUncertain(broker, request, startedAt));
+  }
+}
+
+/// 정정·취소 실행 (3-1): 폰 잠금 확인 → 증권사에 정정·취소. 가격 재확인은 하지 않는다 (취소는 가격과 상관없고, 정정 가격은 사용자가 정했다)
+Future<Map<String, dynamic>> _revise(
+  Broker? broker,
+  Map<String, dynamic> request, {
+  required Future<bool> Function() unlock,
+  required OrderJournal journal,
+}) async {
+  final key = request['idempotency_key'] as String;
+  final cancel = request['order_change'] == 'cancel';
+  final label = cancel ? '취소' : '정정';
+  Map<String, dynamic> result(String status, String message, [String? orderNo]) =>
+      {'idempotency_key': key, 'status': status, 'message': message, 'broker_order_no': ?orderNo};
+
+  final done = await journal.result(key);
+  if (done != null) return done; // 이미 보낸 정정·취소면 그 결과 (두 번 보내지 않는다)
+  if (broker == null) return result('failed', '증권사가 연결되지 않아 $label하지 않았어요');
+  if (await journal.startedAt(key) != null) {
+    // 보낸 뒤 앱이 꺼졌다. 다시 보내지 않고 사람에게 확인을 맡긴다
+    return _finish(journal, key, result('unknown_checked', '$label 요청을 보냈는지 확인하지 못했어요. ${broker.name} 앱에서 주문 내역을 확인해 주세요'));
+  }
+  if (!broker.isFake && !await unlock()) return result('failed', '폰 잠금 확인을 하지 않아 $label하지 않았어요');
+  await journal.start(key, kstHhmmss(DateTime.now()));
+  try {
+    final orderNo = await broker.revise(request['original_order_no'] as String, request['stock_code'] as String,
+        cancel ? null : request['limit_price'] as int);
+    return await _finish(journal, key, result('accepted', '${broker.name}에 $label 요청이 접수됐어요', orderNo));
+  } on BrokerError catch (error) {
+    return _finish(journal, key, result('failed', error.message));
+  } catch (_) {
+    return _finish(journal, key, result('unknown_checked', '응답이 없어 $label됐는지 모르겠어요. ${broker.name} 앱에서 주문 내역을 확인해 주세요'));
   }
 }
 
