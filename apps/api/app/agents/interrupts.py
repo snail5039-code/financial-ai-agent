@@ -46,10 +46,18 @@ class Balance(Strict):
     fetched_at: FetchedAt
 
 
+class Intraday(Strict):
+    """폰이 받은 오늘 장중 흐름: 전일 대비 %와 1분봉 [체결시각 "HHmmss", 가격] (오래된 것부터)."""
+
+    change_pct: float | None = Field(default=None, ge=-100, le=1000)
+    bars: list[tuple[Annotated[str, Field(pattern=r"^\d{6}$")], Annotated[int, Field(gt=0, le=MAX_KRW)]]] = Field(max_length=120)
+
+
 class Price(Strict):
     stock_code: str = Field(pattern=STOCK_CODE_PATTERN)
     price: int = Field(gt=0, le=MAX_KRW)
     as_of: FetchedAt
+    intraday: Intraday | None = None
 
 
 class FetchAnswer(Strict):

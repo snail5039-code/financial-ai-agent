@@ -309,3 +309,16 @@ def test_snapshot_api(client, user) -> None:
 
     with_account = {**snapshot, "account_no": "12345678-01"}
     assert client.post("/api/snapshot", headers=user["headers"], json=with_account).status_code == 422
+
+
+def test_fetch_answer_accepts_intraday_and_rejects_bad_bars() -> None:
+    from pydantic import ValidationError
+
+    from app.agents.interrupts import FetchAnswer
+
+    price = {"stock_code": "005930", "price": 71_200, "as_of": now_iso(),
+             "intraday": {"change_pct": 1.5, "bars": [["091100", 71_000], ["091200", 71_200]]}}
+    dumped = FetchAnswer.model_validate({"prices": [price]}).model_dump(mode="json", exclude_none=True)
+    assert dumped["prices"][0]["intraday"]["bars"] == [["091100", 71_000], ["091200", 71_200]]
+    with pytest.raises(ValidationError):
+        FetchAnswer.model_validate({"prices": [{**price, "intraday": {"bars": [["9:11", 71_000]]}}]})

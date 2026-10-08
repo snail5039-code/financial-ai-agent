@@ -11,10 +11,11 @@ import '../secure/key_store.dart';
 import 'broker.dart';
 
 const kisMockBaseUrl = 'https://openapivts.koreainvestment.com:29443';
-const _timeout = Duration(seconds: 10);
+const _timeout = Duration(seconds: 30); // 모의투자 잔고 조회가 10초를 넘길 때가 있었다 (2026-10-08 장중)
 // 모의투자는 초당 호출 수가 적다 ("초당 거래건수를 초과" 오류). 호출 시작 사이를 이만큼 띄운다.
 // 550ms로는 채팅 목록 읽기와 대화 조회가 겹칠 때 걸렸다 (2026-10-07). tools/kis_mock_check.py도 1.1초 간격
 const _minGap = Duration(milliseconds: 1000);
+const _rateLimitRetries = 3;
 
 class KisMockBroker implements Broker {
   KisMockBroker(this.keys, {http.Client? client, SecureBox? box})
@@ -90,23 +91,31 @@ class KisMockBroker implements Broker {
   Future<Map<String, dynamic>> _call(String method, String path, String trId,
       {Map<String, String>? query, Map<String, String>? body}) async {
     final token = await _accessToken();
-    // 앞 호출이 끝난 뒤 _minGap만큼 기다렸다 보낸다 (동시에 불려도 차례로)
-    final previous = _lastCall;
-    final turn = Completer<void>();
-    _lastCall = turn.future;
-    await previous;
-    Future.delayed(_minGap, turn.complete);
-    final request = http.Request(method, Uri.parse('$kisMockBaseUrl$path').replace(queryParameters: query))
-      ..headers.addAll({
-        'content-type': 'application/json; charset=utf-8',
-        'authorization': 'Bearer $token',
-        'appkey': keys.appKey,
-        'appsecret': keys.appSecret,
-        'tr_id': trId,
-        'custtype': 'P',
-      });
-    if (body != null) request.body = jsonEncode(body);
-    return _send(request);
+    for (var attempt = 1;; attempt++) {
+      // 앞 호출이 끝난 뒤 _minGap만큼 기다렸다 보낸다 (동시에 불려도 차례로)
+      final previous = _lastCall;
+      final turn = Completer<void>();
+      _lastCall = turn.future;
+      await previous;
+      Future.delayed(_minGap, turn.complete);
+      final request = http.Request(method, Uri.parse('$kisMockBaseUrl$path').replace(queryParameters: query))
+        ..headers.addAll({
+          'content-type': 'application/json; charset=utf-8',
+          'authorization': 'Bearer $token',
+          'appkey': keys.appKey,
+          'appsecret': keys.appSecret,
+          'tr_id': trId,
+          'custtype': 'P',
+        });
+      if (body != null) request.body = jsonEncode(body);
+      try {
+        return await _send(request);
+      } on BrokerError catch (error) {
+        // 초당 호출 제한은 KIS가 요청을 처리하지 않고 돌려보낸 것이라 잠시 뒤 다시 보내도 안전하다 (주문 포함, 2026-10-08)
+        if (attempt >= _rateLimitRetries || !error.message.contains('초당 거래건수')) rethrow;
+        await Future.delayed(_minGap * 2);
+      }
+    }
   }
 
   static int _int(Object? value) => double.tryParse('${value ?? ''}')?.round() ?? 0;
