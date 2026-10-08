@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../common/common.dart';
+import '../auto/auto_page.dart';
 import '../auto/auto_trader.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
@@ -27,7 +28,29 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) autoTrader.load().then((_) => autoTrader.start()); // 모의투자 자동매매 (켜져 있을 때만 산다)
+    if (!kIsWeb) autoTrader.load().then((_) => autoTrader.start()).then((_) => _askPlan()); // 모의투자 자동매매
+  }
+
+  /// 자동매매가 켜져 있는데 오늘 계획을 승인하지 않았으면 앱을 열 때 묻는다
+  void _askPlan() {
+    if (!mounted || !autoTrader.needsPlan) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('오늘 자동매매 계획'),
+        content: const Text('오늘 얼마를 사고 무엇을 팔지 승인해야 자동매매가 시작돼요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('나중에')),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              Navigator.of(context).push(pageRoute(const AutoTradePage()));
+            },
+            child: const Text('계획 정하기'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 투자 비서 대화 열기. text가 있으면 바로 보낸다 (오늘 탭의 추천 질문)

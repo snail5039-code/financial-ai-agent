@@ -145,3 +145,9 @@ def test_habit_warnings() -> None:
     assert "급등 경고를 받고도 산 적이 여러 번" in text and "퀴즈에서" not in text
     [text] = warnings(monthly_fills=12, cost_krw=1_500)
     assert "최근 30일 동안 12건 체결" in text and "1,500원" in text
+
+
+def test_sell_is_not_limited_by_daily_total() -> None:
+    result = check(side="sell", qty=1, today=1_900_000)  # 오늘 190만 매수했어도 매도는 1일 한도와 상관없다
+    assert "max_daily" not in [r["rule"] for r in result["rules"]]
+    assert result["ok"], result

@@ -359,4 +359,26 @@ void main() {
     expect(AutoTrader.allowed(KbBroker(keys, box: SecureBox.memory())), isFalse); // 실전 증권사
     expect(AutoTrader.allowed(null), isFalse);
   });
+
+  test('자동 매도는 1회 한도 안으로 나눈다', () {
+    expect(splitQty(22, 106800, 1940000), [18, 4]); // 18주 = 1,922,400원
+    expect(splitQty(93, 24800, 1940000), [78, 15]);
+    expect(splitQty(5, 24800, 1940000), [5]);
+    expect(splitQty(3, 2500000, 1940000), isEmpty); // 1주가 한도보다 비싸다
+  });
+
+  test('자동매매는 오늘 계획을 승인해야 시작하고, 예전 기록의 보유분을 옮긴다', () async {
+    final box = SecureBox.memory();
+    await box.write('auto_on', 'true');
+    await box.write('auto_bought:2026-10-08', jsonEncode({'000720': {'name': '현대건설', 'qty': 22}}));
+    final trader = AutoTrader(box: box, now: () => DateTime.utc(2026, 10, 12, 0, 30)); // 월 09:30 KST
+    await trader.load();
+    expect(trader.needsPlan, isTrue);
+    expect(trader.positions['000720'], {'name': '현대건설', 'qty': 22});
+    await trader.approvePlan(0, ['000720']);
+    expect(trader.needsPlan, isFalse);
+    expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'sell': ['000720']});
+    await trader.cancelPlan();
+    expect(trader.needsPlan, isTrue);
+  });
 }

@@ -24,11 +24,12 @@ HOT_RANK = 0.9                                     # 최근 5거래일 상승률
 CONCENTRATION_SHARE = Decimal("0.8")               # 주문 후 비중이 한도의 80%를 넘으면 분산 안내
 
 
-# 오늘 주문한 금액 (docs/plan/07-database.md 4장). 1일 한도 검사와 홈의 "오늘 한도" 링이 같이 쓴다. SUM은 numeric이라 int로
+# 오늘 매수한 금액 (docs/plan/07-database.md 4장). 1일 한도 검사와 홈의 "오늘 한도" 링이 같이 쓴다. SUM은 numeric이라 int로
+# 매도는 1일 한도에 넣지 않는다: 위험을 줄이는 주문이고, 한도 때문에 못 팔면 오히려 위험을 떠안는다 (2026-10-08 사용자 결정)
 TODAY_ORDERED_SQL = (
     "SELECT COALESCE(SUM(o.qty * o.price), 0) AS total FROM orders o"
     " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
-    " WHERE p.user_id = %s AND o.status IN ('accepted', 'filled', 'partially_filled')"
+    " WHERE p.user_id = %s AND p.action = 'buy' AND o.status IN ('accepted', 'filled', 'partially_filled')"
     " AND o.created_at >= date_trunc('day', now())"
 )
 
@@ -91,9 +92,10 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
     rules = [
         rule("market_hours", "장 운영 시간 (휴장일 제외 평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}", is_market_open(now)),
         rule("max_order", "1회 주문 한도", policy["max_order_krw"], amount, amount <= policy["max_order_krw"]),
-        rule("max_daily", "1일 주문 한도", policy["max_daily_krw"], today_ordered_krw + amount,
-             today_ordered_krw + amount <= policy["max_daily_krw"]),
     ]
+    if side == "buy":  # 1일 한도는 매수만 (위 TODAY_ORDERED_SQL 설명)
+        rules.append(rule("max_daily", "1일 주문 한도", policy["max_daily_krw"], today_ordered_krw + amount,
+                          today_ordered_krw + amount <= policy["max_daily_krw"]))
     if snapshot is None:
         rules.append(rule("account", "계좌 정보", "최근 30분 안의 잔고", "없음", False))
         return {"ok": False, "rules": rules, "weight_after": None}

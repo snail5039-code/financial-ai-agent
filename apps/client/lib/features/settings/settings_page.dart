@@ -140,7 +140,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: ListTile(
                     leading: const Icon(Icons.smart_toy_outlined, color: brandBlue),
                     title: const Text('모의 자동매매', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: ListenableBuilder(listenable: autoTrader, builder: (_, _) => Text(autoTrader.on ? '켜짐' : '꺼짐')),
+                    subtitle: ListenableBuilder(listenable: autoTrader, builder: (_, _) => Text(!autoTrader.on ? '꺼짐' : autoTrader.needsPlan ? '켜짐 · 오늘 계획 승인 필요' : '켜짐')),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(pageRoute(const AutoTradePage())),
                   ),
