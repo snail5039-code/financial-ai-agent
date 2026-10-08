@@ -12,6 +12,7 @@
 """
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 
@@ -29,6 +30,8 @@ from app.db import connect
 from app.functions import metrics
 from app.functions.profile import LABELS
 from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk
+from app import config
+from app.integrations import google_news
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
@@ -41,6 +44,8 @@ SEARCH_MAX_DISTANCE = 0.6  # 코사인 거리. 이보다 멀면 관련 없다고
 SEARCH_RELATIVE_GAP = 0.05  # 그 검색어의 1등보다 이만큼 넘게 먼 문단은 쓰지 않는다 (질문마다 거리 수준이 달라 상대 기준)
 MIN_HANGUL_SHARE = 0.3      # 한글이 이보다 적은 조각은 깨진 표 조각으로 보고 근거로 쓰지 않는다
 RECENT_DISCLOSURES = 5
+# 뉴스 (12-todo-by-stage.md 2-2): 종목마다 최근 NEWS_DAYS일 기사 NEWS_RESULTS개. 같은 종목은 NEWS_REFRESH 안에 다시 받지 않는다
+NEWS_DAYS, NEWS_RESULTS, NEWS_REFRESH = 3, 5, timedelta(minutes=30)
 SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 
 NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 100개, "
@@ -69,6 +74,7 @@ GENERAL_MODE_GUIDE = "일반 모드다 (성향 퀴즈 안 함). 판단하지 말
 #   fin:{접수번호}          그 공시의 주요 재무 계정     price:{종목}:{날짜}        그날 종가·시가총액 (하루 늦은 공개 데이터)
 #   quote:{종목}            폰이 증권사에서 받은 현재가  snapshot                  폰이 보낸 내 계좌 요약
 #   intraday:{종목}         폰이 받은 오늘 1분봉 최근 30분과 전일 대비 등락률 (장중 흐름)
+#   news:{번호}             뉴스 제목·언론사·발행 시각·링크 (Google 뉴스 RSS, 본문 없음, 미확인 보도)
 
 def load_sources(conn, ids: list[str], state: InvestState) -> dict[str, dict]:
     """출처 ID → {kind, title, url, as_of, content}. 없는 ID는 결과에서 빠진다 (검증에서 '없는 출처'로 잡힘)."""
@@ -114,6 +120,12 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
                            (code, day)).fetchone()
         return row and {"kind": "price", "title": f"{day} 종가 (금융위원회_주식시세정보)", "url": None, "as_of": day,
                         "content": f"종가 {won(row['close'])}, 시가총액 {won(row['market_cap'])}"}
+    if kind == "news":
+        row = conn.execute("SELECT title, press, url, published_at FROM news WHERE id::text = %s", (rest,)).fetchone()
+        return row and {"kind": "news", "title": f"{row['title']} ({row['press'] or '언론사 미확인'})", "url": row["url"],
+                        "as_of": row["published_at"].isoformat(),
+                        "content": f"뉴스 제목: {row['title']}. 언론사 {row['press'] or '미확인'}, "
+                                   f"발행 {row['published_at']:%Y-%m-%d %H:%M}. 본문은 없다. 공시로 확인되지 않은 보도다"}
     if kind == "quote" and state.get("prices"):
         price = state["prices"][0]
         return {"kind": "price", "title": "현재가 (앱 실시간 조회)", "url": None, "as_of": price["as_of"],
@@ -482,6 +494,25 @@ def get_account_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             "prices": [price] if price else None}
 
 
+def recent_news(conn, code: str, name: str) -> list[str]:
+    """최근 뉴스 출처 ID. 30분 안에 받은 적이 없으면 Google 뉴스 RSS에서 새로 받아 저장한다 (실패하면 저장된 것만)"""
+    last = conn.execute("SELECT max(fetched_at) AS at FROM news WHERE stock_code = %s", (code,)).fetchone()["at"]
+    if config.NEWS_FETCH and (last is None or datetime.now(KST) - last > NEWS_REFRESH):
+        try:
+            for item in google_news.search(name, NEWS_DAYS):
+                conn.execute(
+                    "INSERT INTO news (stock_code, title, press, url, published_at) VALUES (%s, %s, %s, %s, %s)"
+                    " ON CONFLICT (stock_code, url) DO UPDATE SET fetched_at = now()",
+                    (code, item["title"], item["press"], item["url"], item["published_at"]))
+            conn.execute("UPDATE news SET fetched_at = now() WHERE stock_code = %s", (code,))  # 기사가 없어도 30분은 다시 안 받는다
+        except Exception:  # noqa: BLE001 뉴스는 덤이다. 못 받아도 분석은 한다
+            logging.getLogger(__name__).warning("뉴스를 받지 못했어요: %s", code, exc_info=True)
+    rows = conn.execute(
+        "SELECT id FROM news WHERE stock_code = %s AND published_at >= now() - %s::interval"
+        " ORDER BY published_at DESC LIMIT %s", (code, f"{NEWS_DAYS} days", NEWS_RESULTS)).fetchall()
+    return [f"news:{row['id']}" for row in rows]
+
+
 def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     code = state["stock_code"]
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
@@ -496,6 +527,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             "SELECT rcept_no FROM disclosures WHERE stock_code = %s ORDER BY filed_at DESC LIMIT %s",
             (code, RECENT_DISCLOSURES))]
         ids += search_chunks(conn, code, state["stock_name"], state["query"])
+        ids += recent_news(conn, code, state["stock_name"])
         grade, risk = stock_risk(conn, code)
         if risk:
             ids.append(f"dart:{risk['rcept_no']}")  # 1등급 근거 공시를 자료에 넣는다

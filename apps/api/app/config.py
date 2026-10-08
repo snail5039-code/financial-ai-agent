@@ -32,6 +32,9 @@ CLOSE_SUMMARY_TIME = os.environ.get("CLOSE_SUMMARY_TIME", "").strip() or "15:40"
 # 장 마감 AI 회고·내일 계획 시각 (예: "15:50", 장 마감 요약 뒤). Gemini 비용이 생겨 비어 있으면 끈다
 CLOSE_REVIEW_TIME = os.environ.get("CLOSE_REVIEW_TIME", "").strip() or None
 
+# 분석할 때 Google 뉴스 RSS에서 종목 뉴스(제목·링크)를 받는다. 무료, 키 없음. "off"면 저장된 뉴스만 쓴다
+NEWS_FETCH = os.environ.get("NEWS_FETCH", "").strip().lower() != "off"
+
 # 개발용: 장 운영 시간 검사를 이 시각(KST, 예: "10:00")으로 한다. 비우면 실제 시계. 운영 서버에서는 비운다
 MARKET_CLOCK = os.environ.get("MARKET_CLOCK", "").strip() or None
 

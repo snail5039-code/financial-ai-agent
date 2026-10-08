@@ -14,6 +14,7 @@ from app.migrate import migrate
 TEST_DB = "invest_test"
 # 개발용 .env의 장 시간 고정(MARKET_CLOCK)이 테스트에 섞이지 않게 한다. 테스트는 clock.now를 직접 바꾼다
 config.MARKET_CLOCK = None
+config.NEWS_FETCH = False  # 테스트는 인터넷에서 뉴스를 받지 않는다
 
 
 @pytest.fixture(scope="session")
@@ -30,7 +31,7 @@ def test_db_url() -> str:
 
 @pytest.fixture(scope="session")
 def migrated(test_db_url: str) -> str:
-    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql", "003_quiz_modes.sql", "004_market_data.sql", "005_analysis.sql", "006_financials_cumulative.sql", "007_orders.sql", "008_order_fills.sql", "009_briefings.sql", "010_stock_rooms.sql", "011_glossary.sql", "012_watchlist.sql", "013_close_summary.sql", "014_risk_grade.sql"]
+    assert migrate(test_db_url) == ["001_init.sql", "002_auth_policy.sql", "003_quiz_modes.sql", "004_market_data.sql", "005_analysis.sql", "006_financials_cumulative.sql", "007_orders.sql", "008_order_fills.sql", "009_briefings.sql", "010_stock_rooms.sql", "011_glossary.sql", "012_watchlist.sql", "013_close_summary.sql", "014_risk_grade.sql", "015_news.sql"]
     return test_db_url
 
 
