@@ -26,7 +26,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
-from app import clock
+from app import clock, signals
 from app.agents import llm
 from app.agents.analysis import (
     VERDICT_LABELS, check_target_node, gather_node, get_account_node, invest_agent_node, save_proposal,
@@ -254,6 +254,12 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     # 퀴즈 답이든 실제 습관이든 급등주를 바로 사는 편이면 급등 매수 때 한 번 더 확인한다
     if orders.needs_hot_confirm(warnings, bool({"chases_hot_stocks", "hot_buys"} & set(state["flags"]))):
         confirm.append("급등 직후 매수예요. 한 번 더 생각해 보셨나요?")
+    # 5-4 대화 속 성향 신호 (학습한 로컬 모델, 꺼져 있으면 None). 사람이 쓴 말만 본다
+    signal = None if state.get("auto_origin") or change == "cancel" else signals.model_signal(state["query"])
+    if signal_text := signals.signal_warning(signal, side):
+        warnings.append(signal_text)
+        if side == "buy":
+            confirm.append("대화에서 투자 위험 신호가 보였어요. 이 돈으로 투자해도 괜찮은지 확인해 주세요.")
 
     card = {
         "stock_code": code, "stock_name": state["stock_name"], "side": side, "qty": qty, "limit_price": price,

@@ -43,3 +43,6 @@ MARKET_CLOCK = os.environ.get("MARKET_CLOCK", "").strip() or None
 
 # 웹(Flutter Web) 개발 서버 주소. 쉼표로 여러 개. 비우면 다른 주소의 브라우저 요청을 받지 않는다
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+
+# 대화 속 성향 신호 감지 모델 (5-4, apps/finetune/serve.py 주소, 예: http://127.0.0.1:8100/classify). 비우면 쓰지 않는다
+SIGNAL_MODEL_URL = os.environ.get("SIGNAL_MODEL_URL", "").strip() or None

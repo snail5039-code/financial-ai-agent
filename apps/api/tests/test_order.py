@@ -341,6 +341,22 @@ def test_frequent_trading_warning_and_daily_total(client, custom_user, ai) -> No
     assert daily["actual"] == 3 * 400_000  # 오늘 체결 2건 + 이번 주문
 
 
+def test_conversation_signal_adds_warning_and_confirm(client, custom_user, ai, monkeypatch) -> None:
+    from app import signals
+    seen = []
+    monkeypatch.setattr(signals, "model_signal", lambda text: seen.append(text) or "borrowed_money")
+    card = first(to_approval(client, custom_user), "interrupt")["card"]
+    assert seen and signals.WARNINGS["borrowed_money"] in card["warnings"]
+    assert any("위험 신호" in c for c in card["confirm_required"])
+
+
+def test_signal_warning_only_matches_side() -> None:
+    from app.signals import keyword_signal, signal_warning
+    assert signal_warning("borrowed_money", "sell") is None and signal_warning("panic_sell", "buy") is None
+    assert signal_warning("panic_sell", "sell") and signal_warning(None, "buy") is None and signal_warning("none", "buy") is None
+    assert keyword_signal("마통 당겨서 살래") == "borrowed_money" and keyword_signal("삼성전자 어때?") == "none"
+
+
 def test_daily_limit_blocks_after_orders(client, custom_user, ai, migrated) -> None:
     with psycopg.connect(migrated) as conn:  # 1회 40만, 1일 60만으로 낮춘다 (1일 ≥ 1회)
         conn.execute("UPDATE policies SET max_order_krw = 400000, max_daily_krw = 600000 WHERE user_id = %s",
