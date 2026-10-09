@@ -793,3 +793,46 @@ def test_split_reservation_spreads_qty_over_time(client, custom_user, ai, monkey
     assert [i["qty"] for i in items] == [4, 3, 3] and {i["kind"] for i in items} == {"split"}
     due = [datetime.fromisoformat(i["due_at"]) for i in items]
     assert due[1] - due[0] == due[2] - due[1] == timedelta(minutes=30)
+
+
+# ---------- 자동매매 주문 구분 (3-4) ----------
+
+def test_auto_order_lets_ai_decline_buy_and_needs_confirm(client, custom_user, ai) -> None:
+    ai["action"] = "watch"  # 투자 AI: 지금은 사지 말고 관찰
+    body = {"text": "주문전자 4주 사줘", "client": "app", "origin": "auto"}
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
+    card = first(events_of(answer(client, custom_user, events, balance())), "interrupt")["card"]
+    assert "[자동매매 주문]" in ai["invest"][-1] and "자동매매가 낸 주문" in ai["verify"][-1]
+    assert any("관찰하자고 했어요" in c for c in card["confirm_required"])  # 앱은 확인이 필요한 처리안을 자동 승인하지 않는다
+
+    ai["action"] = None  # 사람이 직접 지시한 주문은 그대로 (행동은 지시대로)
+    card = first(to_approval(client, custom_user), "interrupt")["card"]
+    assert "[사용자 지시 주문]" in ai["invest"][-1] and card["confirm_required"] == []
+
+
+def test_partial_cancel_and_choosing_among_open_orders(client, custom_user, ai, migrated, monkeypatch) -> None:
+    def partial(query, history):
+        if "취소" in query:
+            return llm.Understood(query=query, intent="order", stock_name=NAME, order_change="cancel", qty=2)
+        return understand(query, history)
+
+    monkeypatch.setattr(llm, "understand", partial)
+    first_key = place_accepted_order(client, custom_user)
+    place_accepted_order(client, custom_user)
+
+    events = chat(client, custom_user, "주문전자 2주만 취소해줘")
+    question = first(events, "interrupt")
+    assert question["kind"] == "question" and len(question["choices"]) == 2  # 미체결 주문이 2개면 고르게 한다
+    [older] = db(migrated, "SELECT o.id::text FROM orders o WHERE o.idempotency_key = %s", first_key)
+    events = events_of(answer(client, custom_user, events, {"choice_id": older[0]}))
+    events = events_of(answer(client, custom_user, events, balance()))
+    card = first(events, "interrupt")["card"]
+    assert card["qty"] == 2 and card["order_change"] == "cancel"
+    execute_events = events_of(answer(client, custom_user, events, {"decision": "approve"}))
+    request = first(execute_events, "interrupt")["request"]
+    assert request["all_qty"] is False and request["qty"] == 2
+    events_of(answer(client, custom_user, execute_events, {"result": {
+        "idempotency_key": request["idempotency_key"], "status": "accepted", "broker_order_no": "0000999"}}))
+    rows = db(migrated, "SELECT o.kind, o.status, o.qty FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                        " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s ORDER BY o.created_at", custom_user["id"])
+    assert rows == [("new", "accepted", 2), ("new", "accepted", 4), ("cancel", "accepted", 2)]  # 원래 주문은 2주가 남는다

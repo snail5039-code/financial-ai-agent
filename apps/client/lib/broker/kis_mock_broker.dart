@@ -189,14 +189,14 @@ class KisMockBroker implements Broker {
   }
 
   /// 주식주문(정정취소) VTTC0013U. 원래 주문의 주문조직번호가 필요해서 오늘 주문 내역에서 먼저 찾는다.
-  /// 남은 수량 전부(QTY_ALL_ORD_YN=Y)를 취소(02)하거나 지정가로 정정(01)한다
+  /// 남은 수량 전부(QTY_ALL_ORD_YN=Y) 또는 일부(N, ORD_QTY)를 취소(02)하거나 지정가로 정정(01)한다
   @override
-  Future<String> revise(String orderNo, String stockCode, int? price) async {
+  Future<String> revise(String orderNo, String stockCode, int? price, {int? qty}) async {
     final branch = await _orderBranch(orderNo, stockCode);
     final data = await _call('POST', '/uapi/domestic-stock/v1/trading/order-rvsecncl', 'VTTC0013U', body: {
       'CANO': keys.cano, 'ACNT_PRDT_CD': keys.productCode, 'KRX_FWDG_ORD_ORGNO': branch, 'ORGN_ODNO': orderNo,
-      'ORD_DVSN': '00', 'RVSE_CNCL_DVSN_CD': price == null ? '02' : '01', 'ORD_QTY': '0',
-      'ORD_UNPR': '${price ?? 0}', 'QTY_ALL_ORD_YN': 'Y', 'EXCG_ID_DVSN_CD': 'KRX',
+      'ORD_DVSN': '00', 'RVSE_CNCL_DVSN_CD': price == null ? '02' : '01', 'ORD_QTY': '${qty ?? 0}',
+      'ORD_UNPR': '${price ?? 0}', 'QTY_ALL_ORD_YN': qty == null ? 'Y' : 'N', 'EXCG_ID_DVSN_CD': 'KRX',
     });
     final newNo = (data['output'] as Map?)?['ODNO'];
     if (newNo == null) throw BrokerError('KIS가 정정·취소 주문번호를 주지 않았어요');

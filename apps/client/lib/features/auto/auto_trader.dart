@@ -286,7 +286,7 @@ class AutoTrader extends ChangeNotifier {
   /// 처리안이 나왔지만 자동 승인하지 않았으면 false, 처리안까지 못 갔거나 실행이 실패했으면(오류) null
   Future<bool?> _order(String name, int qty, String side, {String why = ''}) async {
     final tag = why.isEmpty ? '' : '[$why] ';
-    final conversation = Conversation(unlock: () async => on && plan != null); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
+    final conversation = Conversation(unlock: () async => on && plan != null, auto: true); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
     await conversation.send(side == 'buy' ? '$name $qty주 사줘' : '$name $qty주 팔아줘');
     final waiting = conversation.waiting;
     if (waiting?['kind'] != 'approval') {

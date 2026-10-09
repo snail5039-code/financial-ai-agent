@@ -255,6 +255,12 @@ void main() {
           ['06010', '0000010734', '02', 'Y']);
       expect(await executeOrder(b, request, journal: journal, unlock: () async => true), result);
       expect(sent.where((r) => r.url.path.endsWith('order-rvsecncl')).length, 1);
+
+      // 일부만: 2주만 취소하면 QTY_ALL_ORD_YN=N, ORD_QTY=2
+      await executeOrder(b, {...request, 'idempotency_key': 'c2', 'qty': 2, 'all_qty': false},
+          journal: journal, unlock: () async => true);
+      final part = jsonDecode(sent.lastWhere((r) => r.url.path.endsWith('order-rvsecncl')).body) as Map<String, dynamic>;
+      expect([part['QTY_ALL_ORD_YN'], part['ORD_QTY']], ['N', '2']);
     });
 
     test('체결 갱신: 접수된 주문의 체결 수량·평균가를 서버에 올린다', () async {

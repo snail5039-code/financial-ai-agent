@@ -42,9 +42,9 @@ abstract class Broker {
   /// 지정가 주문. 접수되면 주문번호. 거절이면 BrokerError, 그 밖의 예외(시간 초과 등)는 "접수됐는지 모름"
   Future<({String orderNo, int filledQty, int? filledPrice})> order(String side, String stockCode, int qty, int price);
 
-  /// 미체결 주문 정정·취소 (3-1). price가 null이면 남은 수량 전부 취소, 있으면 남은 수량 전부를 그 지정가로 정정.
+  /// 미체결 주문 정정·취소 (3-1). price가 null이면 취소, 있으면 그 지정가로 정정. qty가 null이면 남은 수량 전부, 있으면 그만큼만.
   /// 접수되면 증권사가 준 새 주문번호. 거절이면 BrokerError, 그 밖의 예외는 "접수됐는지 모름"
-  Future<String> revise(String orderNo, String stockCode, int? price);
+  Future<String> revise(String orderNo, String stockCode, int? price, {int? qty});
 
   /// 오늘 이 종목 주문 내역 (응답이 불확실할 때 다시 주문하지 않고 먼저 확인한다, FR-28). 빈 문자열이면 전체 종목
   Future<List<BrokerOrder>> todayOrders(String stockCode);
@@ -203,7 +203,7 @@ Future<Map<String, dynamic>> _revise(
   await journal.start(key, kstHhmmss(DateTime.now()));
   try {
     final orderNo = await broker.revise(request['original_order_no'] as String, request['stock_code'] as String,
-        cancel ? null : request['limit_price'] as int);
+        cancel ? null : request['limit_price'] as int, qty: request['all_qty'] == false ? request['qty'] as int : null);
     return await _finish(journal, key, result('accepted', '${broker.name}에 $label 요청이 접수됐어요', orderNo));
   } on BrokerError catch (error) {
     return _finish(journal, key, result('failed', error.message));

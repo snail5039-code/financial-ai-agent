@@ -444,7 +444,11 @@ def invest_context(state: InvestState) -> str:
         "[자료]\n" + "\n".join(source_lines(state["sources"])),
         "[지표] (코드가 계산한 값. 이 값만 쓴다)\n" + "\n".join(metric_line(m) for m in state["metrics"]),
     ]
-    if state.get("user_directed"):
+    if state.get("auto_origin") and state.get("user_directed"):
+        parts.append(f"[자동매매 주문] {directed_order_text(state)}. 사용자가 지금 직접 지시한 것이 아니라 앱의 자동매매·예약이 낸 주문이다. "
+                     "[자료]의 장중 흐름(intraday), 뉴스, 공시를 보고 지금 이 행동이 적절한지 판단한다. "
+                     "매수인데 하락 중이거나 악재 보도가 있는 등 지금 사기 적절하지 않으면 행동을 watch(관찰)로 쓰고 이유를 근거에 쓴다.")
+    elif state.get("user_directed"):
         parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
                      "행동은 지시대로 쓰고, 이 주문의 근거와 함께 반대 근거·위험을 경고 위주로 쓴다 (FR-21).")
     if state.get("verifications"):
@@ -462,7 +466,8 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
         f"[종목] {state['stock_name']}({state['stock_code']}), {grade_text(state)}",
         "[사용자]\n" + "\n".join(user_lines(state)),
         f"[제안] 행동: {proposal['action']}"
-        + (f" (사용자가 직접 지시한 주문: {directed_order_text(state)}. 경고 위주로 본다)" if state.get("user_directed") else ""),
+        + (f" (자동매매가 낸 주문: {directed_order_text(state)}. 지금 이 행동이 적절한지 근거로 본다)" if state.get("auto_origin")
+           else f" (사용자가 직접 지시한 주문: {directed_order_text(state)}. 경고 위주로 본다)" if state.get("user_directed") else ""),
         "[근거]\n" + "\n".join(claims),
         "[반대 근거]\n" + "\n".join(f"- {x}" for x in proposal["counter_arguments"]),
         "[위험]\n" + "\n".join(f"- {x}" for x in proposal["risks"]),
@@ -572,7 +577,9 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "risk_reason": risk and (f"{risk['title']} ({risk['filed_at']} 거래소 공시, 출처 dart:{risk['rcept_no']})"
                                  + (f". 이후 관련 공시: {risk['later']}" if risk["later"] else "")),
         # 사용자가 직접 지시한 주문은 행동을 바꾸지 않는다. 성향에 안 맞으면 처리안에서 확인을 받는다 (주문 그래프)
-        "allowed_actions": [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank),
+        # 자동매매의 매수는 투자 AI가 진입 시점을 보고 '관찰'로 거절할 수 있다 (3-4, 2026-10-08 손실 원인)
+        "allowed_actions": ([state["side"], "watch"] if state.get("auto_origin") and state["side"] == "buy" else [state["side"]])
+        if state.get("user_directed") else allowed_actions(*profile, holds, rank),
         "buy_block_reason": buy_block_reason(*profile, rank),
         "verifications": [], "revision_round": 0,
     }

@@ -63,6 +63,7 @@ class InvestState(TypedDict, total=False):
     history_kind: str | None # history: orders / rejected (없으면 제안·주문 전부)
     room_stock: str | None   # 종목 대화방이면 그 종목 이름. 요청에 종목이 없으면 이 종목으로 본다
     user_directed: bool      # 사용자가 직접 지시한 주문인지 (분석에서 이어진 주문이면 false)
+    auto_origin: bool        # 3-4: 앱의 자동매매·예약이 낸 주문. 매수는 투자 AI가 '관찰'로 거절할 수 있고, 그러면 자동 승인하지 않는다
     from_analysis: bool      # 분석 결과에서 "이대로 주문할까요?"로 이어졌는지
     policy_result: dict | None   # 정책 검사 결과 (PolicyResult)
     coach_warnings: list     # 행동 코치 경고
@@ -83,7 +84,7 @@ def new_request(query: str, history: list, profile: dict) -> dict:
         "verifications": [], "revision_round": 0,
         "side": None, "qty": None, "limit_price": None, "order_change": None, "target_order": None,
         "trigger_price": None, "trigger_direction": None, "split_count": None,
-        "user_directed": False, "from_analysis": False,
+        "user_directed": False, "auto_origin": False, "from_analysis": False,
         "policy_result": None, "coach_warnings": [], "confirm_required": [], "approval_id": None, "card": None,
         "expires_at": None, "decision": None,
     }

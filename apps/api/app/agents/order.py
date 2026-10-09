@@ -78,20 +78,33 @@ def order_values_node(state: InvestState) -> dict:
 
 
 def find_order_node(state: InvestState, runtime: Runtime[Context]) -> dict:
-    """정정·취소할 원래 주문: 오늘 낸 이 종목의 아직 다 체결되지 않은 주문 중 가장 최근 것. 정정 가격이 없으면 묻는다."""
+    """정정·취소할 원래 주문: 오늘 낸 이 종목의 아직 다 체결되지 않은 주문. 여러 개면 고르게 하고, 정정 가격이 없으면 묻는다.
+    수량을 말했으면("2주만 취소") 남은 수량 중 그만큼만, 아니면 남은 수량 전부."""
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-        row = conn.execute(
-            "SELECT o.id, o.broker_order_no, o.side, o.qty - o.filled_qty AS qty, o.price FROM orders o"
+        rows = conn.execute(
+            "SELECT o.id, o.broker_order_no, o.side, o.qty - o.filled_qty AS qty, o.price, o.created_at FROM orders o"
             " JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
             " WHERE p.user_id = %s AND p.stock_code = %s AND o.kind <> 'cancel' AND o.status = ANY(%s)"
             " AND o.broker_order_no IS NOT NULL AND o.filled_qty < o.qty AND o.created_at >= date_trunc('day', now())"
-            " ORDER BY o.created_at DESC LIMIT 1",
+            " ORDER BY o.created_at DESC",
             (state["user_id"], state["stock_code"], list(OPEN_STATUSES)),
-        ).fetchone()
+        ).fetchall()
     change = CHANGE_LABELS[state["order_change"]]
-    if row is None:
+    if not rows:
         return {"answer": f"{change}할 {state['stock_name']} 주문이 없어요. 오늘 낸 주문 중 아직 체결되지 않은 것만 {change}할 수 있어요."}
-    target = {**row, "id": str(row["id"])}
+    row = rows[0]
+    if len(rows) > 1:
+        choices = [{"id": str(r["id"]), "label": f"{r['created_at']:%H:%M} {SIDE_LABELS[r['side']]} 미체결 {r['qty']:,}주 · "
+                                                f"{won(r['price'])} (주문번호 {r['broker_order_no']})"} for r in rows]
+        picked = pause("question", text=f"{state['stock_name']} 미체결 주문이 {len(rows)}개예요. 어느 주문을 {change}할까요?",
+                       choices=choices).get("choice_id")
+        row = next((r for r in rows if str(r["id"]) == picked), None)
+        if row is None:
+            return {"answer": f"어느 주문인지 알아듣지 못했어요. {change}하지 않았어요."}
+    target = {**{k: v for k, v in row.items() if k != "created_at"}, "id": str(row["id"])}
+    qty = state.get("qty") or target["qty"]
+    if not 1 <= qty <= target["qty"]:
+        return {"answer": f"{change}할 수 있는 수량은 미체결 {target['qty']:,}주까지예요."}
     price = target["price"]
     if state["order_change"] == "modify":
         price = state.get("limit_price") or parse_qty(pause(
@@ -100,7 +113,7 @@ def find_order_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             return {"answer": "바꿀 가격을 알아듣지 못했어요. '105,000원으로'처럼 다시 말해 주세요."}
         if price == target["price"]:
             return {"answer": f"지금 주문 가격과 같아요 ({won(price)}). 정정하지 않았어요."}
-    return {"target_order": target, "side": target["side"], "qty": target["qty"], "limit_price": price}
+    return {"target_order": target, "side": target["side"], "qty": qty, "limit_price": price}
 
 
 RESERVE_DAYS = 7          # 가격 조건 예약은 7일 지나면 끝
@@ -223,6 +236,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     elif side == "buy" and state.get("buy_block_reason") and change != "cancel":
         confirm.append(f"성향보다 위험한 주문이에요: {state['buy_block_reason']}.")
     verification = state["verifications"][-1]
+    if state.get("auto_origin") and state["proposal"]["action"] != side:
+        confirm.append(f"투자 AI가 지금은 {SIDE_LABELS[side]}하지 말고 관찰하자고 했어요 (자동매매 주문).")
     if verification["verdict"] in ("reject", "user_judgement"):
         confirm.append(f"검증 AI 판정이 '{VERDICT_LABELS[verification['verdict']]}'이에요: {verification['summary']}")
     # 퀴즈 답이든 실제 습관이든 급등주를 바로 사는 편이면 급등 매수 때 한 번 더 확인한다
@@ -402,8 +417,8 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "approval_id": state["approval_id"], "stock_code": state["stock_code"], "side": state["side"],
         "qty": state["qty"], "limit_price": state["limit_price"], "approved_price": state["limit_price"],
         "max_price_drift_pct": orders.MAX_PRICE_DRIFT_PCT, "idempotency_key": state["approval_id"],
-        **({"order_change": state["order_change"], "original_order_no": state["target_order"]["broker_order_no"]}
-           if state.get("order_change") else {}),
+        **({"order_change": state["order_change"], "original_order_no": state["target_order"]["broker_order_no"],
+            "all_qty": state["qty"] == state["target_order"]["qty"]} if state.get("order_change") else {}),
     }
     result = pause("execute", request=request, text="폰 앱에서 가격을 다시 확인하고 실행해 주세요.")["result"]
     with connect(runtime.context.database_url) as conn:
@@ -421,9 +436,12 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
              result.get("filled_price"), result.get("message"), state.get("order_change") or "new",
              state["target_order"]["id"] if state.get("target_order") else None),
         )
-        if state.get("order_change") and result["status"] == "accepted":  # 증권사가 받아 줬을 때만 원래 주문을 닫는다
-            conn.execute("UPDATE orders SET status = %s WHERE id = %s",
-                         ("cancelled" if state["order_change"] == "cancel" else "replaced", state["target_order"]["id"]))
+        if state.get("order_change") and result["status"] == "accepted":  # 증권사가 받아 줬을 때만 원래 주문을 바꾼다
+            if state["qty"] == state["target_order"]["qty"]:  # 남은 수량 전부: 원래 주문을 닫는다
+                conn.execute("UPDATE orders SET status = %s WHERE id = %s",
+                             ("cancelled" if state["order_change"] == "cancel" else "replaced", state["target_order"]["id"]))
+            else:  # 일부: 원래 주문의 수량을 그만큼 줄인다 (나머지는 원래 주문으로 남는다)
+                conn.execute("UPDATE orders SET qty = qty - %s WHERE id = %s", (state["qty"], state["target_order"]["id"]))
         audit(conn, state["user_id"], "order_result", {"approval_id": state["approval_id"], **result})
     return {"answer": format_result(state, result)}
 

@@ -58,6 +58,7 @@ class ChatRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     client: Literal["app", "web"]
     stock_code: str | None = Field(default=None, pattern=r"^[0-9A-Z]{6}$")  # 새 대화를 종목 방에서 시작할 때
+    origin: Literal["user", "auto"] = "user"  # auto: 앱의 자동매매·예약이 보낸 주문 (3-4). AI가 매수 시점을 따진다
 
 
 class ResumeRequest(BaseModel):
@@ -163,7 +164,7 @@ def chat(body: ChatRequest, request: Request, conn: Conn, user_id: UserId) -> St
     graph_input = {
         **new_request(body.text, recent_history(conn, thread_id), profile_summary(conn, user_id)),
         "user_id": str(user_id), "thread_id": str(thread_id), "client": body.client,
-        "room_stock": room and room["name"],
+        "room_stock": room and room["name"], "auto_origin": body.origin == "auto",
     }
     conn.execute(
         "INSERT INTO messages (thread_id, role, text, client) VALUES (%s, 'user', %s, %s)",

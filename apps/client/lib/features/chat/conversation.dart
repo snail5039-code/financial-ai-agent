@@ -18,7 +18,10 @@ class ChatItem {
 }
 
 class Conversation extends ChangeNotifier {
-  Conversation({this.threadId, this.waiting, this.stockCode, this.stockName, this.unlock = phoneUnlock});
+  Conversation({this.threadId, this.waiting, this.stockCode, this.stockName, this.unlock = phoneUnlock, this.auto = false});
+
+  /// 앱의 자동매매·예약이 보내는 주문이면 true. 서버가 사람 지시와 구분해 투자 AI가 매수 시점을 따진다 (3-4)
+  final bool auto;
 
   String? threadId;
   final String? stockCode; // 종목 대화방이면 그 종목 (없으면 투자 비서)
@@ -48,6 +51,7 @@ class Conversation extends ChangeNotifier {
     return _run(api.stream('/api/chat', {
       'thread_id': threadId, 'text': text, 'client': clientKind,
       if (threadId == null && stockCode != null) 'stock_code': stockCode,
+      if (auto) 'origin': 'auto',
     }));
   }
 

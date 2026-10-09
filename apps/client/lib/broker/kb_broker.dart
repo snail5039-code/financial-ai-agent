@@ -113,7 +113,7 @@ class KbBroker implements Broker {
   Future<List<BrokerOrder>> todayOrders(String stockCode) async => throw BrokerError(_accountNotReady);
 
   @override
-  Future<String> revise(String orderNo, String stockCode, int? price) async =>
+  Future<String> revise(String orderNo, String stockCode, int? price, {int? qty}) async =>
       throw BrokerError('KB로는 주문하지 않아요. 주문 개발·검증은 KIS 모의투자로 해요 (AGENTS.md 4장)');
 
   @override
