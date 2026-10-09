@@ -223,3 +223,27 @@ def put_policy(body: PolicyRequest, conn: Conn, user_id: UserId) -> dict:
     })
     conn.commit()
     return policy_response(load_policy(conn, user_id))
+
+
+@router.get("/portfolio/analysis")
+def portfolio_analysis(conn: Conn, user_id: UserId) -> dict:
+    """5단계 포트폴리오 점검 (functions/portfolio.py). 폰이 보낸 최근 계좌 요약과 서버 최근 종가로 계산한다. 주문은 만들지 않는다"""
+    from app.agents.query import latest_snapshot
+    from app.functions.portfolio import analyze
+
+    snapshot = latest_snapshot(conn, user_id)
+    if snapshot is None:
+        raise HTTPException(404, "계좌 요약이 아직 없어요. 앱에서 자산 화면을 한 번 열어 주세요")
+    codes = [h["stock_code"] for h in snapshot["holdings"]]
+    latest = conn.execute(
+        "SELECT DISTINCT ON (stock_code) stock_code, close, trade_date FROM stock_prices WHERE stock_code = ANY(%s)"
+        " ORDER BY stock_code, trade_date DESC", (codes,)).fetchall()
+    closes = {r["stock_code"]: r["close"] for r in latest}
+    risky = {r["code"]: r["title"] for r in conn.execute(
+        "SELECT s.code, d.title FROM stocks s JOIN disclosures d ON d.rcept_no = s.risk_rcept_no"
+        " WHERE s.code = ANY(%s) AND s.risk_grade = 1", (codes,))}
+    policy = conn.execute("SELECT max_weight_pct FROM policies WHERE user_id = %s", (user_id,)).fetchone()
+    profile = profile_summary(conn, user_id)
+    result = analyze(snapshot, closes, policy["max_weight_pct"], profile.get("risk_level") or 1, risky, profile["mode"])
+    # 공개 시세는 다음 영업일 오후에 나와서 하루 이상 늦을 수 있다. 화면에 어느 날 종가인지 보여준다
+    return {**result, "fetched_at": snapshot["fetched_at"], "price_date": max((r["trade_date"] for r in latest), default=None)}

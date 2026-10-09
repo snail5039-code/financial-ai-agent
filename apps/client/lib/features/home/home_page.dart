@@ -9,6 +9,7 @@ import '../../common/common.dart';
 import '../history/history_page.dart';
 import '../settings/broker_page.dart';
 import 'overview.dart';
+import 'portfolio_page.dart';
 
 /// 증권사에서만 알 수 있는 것 (앱). 실패하면 그 칸만 실패로 보여준다
 typedef BrokerExtras = ({int? buyingPower, List<BrokerOrder>? orders, String? error});
@@ -114,7 +115,7 @@ class _HomePageState extends State<HomePage> {
             extras?.buyingPower != null ? won(extras!.buyingPower!) : kIsWeb ? '폰 앱에서 확인' : '조회 실패',
             hint: '지금 주문에 쓸 수 있는 돈')),
         const SizedBox(width: 10),
-        Expanded(child: _stat('예수금', won(balance['cash_krw'] as int), hint: '결제 전(2일) 금액 포함')),
+        Expanded(child: _stat('예수금 (결제 후)', won(balance['cash_krw'] as int), hint: '사고판 대금이 결제된 뒤(D+2) 남는 현금')),
       ]),
       Row(children: [
         Expanded(child: _stat('주식 평가금', won(t.value), hint: '매입 ${won(t.cost)}')),
@@ -125,6 +126,16 @@ class _HomePageState extends State<HomePage> {
       if (extras?.error != null) Text(extras!.error!, style: const TextStyle(color: Colors.orange)),
       const SizedBox(height: 8),
       RingsCard(overview: o, showTotal: false), // 총자산은 위에 있다
+      const SizedBox(height: 8),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.pie_chart_outline, color: brandBlue),
+          title: const Text('포트폴리오 점검', style: TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: const Text('비중 · 쏠림 · 현금 비율과 조정 제안'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(pageRoute(const PortfolioPage())),
+        ),
+      ),
       // 3. 보유 종목
       const SizedBox(height: 16),
       Row(children: [

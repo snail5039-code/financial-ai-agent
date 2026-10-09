@@ -188,7 +188,7 @@ void main() {
               {'pdno': '005930', 'prdt_name': '삼성전자', 'hldg_qty': '3', 'pchs_avg_pric': '240000.0000', 'prpr': '276000'},
               {'pdno': '000270', 'prdt_name': '기아', 'hldg_qty': '0', 'pchs_avg_pric': '0', 'prpr': '113300'},
             ],
-            'output2': [{'dnca_tot_amt': '9172000'}],
+            'output2': [{'dnca_tot_amt': '9999000', 'prvs_rcdl_excc_amt': '9172000'}], // 결제 후 예수금을 쓴다
           }));
       final balance = await b.balance();
       expect(balance['cash_krw'], 9172000);

@@ -140,7 +140,9 @@ class KisMockBroker implements Broker {
       lastPrices['${r['pdno']}'] = _int(r['prpr']);
     }
     return {
-      'cash_krw': _int(summary['dnca_tot_amt']), // 예수금 총액
+      // 결제가 끝난 뒤(D+2)의 예수금. 예수금 총액(dnca_tot_amt)은 결제 전 매수 대금이 아직 빠지지 않아
+      // 주식 평가액과 더하면 산 금액을 두 번 센다 (2026-10-08 총자산이 1,250만 원으로 보인 버그)
+      'cash_krw': _int(summary['prvs_rcdl_excc_amt']),
       'holdings': [
         for (final r in rows)
           {'stock_code': '${r['pdno']}', 'stock_name': '${r['prdt_name']}', 'qty': _int(r['hldg_qty']),
