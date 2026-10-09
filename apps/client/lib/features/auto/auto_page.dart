@@ -16,6 +16,7 @@ class AutoTradePage extends StatefulWidget {
 class _AutoTradePageState extends State<AutoTradePage> {
   int? _budget; // 승인 전 고르는 중인 값 (null이면 지난번 값)
   Set<String>? _sell; // 승인 전 고르는 중인 팔 종목 (null이면 자동매매로 산 것 전부)
+  bool _aiSell = true; // 장중 급락 시 AI 판단 매도 허용
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -39,7 +40,8 @@ class _AutoTradePageState extends State<AutoTradePage> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: SourceText('매일 오늘 계획(살 총액, 팔 종목)을 승인해야 시작해요. 승인하지 않은 날은 사고팔지 않아요. '
                     '장중(평일 09:05~15:00) 앱이 켜져 있으면 1분마다 확인해서 오늘 아침 브리핑에서 검증 AI가 승인한 종목을 사고, '
-                    '15:00~15:28에 고른 종목을 팔아요. 사든 팔든 주문 때 다시 투자 AI → 검증 AI → 한도 검사를 거치고, 1회 한도를 넘으면 나눠 주문해요. '
+                    '15:00~15:28에 고른 종목을 팔아요. 허용하면 장중에 자동매매로 산 종목이 매입가보다 $autoDropPct% 넘게 내릴 때 '
+                    'AI가 매도를 제안하고 검증 AI가 승인한 경우에만 팔아요. 사든 팔든 주문 때 다시 투자 AI → 검증 AI → 한도 검사를 거치고, 1회 한도를 넘으면 나눠 주문해요. '
                     '성향 초과·검증 반려·급등 재확인처럼 확인이 필요한 처리안은 자동으로 승인하지 않아요. 수익을 보장하지 않아요. '
                     '사고팔 때마다 수수료, 팔 때 세금(0.2%)이 들어요.'),
               ),
@@ -63,7 +65,8 @@ class _AutoTradePageState extends State<AutoTradePage> {
         child: ListTile(
           title: const Text('오늘 계획 (승인함)', style: TextStyle(fontWeight: FontWeight.w700)),
           subtitle: Text('매수: ${plan['budget'] == 0 ? '안 함' : '${won(plan['budget'] as int)}까지'}\n'
-              '매도(15:00 이후): ${sell.isEmpty ? '안 함' : sell.map(nameOf).join(', ')}'),
+              '매도(15:00 이후): ${sell.isEmpty ? '안 함' : sell.map(nameOf).join(', ')}\n'
+              '장중 급락 시 AI 판단 매도: ${plan['ai_sell'] == true ? '허용' : '안 함'}'),
           isThreeLine: true,
           trailing: TextButton(onPressed: autoTrader.cancelPlan, child: const Text('계획 취소')),
         ),
@@ -97,9 +100,16 @@ class _AutoTradePageState extends State<AutoTradePage> {
               title: Text('${(e.value as Map)['name']} ${(e.value as Map)['qty']}주'),
               onChanged: (v) => setState(() => _sell = {...sell}..remove(e.key)..addAll(v! ? [e.key] : [])),
             ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _aiSell,
+            title: const Text('장중 급락 시 AI 판단으로 매도'),
+            subtitle: const Text('자동매매로 산 종목이 매입가보다 $autoDropPct% 넘게 내리면 투자 AI·검증 AI가 팔지 판단해요'),
+            onChanged: (v) => setState(() => _aiSell = v),
+          ),
           const SizedBox(height: 8),
           FilledButton(
-            onPressed: () => autoTrader.approvePlan(budget, sell.toList()),
+            onPressed: () => autoTrader.approvePlan(budget, sell.toList(), aiSell: _aiSell),
             child: const Text('오늘 계획 승인'),
           ),
         ]),

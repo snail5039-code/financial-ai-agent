@@ -383,6 +383,14 @@ void main() {
     expect(AutoTrader.allowed(null), isFalse);
   });
 
+  test('장중 급락: 분석 답이 검증 승인 + 매도 검토일 때만 판다', () {
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 매도 검토\n\n근거'), isTrue);
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 조건부 승인\n제안: 매도 검토'), isTrue);
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 반려\n제안: 매도 검토'), isFalse);
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 보유'), isFalse);
+    expect(aiSaysSell('오늘 분석 횟수를 다 썼어요'), isFalse);
+  });
+
   test('자동 매도는 1회 한도 안으로 나눈다', () {
     expect(splitQty(22, 106800, 1940000), [18, 4]); // 18주 = 1,922,400원
     expect(splitQty(93, 24800, 1940000), [78, 15]);
@@ -400,7 +408,7 @@ void main() {
     expect(trader.positions['000720'], {'name': '현대건설', 'qty': 22});
     await trader.approvePlan(0, ['000720']);
     expect(trader.needsPlan, isFalse);
-    expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'sell': ['000720']});
+    expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'sell': ['000720'], 'ai_sell': true});
     await trader.cancelPlan();
     expect(trader.needsPlan, isTrue);
   });
