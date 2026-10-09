@@ -3,7 +3,8 @@
 1. 시세 (공공데이터포털): 코스피 시가총액 상위 100개, 코스닥 상위 50개를 분석 대상(stocks.is_target)으로 정한다 (TARGETS)
    최근 10일 시장 전체 시세(시장마다 1~2번 호출)로 매일 갱신하고, 새 대상이나 빈 날이 있는 종목만 100일치를 따로 받는다
 2. 재무 (OpenDART): 대상 종목의 올해·작년 정기보고서 주요 계정. 이미 받은 보고서는 다시 받지 않는다
-3. 공시 (OpenDART): 공시 목록은 마지막으로 받은 날부터, 최신 정기보고서의 "사업의 내용"·"경영진단" 본문 → 조각 → 임베딩
+3. 공시 (OpenDART): 공시 목록은 마지막으로 받은 날부터. 본문 → 조각 → 임베딩은 최근 정기보고서 2건의 "사업의 내용"·"경영진단"
+   (지난 보고서와 비교할 수 있게)과 최근 주요사항보고서 3건 전체 (표는 줄·칸 구분을 살린다, 2-8)
 4. 종목 위험등급: 최근 1년 거래소 공시에 관리종목·상장폐지 사유 등이 있으면 1등급 (functions/suitability.py)
 
 여러 번 실행해도 된다. 받은 값은 덮어쓰고, 이미 조각낸 공시는 건너뛴다.
@@ -11,6 +12,7 @@
 서버를 띄워 두면 매일 AUTO_COLLECT_HOUR시(기본 15시, KST)에 자동으로 실행한다 (app/main.py).
     --skip-prices   1단계를 건너뛰고 지금 분석 대상 종목으로만 (시세 키가 아직 안 될 때)
     --codes A,B     이 종목들만 (stocks에 이미 있어야 함)
+    --rechunk       이미 조각낸 본문도 지우고 다시 조각·임베딩 (조각 방식이 바뀌었을 때. Gemini 임베딩 비용이 든다)
 """
 
 import argparse
@@ -35,6 +37,8 @@ RECENT_DAYS = 10  # 매일 받는 시장 전체 시세 기간 (주말·연휴를
 DISCLOSURE_DAYS = 365
 WANTED_SECTIONS = ("사업의 내용", "경영진단")
 EMBED_BATCH = 100
+PERIODIC_REPORTS = 2   # 정기보고서 최신 몇 건의 본문을 임베딩할지 (최신 + 직전, 2026-10-09)
+MAJOR_REPORTS, MAJOR_MAX_CHUNKS = 3, 20  # 주요사항보고서 최신 몇 건, 한 건에 조각 최대 몇 개 (비용 상한)
 
 
 def amount(text: str | None) -> int | None:
@@ -134,19 +138,27 @@ def collect_disclosures(conn: psycopg.Connection, api_key: str, code: str, corp_
     for item in items:
         save_disclosure(conn, code, item)
 
-    periodic = opendart.disclosures(corp_code, api_key, begin, end, kind="A")
-    if not periodic:
-        return f"공시 {len(items)}건, 정기보고서 없음"
-    report = periodic[0]  # 최신 정기보고서
-    save_disclosure(conn, code, report)
-    if conn.execute("SELECT 1 FROM disclosure_chunks WHERE rcept_no = %s LIMIT 1", (report["rcept_no"],)).fetchone():
-        return f"공시 {len(items)}건, {report['report_nm'].strip()} 이미 조각냄"
+    periodic = opendart.disclosures(corp_code, api_key, begin, end, kind="A")[:PERIODIC_REPORTS]
+    major = opendart.disclosures(corp_code, api_key, begin, end, kind="B")[:MAJOR_REPORTS]
+    if not periodic and not major:
+        return f"공시 {len(items)}건, 본문 공시 없음"
+    done = [embed_report(conn, api_key, code, report, WANTED_SECTIONS) for report in periodic]
+    done += [embed_report(conn, api_key, code, report, ("",), MAJOR_MAX_CHUNKS) for report in major]  # 주요사항은 단원 전체
+    return f"공시 {len(items)}건, " + ", ".join(done)
 
+
+def embed_report(conn: psycopg.Connection, api_key: str, code: str, report: dict, wanted: tuple[str, ...],
+                 limit: int | None = None) -> str:
+    """공시 하나의 본문을 조각내 임베딩한다. 이미 조각낸 공시는 건너뛴다 (다시 하려면 --rechunk)."""
+    save_disclosure(conn, code, report)
+    name = " ".join(report["report_nm"].split())
+    if conn.execute("SELECT 1 FROM disclosure_chunks WHERE rcept_no = %s LIMIT 1", (report["rcept_no"],)).fetchone():
+        return f"{name} 이미 조각냄"
     chunks = [
         (title, chunk)
-        for title, text in opendart.document_sections(report["rcept_no"], api_key, WANTED_SECTIONS)
+        for title, text in opendart.document_sections(report["rcept_no"], api_key, wanted)
         for chunk in split_text(text)
-    ]
+    ][:limit]
     for start in range(0, len(chunks), EMBED_BATCH):
         batch = chunks[start:start + EMBED_BATCH]
         vectors = llm.embed_documents([chunk for _, chunk in batch])
@@ -154,9 +166,9 @@ def collect_disclosures(conn: psycopg.Connection, api_key: str, code: str, corp_
             conn.execute(
                 "INSERT INTO disclosure_chunks (rcept_no, seq, section, content, embedding)"
                 " VALUES (%s, %s, %s, %s, %s::vector)",
-                (report["rcept_no"], seq, title, chunk, str(vector)),
+                (report["rcept_no"], seq, title or name, chunk, str(vector)),
             )
-    return f"공시 {len(items)}건, {report['report_nm'].strip()} 본문 {len(chunks)}조각"
+    return f"{name} 본문 {len(chunks)}조각"
 
 
 # ---------- 4. 종목 위험등급 ----------
@@ -174,7 +186,7 @@ def refresh_risk_grade(conn: psycopg.Connection, code: str, today) -> int:
 
 # ---------- 실행 ----------
 
-def run(codes: list[str] | None = None, skip_prices: bool = False) -> None:
+def run(codes: list[str] | None = None, skip_prices: bool = False, rechunk: bool = False) -> None:
     if not config.OPENDART_API_KEY:
         raise SystemExit("OPENDART_API_KEY가 비어 있습니다 (apps/api/.env)")
     today = datetime.now(KST).date()
@@ -198,6 +210,9 @@ def run(codes: list[str] | None = None, skip_prices: bool = False) -> None:
                 continue
             try:
                 financial_rows = collect_financials(conn, config.OPENDART_API_KEY, code, corp_of[code], today.year)
+                if rechunk:
+                    conn.execute("DELETE FROM disclosure_chunks WHERE rcept_no IN"
+                                 " (SELECT rcept_no FROM disclosures WHERE stock_code = %s)", (code,))
                 summary = collect_disclosures(conn, config.OPENDART_API_KEY, code, corp_of[code], today)
                 grade = refresh_risk_grade(conn, code, today)
                 conn.commit()
@@ -234,8 +249,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="분석용 시세·재무·공시 수집")
     parser.add_argument("--skip-prices", action="store_true")
     parser.add_argument("--codes", help="쉼표로 구분한 종목 코드")
+    parser.add_argument("--rechunk", action="store_true")
     args = parser.parse_args()
-    run(args.codes.split(",") if args.codes else None, args.skip_prices)
+    run(args.codes.split(",") if args.codes else None, args.skip_prices, args.rechunk)
 
 
 if __name__ == "__main__":

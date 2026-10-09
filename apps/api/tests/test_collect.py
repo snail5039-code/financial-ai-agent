@@ -95,7 +95,7 @@ def test_collect_financials_and_disclosures(conn, monkeypatch) -> None:
     filing = {"rcept_no": "R1", "report_nm": "사업보고서 (2025.12) ", "rcept_dt": "20260310"}
     other = {"rcept_no": "R2", "report_nm": "주요사항보고서", "rcept_dt": "20260401"}
     monkeypatch.setattr(opendart, "disclosures",
-                        lambda corp, key, begin, end, kind=None: [filing] if kind == "A" else [other, filing])
+                        lambda corp, key, begin, end, kind=None: {"A": [filing], "B": []}.get(kind, [other, filing]))
     monkeypatch.setattr(opendart, "document_sections",
                         lambda rcept_no, key, wanted: [("II. 사업의 내용", "반도체를 만든다. " * 200)])
     embedded = []
@@ -114,7 +114,8 @@ def test_collect_financials_and_disclosures(conn, monkeypatch) -> None:
     monkeypatch.setattr(opendart, "disclosures",
                         lambda corp, key, begin, end, kind=None: since.append((begin, kind)) or ([filing] if kind == "A" else []))
     second = collect.collect_disclosures(conn, "key", "999999", "C1", date(2026, 10, 5))
-    assert since == [("20260401", None), ("20251005", "A")]  # 목록은 마지막 공시일부터, 정기보고서는 1년치
+    # 목록은 마지막 공시일부터, 정기보고서·주요사항보고서는 1년치
+    assert since == [("20260401", None), ("20251005", "A"), ("20251005", "B")]
 
     row = conn.execute("SELECT amount, prev_amount FROM financials WHERE stock_code = '999999'"
                        " AND account = '당기순이익(손실)'").fetchone()
@@ -129,11 +130,23 @@ def test_collect_financials_and_disclosures(conn, monkeypatch) -> None:
 def test_sections_of_extracts_titles_and_plain_text() -> None:
     document = ("<SECTION-1><TITLE>I. 회사의 개요</TITLE><P>개요</P></SECTION-1>"
                 "<SECTION-1><TITLE ATOC=\"Y\">II. 사업의 내용</TITLE><P>메모리 &amp; 파운드리</P>"
-                "<TABLE><TR><TD>매출</TD></TR></TABLE></SECTION-1>")
+                "<TABLE><TR><TH>구분</TH><TH>2025</TH></TR><TR><TD>매출</TD><TE ALIGN=\"R\">1,200</TE></TR></TABLE></SECTION-1>")
     assert opendart.sections_of(document) == [
         ("I. 회사의 개요", "I. 회사의 개요 개요"),
-        ("II. 사업의 내용", "II. 사업의 내용 메모리 & 파운드리 매출"),
+        ("II. 사업의 내용", "II. 사업의 내용 메모리 & 파운드리 [표] 구분 | 2025 ; 매출 | 1,200 [표 끝]"),  # 표의 줄·칸을 남긴다
     ]
+
+
+def test_major_reports_are_embedded_with_chunk_limit(conn, monkeypatch) -> None:
+    conn.execute("INSERT INTO stocks (code, name, market) VALUES ('999998', '주요사항회사', 'KOSPI') ON CONFLICT DO NOTHING")
+    major = {"rcept_no": "M1", "report_nm": "주요사항보고서(유상증자결정)", "rcept_dt": "20260901"}
+    monkeypatch.setattr(opendart, "disclosures", lambda corp, key, begin, end, kind=None: [major] if kind == "B" else [])
+    monkeypatch.setattr(opendart, "document_sections", lambda rcept_no, key, wanted: [("", "유상증자를 결정했다. " * 2000)])
+    monkeypatch.setattr(collect.llm, "embed_documents", lambda texts: [[0.1] * 768 for _ in texts])
+    summary = collect.collect_disclosures(conn, "key", "999998", "C2", date(2026, 10, 5))
+    row = conn.execute("SELECT count(*) AS n, min(section) AS section FROM disclosure_chunks WHERE rcept_no = 'M1'").fetchone()
+    assert row["n"] == collect.MAJOR_MAX_CHUNKS and row["section"] == "주요사항보고서(유상증자결정)"  # 제목 없는 단원은 공시 이름
+    assert "주요사항보고서(유상증자결정) 본문 20조각" in summary
 
 
 def test_seconds_until_next_run() -> None:

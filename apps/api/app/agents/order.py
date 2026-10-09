@@ -37,6 +37,7 @@ from app.agents.state import Context, InvestState
 from app.db import audit, connect, jsonb
 from app.functions import orders
 from app.functions.behavior import behavior
+from app.notify import notify
 
 CHANGE_LABELS = {"cancel": "취소", "modify": "정정"}
 OPEN_STATUSES = ("accepted", "partially_filled", "unknown_checked")
@@ -319,6 +320,11 @@ def approval_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             return {**edit, "decision": "edit"}
         conn.execute("UPDATE approvals SET status = 'approved', decided_at = now(), decided_channel = %s WHERE id = %s",
                      (reply["client"], approval_id))
+        if reply["client"] == "web":  # 웹에서 승인하면 주문은 폰에서 실행해야 한다
+            card = state["card"]
+            notify(conn, state["user_id"], "needs_execution", "폰에서 주문을 실행해 주세요",
+                   f"웹에서 승인한 {card['stock_name']} {card['qty']:,}주 {SIDE_LABELS[card['side']]} 처리안이 기다려요",
+                   {"approval_id": approval_id})
         audit(conn, state["user_id"], "approval_approved", {"approval_id": approval_id, "confirm_risk": reply.get("confirm_risk")})
     return {"decision": "approve"}
 

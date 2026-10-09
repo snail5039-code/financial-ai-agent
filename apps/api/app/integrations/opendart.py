@@ -56,7 +56,7 @@ def corp_codes(api_key: str) -> dict[str, str]:
 
 
 def disclosures(corp_code: str, api_key: str, begin: str, end: str, kind: str | None = None) -> list[dict]:
-    """공시 목록 (최신부터, 최대 100건). kind="A"면 정기공시(사업·반기·분기보고서)만. 날짜는 YYYYMMDD."""
+    """공시 목록 (최신부터, 최대 100건). kind="A"면 정기공시(사업·반기·분기보고서)만, "B"면 주요사항보고만. 날짜는 YYYYMMDD."""
     params = {"corp_code": corp_code, "bgn_de": begin, "end_de": end, "page_count": 100}
     return get_json("list.json", api_key, **params, **({"pblntf_ty": kind} if kind else {}))
 
@@ -80,11 +80,22 @@ def document_sections(rcept_no: str, api_key: str, wanted: tuple[str, ...]) -> l
     return [(title, text) for title, text in sections_of(document) if any(word in title for word in wanted)]
 
 
+def table_text(table: str) -> str:
+    """<TABLE>을 "[표] 칸 | 칸 ; 칸 | 칸 [표 끝]"으로. 표의 줄·칸 구분을 살려서 숫자가 어느 항목 것인지 남게 한다 (2-8)"""
+    rows = []
+    for row in re.findall(r"<TR[^>]*>(.*?)</TR>", table, re.DOTALL):
+        cells = [" ".join(re.sub(r"<[^>]+>", " ", cell).split()) for cell in re.findall(r"<T[DHEU][^>]*>(.*?)</T[DHEU]>", row, re.DOTALL)]
+        if any(cells):
+            rows.append(" | ".join(cells))
+    return f" [표] {' ; '.join(rows)} [표 끝] " if rows else " "
+
+
 def sections_of(document: str) -> list[tuple[str, str]]:
-    """<SECTION-1> 단원마다 (제목, 태그를 지운 본문)."""
+    """<SECTION-1> 단원마다 (제목, 태그를 지운 본문). 표는 줄·칸 구분을 남긴다."""
     result = []
     for block in re.findall(r"<SECTION-1[^>]*>(.*?)</SECTION-1>", document, re.DOTALL):
         title = re.search(r"<TITLE[^>]*>(.*?)</TITLE>", block, re.DOTALL)
+        block = re.sub(r"<TABLE[^>]*>(.*?)</TABLE>", lambda m: table_text(m.group(1)), block, flags=re.DOTALL)
         text = html.unescape(re.sub(r"<[^>]+>", " ", block))
         result.append((title.group(1).strip() if title else "", re.sub(r"\s+", " ", text).strip()))
     return result

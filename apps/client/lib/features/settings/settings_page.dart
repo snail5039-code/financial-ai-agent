@@ -11,6 +11,7 @@ import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
 import 'behavior_page.dart';
 import 'broker_page.dart';
+import 'notifications_page.dart';
 import '../../broker/broker.dart';
 import 'package:flutter/foundation.dart';
 
@@ -145,6 +146,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: () => Navigator.of(context).push(pageRoute(const AutoTradePage())),
                   ),
                 ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.notifications_outlined, color: brandBlue),
+                  title: const Text('알림', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('브리핑 · 체결 · 폰에서 실행할 주문'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(pageRoute(const NotificationsPage())),
+                ),
+              ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.insights_outlined, color: coachOrange),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../common/common.dart';
 import '../approvals/approval_detail_page.dart';
 import 'conversation.dart';
+import 'news_page.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage(this.conversation, {super.key});
@@ -48,6 +49,11 @@ class _ChatPageState extends State<ChatPage> {
                 : RoomAvatar(text: _short(_c.stockName!), color: const Color(0xFFFFF5F4), foreground: const Color(0xFFA3241B), size: 36),
             subtitle: _c.stockName == null ? '검증 AI와 함께 확인해요' : '이 방에서는 종목 이름을 빼고 말해도 돼요',
             actions: [
+          if (_c.stockCode != null)
+            IconButton(
+                tooltip: '뉴스·공시',
+                icon: const Icon(Icons.newspaper_outlined),
+                onPressed: () => Navigator.of(context).push(pageRoute(NewsPage(_c.stockCode!, _c.stockName!)))),
           IconButton(tooltip: '새 대화', icon: const Icon(Icons.add_comment_outlined), onPressed: _newChat),
         ]),
         body: ListenableBuilder(

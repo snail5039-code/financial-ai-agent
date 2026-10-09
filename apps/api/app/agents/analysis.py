@@ -121,11 +121,16 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
         return row and {"kind": "price", "title": f"{day} 종가 (금융위원회_주식시세정보)", "url": None, "as_of": day,
                         "content": f"종가 {won(row['close'])}, 시가총액 {won(row['market_cap'])}"}
     if kind == "news":
-        row = conn.execute("SELECT title, press, url, published_at FROM news WHERE id::text = %s", (rest,)).fetchone()
-        return row and {"kind": "news", "title": f"{row['title']} ({row['press'] or '언론사 미확인'})", "url": row["url"],
-                        "as_of": row["published_at"].isoformat(),
-                        "content": f"뉴스 제목: {row['title']}. 언론사 {row['press'] or '미확인'}, "
-                                   f"발행 {row['published_at']:%Y-%m-%d %H:%M}. 본문은 없다. 공시로 확인되지 않은 보도다"}
+        row = conn.execute("SELECT stock_code, title, press, url, published_at FROM news WHERE id::text = %s", (rest,)).fetchone()
+        if row is None:
+            return None
+        nearby = news_disclosure(conn, row["stock_code"], row["published_at"])
+        check = (f"같은 무렵 공시가 있다: {nearby['title']} ({nearby['filed_at']}, 출처 dart:{nearby['rcept_no']}). 내용이 같은지는 공시로 확인한다"
+                 if nearby else "공시로 확인되지 않은 보도다")
+        return {"kind": "news", "title": f"{row['title']} ({row['press'] or '언론사 미확인'})", "url": row["url"],
+                "as_of": row["published_at"].isoformat(),
+                "content": f"뉴스 제목: {row['title']}. 언론사 {row['press'] or '미확인'}, "
+                           f"발행 {row['published_at']:%Y-%m-%d %H:%M}. 본문은 없다. {check}"}
     if kind == "quote" and state.get("prices"):
         price = state["prices"][0]
         return {"kind": "price", "title": "현재가 (앱 실시간 조회)", "url": None, "as_of": price["as_of"],
@@ -501,12 +506,23 @@ def get_account_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             "prices": [price] if price else None}
 
 
+def news_disclosure(conn, code: str, published_at) -> dict | None:
+    """뉴스와 같은 무렵(발행일 하루 전~다음 날) 나온 이 종목 공시. 있으면 "공시 확인" 후보로 보여준다.
+    ponytail: 날짜만 본다. 내용이 같은지는 사람이·검증 AI가 공시 원문으로 확인한다"""
+    return conn.execute(
+        "SELECT rcept_no, title, url, filed_at FROM disclosures WHERE stock_code = %s"
+        " AND filed_at BETWEEN (%s::timestamptz)::date - 1 AND (%s::timestamptz)::date + 1 ORDER BY filed_at DESC LIMIT 1",
+        (code, published_at, published_at)).fetchone()
+
+
 def recent_news(conn, code: str, name: str) -> list[str]:
     """최근 뉴스 출처 ID. 30분 안에 받은 적이 없으면 Google 뉴스 RSS에서 새로 받아 저장한다 (실패하면 저장된 것만)"""
     last = conn.execute("SELECT max(fetched_at) AS at FROM news WHERE stock_code = %s", (code,)).fetchone()["at"]
     if config.NEWS_FETCH and (last is None or datetime.now(KST) - last > NEWS_REFRESH):
         try:
-            for item in google_news.search(name, NEWS_DAYS):
+            longer = tuple(r["name"] for r in conn.execute(  # 이름에 이 종목 이름이 들어간 다른 종목 (뉴스 거르기)
+                "SELECT name FROM stocks WHERE name LIKE %s AND name <> %s", (f"%{name}%", name)))
+            for item in google_news.search(name, NEWS_DAYS, longer):
                 conn.execute(
                     "INSERT INTO news (stock_code, title, press, url, published_at) VALUES (%s, %s, %s, %s, %s)"
                     " ON CONFLICT (stock_code, url) DO UPDATE SET fetched_at = now()",

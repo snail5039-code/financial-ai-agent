@@ -11,6 +11,7 @@ from pydantic import Field, model_validator
 from app.agents.interrupts import MAX_KRW, Strict
 from app.db import Conn, audit
 from app.functions.orders import TODAY_ORDERED_SQL
+from app.notify import notify
 from app.routers.auth import UserId
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -91,5 +92,11 @@ def post_fills(body: Fills, conn: Conn, user_id: UserId) -> dict:
         if row:
             updated.append(row)
             audit(conn, user_id, "order_fill", dict(row))
+            if row["status"] == "filled":
+                name = conn.execute("SELECT s.name, o.side FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                                    " JOIN proposals p ON p.id = a.proposal_id JOIN stocks s ON s.code = p.stock_code"
+                                    " WHERE o.idempotency_key = %s", (fill.idempotency_key,)).fetchone()
+                notify(conn, user_id, "filled", "체결됐어요 (모의투자)",
+                       f"{name['name']} {row['filled_qty']:,}주 {'매수' if name['side'] == 'buy' else '매도'} · 평균 {row['filled_price']:,}원")
     conn.commit()
     return {"updated": updated}

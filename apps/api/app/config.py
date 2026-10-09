@@ -35,6 +35,9 @@ CLOSE_REVIEW_TIME = os.environ.get("CLOSE_REVIEW_TIME", "").strip() or None
 # 분석할 때 Google 뉴스 RSS에서 종목 뉴스(제목·링크)를 받는다. 무료, 키 없음. "off"면 저장된 뉴스만 쓴다
 NEWS_FETCH = os.environ.get("NEWS_FETCH", "").strip().lower() != "off"
 
+# 폰 푸시 알림 (2-1): Firebase 서비스 계정 JSON 파일 경로. 비우면 알림을 쌓기만 하고 보내지 않는다 (앱 알림 목록에는 보임)
+FIREBASE_CREDENTIALS = os.environ.get("FIREBASE_CREDENTIALS", "").strip() or None
+
 # 개발용: 장 운영 시간 검사를 이 시각(KST, 예: "10:00")으로 한다. 비우면 실제 시계. 운영 서버에서는 비운다
 MARKET_CLOCK = os.environ.get("MARKET_CLOCK", "").strip() or None
 

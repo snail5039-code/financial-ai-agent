@@ -14,7 +14,7 @@ from psycopg_pool import ConnectionPool
 from app import briefing, collect, config, review
 from app.agents.graph import build_graph
 from app.db import connect
-from app.routers import approvals, auth, briefings, chat, history, orders, policy, snapshot, watchlist
+from app.routers import approvals, auth, briefings, chat, history, notifications, orders, policy, snapshot, watchlist
 
 
 @asynccontextmanager
@@ -59,7 +59,7 @@ def create_app(database_url: str | None = None, auto_collect_hour: int | None = 
     if config.CORS_ORIGINS:
         # 웹 개발 서버(다른 포트)에서 오는 요청 허용. 로그인은 쿠키가 아니라 Authorization 헤더라서 credentials는 끈다
         app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
-    for module in (auth, policy, chat, snapshot, approvals, history, orders, briefings, watchlist):
+    for module in (auth, policy, chat, snapshot, approvals, history, orders, briefings, watchlist, notifications):
         app.include_router(module.router)
 
     @app.exception_handler(RequestValidationError)

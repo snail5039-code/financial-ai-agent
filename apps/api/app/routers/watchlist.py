@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
+from app.agents.analysis import news_disclosure, recent_news
 from app.db import Conn
 from app.routers.auth import UserId
 
@@ -17,6 +18,26 @@ def list_stocks(conn: Conn, user_id: UserId) -> list[dict]:
         " FROM stocks s WHERE s.is_target ORDER BY s.market DESC, s.name COLLATE \"C\"",
         (user_id,),
     ).fetchall()
+
+
+@router.get("/stocks/{stock_code}/feed")
+def stock_feed(stock_code: str, conn: Conn, user_id: UserId) -> dict:
+    """뉴스·공시 탭 (2-2, FR-40): 최근 뉴스(제목·언론사·링크, 같은 무렵 공시가 있으면 함께)와 최근 30일 공시.
+    뉴스는 30분 안에 받은 적이 없으면 새로 받는다. 기사 본문은 없다"""
+    stock = conn.execute("SELECT code, name FROM stocks WHERE code = %s AND is_target", (stock_code,)).fetchone()
+    if stock is None:
+        raise HTTPException(404, "분석 대상 종목이 아니에요")
+    ids = recent_news(conn, stock_code, stock["name"])
+    conn.commit()  # 새로 받은 뉴스 저장
+    news = conn.execute(
+        "SELECT id, title, press, url, published_at FROM news WHERE id = ANY(%s) ORDER BY published_at DESC",
+        ([int(i.split(":")[1]) for i in ids],)).fetchall()
+    for item in news:
+        item["disclosure"] = news_disclosure(conn, stock_code, item["published_at"])
+    disclosures = conn.execute(
+        "SELECT rcept_no, title, url, filed_at FROM disclosures WHERE stock_code = %s AND filed_at >= current_date - 30"
+        " ORDER BY filed_at DESC, rcept_no DESC LIMIT 30", (stock_code,)).fetchall()
+    return {"stock_code": stock_code, "stock_name": stock["name"], "news": news, "disclosures": disclosures}
 
 
 @router.get("/watchlist")

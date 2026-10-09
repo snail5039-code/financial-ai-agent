@@ -28,6 +28,7 @@ from app.agents.query import latest_close, latest_snapshot
 from app.agents.state import new_request
 from app.clock import KST
 from app.db import connect, jsonb
+from app.notify import notify
 from app.functions.orders import KRX_HOLIDAYS, WORST_CASE_DROP_PCT
 from app.functions.suitability import buy_block_reason, stock_risk_grade
 from app.routers.orders import today as today_summary
@@ -105,6 +106,11 @@ def save_briefing(database_url: str, user_id: str, day, kind: str, content: dict
             " ON CONFLICT (user_id, brief_date, kind) DO UPDATE SET content = EXCLUDED.content, created_at = now()",
             (user_id, day, kind, jsonb(content)),
         )
+        if kind == "morning":
+            picks = len(content.get("picks") or [])
+            notify(conn, user_id, "briefing", "아침 브리핑", f"오늘의 매수 제안 {picks}개가 왔어요" if picks else "오늘 브리핑이 왔어요")
+        elif kind == "close":
+            notify(conn, user_id, "close", "장 마감 요약", f"{day:%m월 %d일} 장 마감 요약이 왔어요")
 
 
 def build_briefing(database_url: str, user_id: str, now: datetime | None = None) -> dict:
