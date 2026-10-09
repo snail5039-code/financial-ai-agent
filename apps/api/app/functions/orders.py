@@ -23,6 +23,10 @@ FREQUENT_TRADE_DAYS, FREQUENT_TRADE_COUNT = 7, 2    # 7일 안에 같은 종목�
 HOT_RANK = 0.9                                     # 최근 5거래일 상승률이 분석 대상 중 상위 10%면 "급등"
 CONCENTRATION_SHARE = Decimal("0.8")               # 주문 후 비중이 한도의 80%를 넘으면 분산 안내
 
+# 3-5 계좌 크기 비례 한도: 매수 1회 금액은 정해 둔 한도와 별도로 계좌 평가액의 이 비율(%)을 넘지 못한다 (성향 단계별).
+# 계좌가 작으면 고정 한도(예: 200만 원)가 계좌의 너무 큰 몫이 되는 것을 막는다. 일반 모드(퀴즈 안 함)는 1단계로 본다
+ACCOUNT_ORDER_PCT = {1: 10, 2: 15, 3: 20, 4: 25, 5: 30}
+
 
 # 오늘 매수한 금액 (docs/plan/07-database.md 4장). 1일 한도 검사와 홈의 "오늘 한도" 링이 같이 쓴다. SUM은 numeric이라 int로
 # 매도는 1일 한도에 넣지 않는다: 위험을 줄이는 주문이고, 한도 때문에 못 팔면 오히려 위험을 떠안는다 (2026-10-08 사용자 결정)
@@ -88,7 +92,8 @@ def rule(name: str, label: str, limit, actual, ok: bool) -> dict:
 
 def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_krw: int,
                  snapshot: dict | None, closes: dict[str, int], stock_code: str, now: datetime,
-                 inputs: list[str], change: str | None = None, replacing_krw: int = 0) -> dict:
+                 inputs: list[str], change: str | None = None, replacing_krw: int = 0,
+                 account_pct: int | None = None) -> dict:
     """PolicyResult (05-schemas.md 6장): 규칙마다 통과 여부. 하나라도 걸리면 처리안 전에 막는다.
 
     change: None 새 주문 / "cancel" 미체결 주문 취소 / "modify" 가격 정정. 정정은 원래 주문 금액(replacing_krw)을 바꾸는 것이라
@@ -112,6 +117,10 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
         return {"ok": False, "rules": rules, "weight_after": None}
 
     held_qty, position_value, total_value = account_values(snapshot, stock_code, price, closes)
+    if side == "buy" and account_pct:
+        limit = total_value * account_pct // 100
+        rules.append(rule("account_share", f"1회 매수 한도 (계좌 평가액의 {account_pct}%)", limit, amount - replacing_krw,
+                          amount - replacing_krw <= limit))
     if side == "buy":
         rules.append(rule("cash", "현금", snapshot["cash_krw"], amount - replacing_krw, amount - replacing_krw <= snapshot["cash_krw"]))
     else:

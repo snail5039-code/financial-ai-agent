@@ -147,6 +147,19 @@ def test_habit_warnings() -> None:
     assert "최근 30일 동안 12건 체결" in text and "1,500원" in text
 
 
+def test_buy_limited_by_account_size() -> None:
+    # 계좌 평가액 320만 원 (현금 200만 + SK하이닉스 2주 × 20만 + 삼성전자 10주 × 8만), 매수 2주 × 20만 = 40만 원
+    def check_pct(pct, side="buy"):
+        return orders.policy_check(side, 2, 200_000, POLICY, 0, SNAPSHOT, {"005930": 80_000}, "000660", OPEN, ["snapshot"],
+                                   account_pct=pct)
+
+    small = check_pct(10)
+    assert failed(small) == ["account_share"]  # 1회 한도 100만 원 안이어도 계좌의 10%(32만)를 넘는다
+    assert next(r for r in small["rules"] if r["rule"] == "account_share")["limit"] == 320_000
+    assert check_pct(15)["ok"]  # 15%(48만)면 된다
+    assert "account_share" not in [r["rule"] for r in check_pct(10, "sell")["rules"]]  # 매도는 막지 않는다
+
+
 def test_sell_is_not_limited_by_daily_total() -> None:
     result = check(side="sell", qty=1, today=1_900_000)  # 오늘 190만 매수했어도 매도는 1일 한도와 상관없다
     assert "max_daily" not in [r["rule"] for r in result["rules"]]

@@ -202,7 +202,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     change, target = state.get("order_change"), state.get("target_order")
     result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.market_now(),
                                  ["snapshot"] if snapshot else [], change=change,
-                                 replacing_krw=target["qty"] * target["price"] if change == "modify" else 0)
+                                 replacing_krw=target["qty"] * target["price"] if change == "modify" else 0,
+                                 account_pct=orders.ACCOUNT_ORDER_PCT[state.get("risk_level") or 1])
     amount = orders.order_amount(qty, price)
     fee = orders.fee_estimate(amount, policy["fee_rate_pct"])
     tax = orders.sell_tax(amount, market) if side == "sell" else 0
