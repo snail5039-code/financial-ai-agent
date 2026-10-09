@@ -7,6 +7,7 @@ import '../../common/common.dart';
 import '../approvals/approvals_page.dart';
 import '../auto/auto_page.dart';
 import '../auto/auto_trader.dart';
+import '../auto/reservations.dart';
 import '../auth/login_page.dart';
 import '../auth/quiz_page.dart';
 import 'behavior_page.dart';
@@ -146,6 +147,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: () => Navigator.of(context).push(pageRoute(const AutoTradePage())),
                   ),
                 ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.schedule_outlined, color: brandBlue),
+                  title: const Text('예약 주문', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('가격 조건 · 분할 주문'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(pageRoute(const ReservationsPage())),
+                ),
+              ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.notifications_outlined, color: brandBlue),

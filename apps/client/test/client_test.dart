@@ -12,6 +12,7 @@ import 'package:invest_client/broker/kb_broker.dart';
 import 'package:invest_client/broker/kis_mock_broker.dart';
 import 'package:invest_client/common/common.dart';
 import 'package:invest_client/features/auto/auto_trader.dart';
+import 'package:invest_client/features/auto/reservations.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/secure/key_store.dart';
@@ -389,6 +390,17 @@ void main() {
     expect(aiSaysSell('현대건설(000720) 분석 · 검증: 반려\n제안: 매도 검토'), isFalse);
     expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 보유'), isFalse);
     expect(aiSaysSell('오늘 분석 횟수를 다 썼어요'), isFalse);
+  });
+
+  test('예약 조건: 분할은 시각, 가격은 방향대로', () {
+    final now = DateTime.utc(2026, 10, 12, 1, 0);
+    expect(reservationDue({'kind': 'split', 'due_at': '2026-10-12T09:59:00+09:00'}, now, null), isTrue);
+    expect(reservationDue({'kind': 'split', 'due_at': '2026-10-12T10:30:00+09:00'}, now, null), isFalse);
+    final below = {'kind': 'price', 'trigger_price': 100000, 'direction': 'below'};
+    expect(reservationDue(below, now, 99900), isTrue);
+    expect(reservationDue(below, now, 100100), isFalse);
+    expect(reservationDue(below, now, null), isFalse); // 현재가를 못 받으면 주문하지 않는다
+    expect(reservationDue({...below, 'direction': 'above'}, now, 100100), isTrue);
   });
 
   test('자동 매도는 1회 한도 안으로 나눈다', () {

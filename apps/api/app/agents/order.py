@@ -2,6 +2,7 @@
 
     find_stock → check_target → order_values → get_account → set_price
                               └ (정정·취소) find_order ┘
+                              order_values → (조건·분할) reserve → 예약 저장 (조건이 되면 폰이 위의 흐름으로 주문)
       → gather → invest_agent ⇄ verify_agent (가벼운 분석: 경고 위주)
       → policy ─┬─ 위반 → blocked (기록하고 막음)
                 └─ 통과 → prepare_approval → approval ─┬─ 승인 → execute ─┬─ 결과 → 기록
@@ -100,6 +101,46 @@ def find_order_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         if price == target["price"]:
             return {"answer": f"지금 주문 가격과 같아요 ({won(price)}). 정정하지 않았어요."}
     return {"target_order": target, "side": target["side"], "qty": target["qty"], "limit_price": price}
+
+
+RESERVE_DAYS = 7          # 가격 조건 예약은 7일 지나면 끝
+SPLIT_GAP = timedelta(minutes=30)  # 분할 주문 사이 간격
+MAX_SPLITS = 10
+
+
+def reserve_node(state: InvestState, runtime: Runtime[Context]) -> dict:
+    """예약·조건부(3-2)·분할(3-3) 주문: 조건만 저장한다. 조건이 되면 폰이 그때 일반 주문 흐름(투자 AI → 검증 AI → 정책 → 승인)을 돌린다."""
+    side, qty = state["side"], state["qty"]  # 시각은 DB now()로 (폰이 실제 시계로 비교하고, 만료도 DB가 본다)
+    label = f"{state['stock_name']} {SIDE_LABELS[side]}"
+    with connect(runtime.context.database_url) as conn:
+        if state.get("trigger_price"):
+            direction = state.get("trigger_direction") or ("below" if side == "buy" else "above")
+            conn.execute(
+                "INSERT INTO reservations (user_id, stock_code, side, qty, kind, trigger_price, direction, expires_at)"
+                " VALUES (%s, %s, %s, %s, 'price', %s, %s, now() + %s)",
+                (state["user_id"], state["stock_code"], side, qty, state["trigger_price"], direction,
+                 timedelta(days=RESERVE_DAYS)))
+            when = f"{won(state['trigger_price'])} {'이하로 내려오면' if direction == 'below' else '이상으로 오르면'}"
+            text = f"예약했어요: {label} {qty:,}주, 현재가가 {when} 주문해요 ({RESERVE_DAYS}일 동안)."
+        else:
+            count = state["split_count"]
+            if not 2 <= count <= min(MAX_SPLITS, qty):
+                return {"answer": f"나눠 주문하는 횟수는 2번부터 {min(MAX_SPLITS, qty)}번까지 할 수 있어요."}
+            parts = [qty // count + (1 if i < qty % count else 0) for i in range(count)]
+            group = conn.execute("SELECT gen_random_uuid()").fetchone()[0]
+            for i, part in enumerate(parts):
+                conn.execute(
+                    "INSERT INTO reservations (user_id, stock_code, side, qty, kind, due_at, group_id, expires_at)"
+                    " VALUES (%s, %s, %s, %s, 'split', now() + %s, %s, now() + %s)",
+                    (state["user_id"], state["stock_code"], side, part, SPLIT_GAP * i, group,
+                     SPLIT_GAP * i + timedelta(days=1)))
+            text = (f"예약했어요: {label} {qty:,}주를 {count}번({', '.join(f'{p:,}주' for p in parts)})에 나눠, "
+                    f"지금부터 {int(SPLIT_GAP.total_seconds() // 60)}분마다 주문해요.")
+        audit(conn, state["user_id"], "reservation_created", {"stock_code": state["stock_code"], "side": side, "qty": qty,
+                                                              "trigger_price": state.get("trigger_price"),
+                                                              "split_count": state.get("split_count")})
+    return {"answer": text + "\n조건이 되면 앱이 그때 투자 AI → 검증 AI → 한도 검사를 거쳐 처리안을 만들어요. "
+                      "앱이 켜져 있어야 하고, 장중(평일 09:05~15:20)에만 확인해요. 더보기 > 예약 주문에서 취소할 수 있어요."}
 
 
 def set_price_node(state: InvestState, runtime: Runtime[Context]) -> dict:
@@ -422,6 +463,8 @@ def route_after_target(state: InvestState) -> str:
 def route_after_values(state: InvestState) -> str:
     if state.get("answer"):
         return END
+    if state.get("trigger_price") or (state.get("split_count") or 0) > 1:
+        return "reserve"
     return "set_price" if state.get("from_analysis") else "get_account"
 
 
@@ -439,7 +482,7 @@ def build_order_graph():
     builder = StateGraph(InvestState, context_schema=Context)
     for name, node in [
         ("find_stock", find_stock_node), ("check_target", check_target_node), ("order_values", order_values_node),
-        ("find_order", find_order_node),
+        ("find_order", find_order_node), ("reserve", reserve_node),
         ("get_account", get_account_node), ("set_price", set_price_node), ("gather", gather_node),
         ("invest_agent", invest_agent_node), ("verify_agent", verify_agent_node), ("policy", policy_node),
         ("blocked", blocked_node), ("prepare_approval", prepare_approval_node), ("approval", approval_node),
@@ -451,7 +494,8 @@ def build_order_graph():
     builder.add_conditional_edges("find_stock", end_if_answered("check_target"), ["check_target", END])
     builder.add_conditional_edges("check_target", route_after_target, ["order_values", "find_order", END])
     builder.add_conditional_edges("find_order", end_if_answered("get_account"), ["get_account", END])
-    builder.add_conditional_edges("order_values", route_after_values, ["set_price", "get_account", END])
+    builder.add_conditional_edges("order_values", route_after_values, ["set_price", "get_account", "reserve", END])
+    builder.add_edge("reserve", END)
     builder.add_conditional_edges("get_account", end_if_answered("set_price"), ["set_price", END])
     builder.add_conditional_edges("set_price", route_after_price, ["policy", "gather", END])
     builder.add_edge("gather", "invest_agent")

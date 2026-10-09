@@ -752,3 +752,44 @@ def run_change(client, user, text, broker_status="accepted"):
                          "broker_order_no": "0000888"}}
     message = first(events_of(answer(client, user, execute_events, result)), "message")["text"]
     return card, execute["request"], message
+
+
+# ---------- 예약·조건부 (3-2), 분할 (3-3) ----------
+
+def reserve_understand(query: str, history: list) -> llm.Understood:
+    if "되면" in query:
+        return llm.Understood(query=query, intent="order", stock_name=NAME, side="buy", qty=4, trigger_price=90_000)
+    if "나눠" in query:
+        return llm.Understood(query=query, intent="order", stock_name=NAME, side="buy", qty=10, split_count=3)
+    return understand(query, history)
+
+
+def test_price_reservation_saved_listed_triggered_once_and_cancelled(client, custom_user, ai, migrated, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", reserve_understand)
+    headers = custom_user["headers"]
+    message = first(chat(client, custom_user, "주문전자 4주 9만원 되면 사줘"), "message")["text"]
+    assert message.startswith("예약했어요: 주문전자 매수 4주, 현재가가 90,000원 이하로 내려오면 주문해요")
+    assert ai["invest"] == []  # 예약할 때는 AI를 부르지 않는다. 조건이 되면 그때 일반 주문 흐름을 돈다
+    [item] = client.get("/api/reservations", headers=headers).json()
+    assert (item["kind"], item["side"], item["qty"], item["trigger_price"], item["direction"]) == ("price", "buy", 4, 90_000, "below")
+
+    assert client.post(f"/api/reservations/{item['id']}/trigger", headers=headers).json()["qty"] == 4
+    assert client.post(f"/api/reservations/{item['id']}/trigger", headers=headers).status_code == 409  # 두 번 주문하지 않는다
+    assert client.get("/api/reservations", headers=headers).json() == []
+    assert client.get("/api/notifications", headers=headers).json()[0]["kind"] == "reservation"
+
+    first(chat(client, custom_user, "주문전자 4주 9만원 되면 사줘"), "message")
+    [again] = client.get("/api/reservations", headers=headers).json()
+    assert client.delete(f"/api/reservations/{again['id']}", headers=headers).status_code == 204
+    assert client.post(f"/api/reservations/{again['id']}/trigger", headers=headers).status_code == 409
+    assert client.delete(f"/api/reservations/{again['id']}", headers=headers).status_code == 404
+
+
+def test_split_reservation_spreads_qty_over_time(client, custom_user, ai, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", reserve_understand)
+    message = first(chat(client, custom_user, "주문전자 10주 3번에 나눠 사줘"), "message")["text"]
+    assert "10주를 3번(4주, 3주, 3주)에 나눠" in message
+    items = client.get("/api/reservations", headers=custom_user["headers"]).json()
+    assert [i["qty"] for i in items] == [4, 3, 3] and {i["kind"] for i in items} == {"split"}
+    due = [datetime.fromisoformat(i["due_at"]) for i in items]
+    assert due[1] - due[0] == due[2] - due[1] == timedelta(minutes=30)

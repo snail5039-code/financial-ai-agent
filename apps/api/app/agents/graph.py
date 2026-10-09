@@ -49,6 +49,8 @@ def understand_node(state: InvestState) -> dict:
     return {"query": result.query, "intent": intent, "query_kind": result.query_kind, "stock_name": stock_name,
             "side": result.side, "qty": result.qty, "limit_price": result.limit_price, "user_directed": intent == "order",
             "order_change": result.order_change if intent == "order" else None, "target_order": None,
+            "trigger_price": result.trigger_price if intent == "order" else None,
+            "trigger_direction": result.trigger_direction, "split_count": result.split_count if intent == "order" else None,
             "term": result.term, "period": result.period, "history_kind": result.history_kind}
 
 

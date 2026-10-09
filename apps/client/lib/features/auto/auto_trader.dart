@@ -279,26 +279,31 @@ class AutoTrader extends ChangeNotifier {
     }
   }
 
+  /// 예약 주문(reservations.dart)도 같은 흐름·같은 자동 승인 규칙으로 주문한다. why는 기록에 붙는 말
+  Future<bool?> runOrder(String name, int qty, String side, {String why = ''}) => _order(name, qty, side, why: why);
+
   /// 한 번 주문 (사람이 채팅에 말한 것과 같은 흐름). 자동 승인해서 실행까지 갔으면 true,
   /// 처리안이 나왔지만 자동 승인하지 않았으면 false, 처리안까지 못 갔거나 실행이 실패했으면(오류) null
-  Future<bool?> _order(String name, int qty, String side) async {
+  Future<bool?> _order(String name, int qty, String side, {String why = ''}) async {
+    final tag = why.isEmpty ? '' : '[$why] ';
     final conversation = Conversation(unlock: () async => on && plan != null); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
     await conversation.send(side == 'buy' ? '$name $qty주 사줘' : '$name $qty주 팔아줘');
     final waiting = conversation.waiting;
     if (waiting?['kind'] != 'approval') {
-      await _note('$name $qty주: ${_last(conversation)}');
+      await _note('$tag$name $qty주: ${_last(conversation)}');
       return null;
     }
     final card = waiting!['card'] as Map<String, dynamic>;
     final confirm = (card['confirm_required'] as List).cast<String>();
-    if (!on || confirm.isNotEmpty || !const {'approve', 'conditional'}.contains(card['verdict'])) {
-      await _note('$name $qty주: 자동으로 승인하지 않았어요 (${confirm.isNotEmpty ? confirm.join(' ') : '검증 ${card['verdict']}'}). '
-          '처리안 모아보기에서 직접 판단해 주세요');
+    if (!on || plan == null || confirm.isNotEmpty || !const {'approve', 'conditional'}.contains(card['verdict'])) {
+      final reason = !on || plan == null ? '자동매매가 꺼져 있거나 오늘 계획을 승인하지 않았어요'
+          : confirm.isNotEmpty ? confirm.join(' ') : '검증 ${card['verdict']}';
+      await _note('$tag$name $qty주: 자동으로 승인하지 않았어요 ($reason). 처리안 모아보기에서 직접 판단해 주세요');
       return false;
     }
     await conversation.answer({'decision': 'approve'});
     final result = _last(conversation);
-    await _note('$name $qty주 자동 ${side == 'buy' ? '매수' : '매도'}: $result');
+    await _note('$tag$name $qty주 자동 ${side == 'buy' ? '매수' : '매도'}: $result');
     // 실행 실패는 처리안을 다 쓴 것이라 다시 시도해도 중복 주문이 남지 않는다
     return result.contains('실패') ? null : !result.contains('않았어요');
   }

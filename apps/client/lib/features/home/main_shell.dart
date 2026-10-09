@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../common/common.dart';
 import '../auto/auto_page.dart';
 import '../auto/auto_trader.dart';
+import '../auto/reservations.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
 import '../history/history_page.dart';
@@ -31,6 +32,7 @@ class _MainShellState extends State<MainShell> {
     super.initState();
     if (!kIsWeb) autoTrader.load().then((_) => autoTrader.start()).then((_) => _askPlan()); // 모의투자 자동매매
     registerPush(); // 폰 푸시 알림 (Firebase 설정 전이면 조용히 넘어간다)
+    if (!kIsWeb) reservationWatcher.start(); // 예약·분할 주문 조건 확인 (장중 1분마다)
   }
 
   /// 자동매매가 켜져 있는데 오늘 계획을 승인하지 않았으면 앱을 열 때 묻는다

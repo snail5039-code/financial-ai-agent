@@ -84,6 +84,11 @@ class Understood(BaseModel):
         default=None, description="order·history일 때만. 사줘·샀어 → buy, 팔아·팔았어 → sell. 말하지 않았으면 null")
     qty: int | None = Field(default=None, description="order일 때 사용자가 말한 주식 수. 말하지 않았으면 null")
     limit_price: int | None = Field(default=None, description="order일 때 사용자가 말한 1주 가격(원). 없으면 null")
+    trigger_price: int | None = Field(
+        default=None, description="order일 때만. '10만원 되면', '9만원 아래로 떨어지면', '12만원 넘으면'처럼 조건 가격(원). 없으면 null")
+    trigger_direction: Literal["below", "above"] | None = Field(
+        default=None, description="trigger_price가 있을 때: 내려오면·떨어지면·이하 → below, 오르면·넘으면·이상 → above. 말하지 않았으면 null")
+    split_count: int | None = Field(default=None, description="order일 때만. '3번에 나눠'처럼 나눠 살·팔 횟수. 없으면 null")
     order_change: Literal["cancel", "modify"] | None = Field(
         default=None, description="order일 때만. 이미 낸 주문을 취소 → cancel, 가격을 바꿔 정정 → modify. 새 주문이면 null")
     term: str | None = Field(default=None, description="explain일 때만. 뜻을 묻는 용어 그대로 (예: PER, 공매도)")
@@ -112,6 +117,8 @@ UNDERSTAND_PROMPT = """너는 주식 앱의 요청 분석기다.
 4. order면 side, qty, limit_price를 사용자가 말한 대로만 채워라. "4주" → qty 4, "7만원에" → limit_price 70000.
    금액으로 말했거나("100만원어치") 말하지 않은 값은 null로 둔다. 추측하지 마라.
    이미 낸 주문을 취소하라면 order_change=cancel, 가격을 바꾸라면 order_change=modify와 바꿀 가격(limit_price)을 채워라.
+   "10만원 되면 사줘"처럼 조건이 있으면 trigger_price(와 trigger_direction), "3번에 나눠 사줘"면 split_count를 채워라.
+   조건 가격은 limit_price에 넣지 마라.
 
 최근 대화:
 {history}"""
