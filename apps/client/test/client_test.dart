@@ -409,6 +409,25 @@ void main() {
     expect(reservationDue({...below, 'direction': 'above'}, now, 100100), isTrue);
   });
 
+  test('실전 모드: 처리안 모드와 증권사가 맞을 때만 실행하고, KB 실전 주문은 준비 전이라 켤 수 없다', () async {
+    final keys = BrokerKeys(appKey: 'a', appSecret: 'b', account: '12345678');
+    final kb = KbBroker(keys, box: SecureBox.memory());
+    final mock = KisMockBroker(keys, box: SecureBox.memory());
+    expect(kb.isReal && !kb.realOrdersReady, isTrue);
+    expect(modeMismatch(mock, 'mock', false), isNull);
+    expect(modeMismatch(mock, 'real', true), contains('실전 주문을 낼 수 있는 증권사'));
+    expect(modeMismatch(kb, 'real', false), contains('실전 모드가 꺼져'));
+    expect(modeMismatch(kb, 'mock', false), contains('실전 계좌가 연결돼'));
+    final result = await executeOrder(kb, {...order('buy', 1, 113300), 'mode': 'real'},
+        unlock: () async => true, journal: OrderJournal(SecureBox.memory()));
+    expect(result['status'], 'failed'); // 실전 모드가 꺼져 있으면 실전 처리안을 실행하지 않는다
+    expect(AutoTrader.allowed(kb), isFalse);
+    realMode.value = true;
+    expect(AutoTrader.budgets, autoRealBudgets);
+    expect(AutoTrader.allowed(kb), isFalse); // 실전 모드여도 실전 주문 준비가 안 된 증권사는 자동매매 불가
+    realMode.value = false;
+  });
+
   test('자동 매도는 1회 한도 안으로 나눈다', () {
     expect(splitQty(22, 106800, 1940000), [18, 4]); // 18주 = 1,922,400원
     expect(splitQty(93, 24800, 1940000), [78, 15]);

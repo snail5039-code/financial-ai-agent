@@ -36,6 +36,11 @@ class KbBroker implements Broker {
   String get name => 'KB증권';
   @override
   bool get isFake => false;
+  @override
+  bool get isReal => true;
+  /// KB 주문 명세가 공개 예제에 아직 없어(2026-10-09 미확인) 주문을 만들지 않았다. 명세를 확인해 order·revise를 만들면 true
+  @override
+  bool get realOrdersReady => false;
 
   Future<String> _accessToken() async {
     final now = DateTime.now();

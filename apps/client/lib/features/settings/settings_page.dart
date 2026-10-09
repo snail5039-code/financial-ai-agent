@@ -13,6 +13,7 @@ import '../auth/quiz_page.dart';
 import 'behavior_page.dart';
 import 'broker_page.dart';
 import 'notifications_page.dart';
+import 'safety_page.dart';
 import '../../broker/broker.dart';
 import 'package:flutter/foundation.dart';
 
@@ -128,6 +129,19 @@ class _SettingsPageState extends State<SettingsPage> {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             final (profile, policy) = snapshot.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
+              if (!kIsWeb) ...[
+                const EmergencyStopButton(),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.account_balance_outlined, color: Color(0xFFC62828)),
+                    title: const Text('실전 모드', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: ValueListenableBuilder(valueListenable: realMode, builder: (_, real, _) => Text(real ? '켜짐 (실제 돈)' : '꺼짐 (모의투자)')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(pageRoute(const RealModePage())),
+                  ),
+                ),
+              ],
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.fact_check_outlined, color: brandBlue),

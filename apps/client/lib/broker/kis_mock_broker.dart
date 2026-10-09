@@ -37,6 +37,10 @@ class KisMockBroker implements Broker {
   String get name => 'KIS 모의투자';
   @override
   bool get isFake => false;
+  @override
+  bool get isReal => false;
+  @override
+  bool get realOrdersReady => false;
 
   // ---------- 접속 토큰 ----------
   // 토큰은 하루 동안 쓸 수 있고 발급은 1분에 한 번만 된다. 그래서 폰 보안 저장소에 두고 다시 쓴다

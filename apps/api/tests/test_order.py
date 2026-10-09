@@ -126,7 +126,7 @@ def test_order_flow_to_execution_and_record(client, custom_user, ai, migrated) -
     assert execute["kind"] == "execute"
     assert execute["request"] == {"approval_id": approval["approval_id"], "stock_code": CODE, "side": "buy", "qty": 4,
                                   "limit_price": PRICE, "approved_price": PRICE, "max_price_drift_pct": 1,
-                                  "idempotency_key": approval["approval_id"]}
+                                  "idempotency_key": approval["approval_id"], "mode": "mock"}
 
     done = events_of(answer(client, user, execute_events, filled(execute)))
     assert "주문이 체결됐어요 (모의투자)" in first(done, "message")["text"]
@@ -836,3 +836,45 @@ def test_partial_cancel_and_choosing_among_open_orders(client, custom_user, ai, 
     rows = db(migrated, "SELECT o.kind, o.status, o.qty FROM orders o JOIN approvals a ON a.id = o.approval_id"
                         " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s ORDER BY o.created_at", custom_user["id"])
     assert rows == [("new", "accepted", 2), ("new", "accepted", 4), ("cancel", "accepted", 2)]  # 원래 주문은 2주가 남는다
+
+
+# ---------- 4단계: 실전 모드·안전장치 ----------
+
+def test_real_mode_order_needs_confirmations_and_records_real(client, custom_user, ai, migrated) -> None:
+    body = {"text": "주문전자 15주 사줘", "client": "app", "mode": "real"}
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
+    approval_events = events_of(answer(client, custom_user, events, balance(cash=20_000_000)))
+    card = first(approval_events, "interrupt")["card"]
+    assert (card["mode"], card["broker"]) == ("real", "kb")
+    assert any("실전 주문이에요" in c for c in card["confirm_required"])
+    assert any("고액 실전 주문" in c for c in card["confirm_required"])  # 15주 × 10만 = 150만 원 ≥ 100만
+    execute_events = events_of(answer(client, custom_user, approval_events, {"decision": "approve", "confirm_risk": True}))
+    execute = first(execute_events, "interrupt")
+    assert execute["request"]["mode"] == "real"  # 폰은 실전 모드·실전 증권사일 때만 실행한다
+    events_of(answer(client, custom_user, execute_events, filled(execute, qty=15)))
+    assert db(migrated, "SELECT o.broker, o.mode FROM orders o JOIN approvals a ON a.id = o.approval_id"
+                        " JOIN proposals p ON p.id = a.proposal_id WHERE p.user_id = %s", custom_user["id"]) == [("kb", "real")]
+
+
+def test_real_auto_order_over_small_limit_is_not_auto_approved(client, custom_user, ai) -> None:
+    body = {"text": "주문전자 4주 사줘", "client": "app", "mode": "real", "origin": "auto"}
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
+    card = first(events_of(answer(client, custom_user, events, balance())), "interrupt")["card"]
+    assert any("300,000원까지만 자동으로 승인" in c for c in card["confirm_required"])  # 40만 원 > 30만 원
+
+
+def test_emergency_stop_cancels_reservations_and_pending_approvals(client, custom_user, ai, monkeypatch) -> None:
+    monkeypatch.setattr(llm, "understand", reserve_understand)
+    headers = custom_user["headers"]
+    chat(client, custom_user, "주문전자 4주 9만원 되면 사줘")
+    monkeypatch.setattr(llm, "understand", understand)
+    to_approval(client, custom_user)  # 승인 대기 처리안 1건
+    assert client.post("/api/emergency-stop", headers=headers).json() == {"cancelled_reservations": 1, "rejected_approvals": 1}
+    assert client.get("/api/reservations", headers=headers).json() == []
+    assert client.get("/api/notifications", headers=headers).json()[0]["kind"] == "emergency_stop"
+
+
+def test_real_readiness_needs_quiz_and_mock_history(client, custom_user, ai) -> None:
+    ready = client.get("/api/real-readiness", headers=custom_user["headers"]).json()
+    assert ready["ok"] is False and ready["checks"][0]["ok"] is True  # 퀴즈는 했고, 모의투자 기록이 아직 없다
+    assert [c["ok"] for c in ready["checks"][1:]] == [False, False]

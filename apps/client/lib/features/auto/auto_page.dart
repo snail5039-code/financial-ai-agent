@@ -85,8 +85,8 @@ class _AutoTradePageState extends State<AutoTradePage> {
           Row(children: [
             const Expanded(child: Text('오늘 살 총액')),
             DropdownButton<int>(
-              value: autoBudgets.contains(budget) ? budget : autoBudgets[1],
-              items: [for (final v in autoBudgets) DropdownMenuItem(value: v, child: Text(v == 0 ? '사지 않음' : won(v)))],
+              value: AutoTrader.budgets.contains(budget) ? budget : AutoTrader.budgets[1],
+              items: [for (final v in AutoTrader.budgets) DropdownMenuItem(value: v, child: Text(v == 0 ? '사지 않음' : won(v)))],
               onChanged: (v) => setState(() => _budget = v),
             ),
           ]),

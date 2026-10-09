@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/api.dart';
+import '../broker/broker.dart';
 
 /// 천 단위 콤마 (1250000 → 1,250,000)
 String comma(num value) {
@@ -121,7 +122,10 @@ AppBar topBar(String title, {List<Widget> actions = const [], Widget? avatar, St
           builder: (_, mode, _) => mode == 'general' ? const Tag('일반 모드', Colors.blueGrey) : const SizedBox(),
         ),
         const SizedBox(width: 6),
-        const Tag('모의투자', Color(0xFFB07800)),
+        ValueListenableBuilder(
+          valueListenable: realMode,
+          builder: (_, real, _) => real ? const Tag('실전투자', Color(0xFFC62828)) : const Tag('모의투자', Color(0xFFB07800)),
+        ),
         const SizedBox(width: 8),
         ...actions,
       ],

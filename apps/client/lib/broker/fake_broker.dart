@@ -49,6 +49,10 @@ class FakeBroker implements Broker {
   String get name => fakeBrokerName;
   @override
   bool get isFake => true;
+  @override
+  bool get isReal => false;
+  @override
+  bool get realOrdersReady => false;
 
   String nameOf(String code) => _prices[code]?.$1 ?? code;
   int? priceOf(String code) => _prices[code]?.$2;

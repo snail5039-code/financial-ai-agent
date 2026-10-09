@@ -52,6 +52,7 @@ class Conversation extends ChangeNotifier {
       'thread_id': threadId, 'text': text, 'client': clientKind,
       if (threadId == null && stockCode != null) 'stock_code': stockCode,
       if (auto) 'origin': 'auto',
+      if (realMode.value) 'mode': 'real',
     }));
   }
 

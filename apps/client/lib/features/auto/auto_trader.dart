@@ -27,6 +27,9 @@ import '../../common/common.dart';
 const autoMaxPerDay = 3; // 하루에 자동으로 사는 종목 수 (아침 브리핑 후보도 최대 3개)
 const autoMaxTries = 3; // 처리안까지 못 간 오류(서버·통신)는 종목마다 하루 이만큼 다시 시도한다
 const autoBudgets = [0, 1000000, 3000000, 5000000]; // 0 = 오늘은 사지 않음
+// 4-3 실전 자동매매 (사용자 결정: 앱이 켜져 있을 때만 소액). 하루 총액과 1건 금액을 모의보다 작게 (서버 REAL_AUTO_MAX와 같은 30만 원)
+const autoRealBudgets = [0, 100000, 300000, 500000];
+const autoRealMaxOrder = 300000;
 const autoDropPct = 3; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 매도 판단을 묻는다
 const autoReviewGap = Duration(minutes: 30);
 const autoMaxReviews = 3; // 종목마다 하루에 묻는 횟수
@@ -62,8 +65,11 @@ class AutoTrader extends ChangeNotifier {
   Timer? _timer;
   DateTime? _lastWatch;
 
-  /// 모의투자일 때만 켤 수 있다. 실전 증권사(KB 등)는 안 된다
-  static bool allowed(Broker? broker) => broker != null && (broker.isFake || broker is KisMockBroker);
+  /// 모의투자이거나, 실전 모드를 켰고 실전 주문 준비가 된 증권사일 때 켤 수 있다 (4-3)
+  static bool allowed(Broker? broker) =>
+      broker != null && (broker.isFake || broker is KisMockBroker || (realMode.value && broker.isReal && broker.realOrdersReady));
+
+  static List<int> get budgets => realMode.value ? autoRealBudgets : autoBudgets;
 
   DateTime get _kst => _now().toUtc().add(const Duration(hours: 9));
   String get _today => _kst.toIso8601String().substring(0, 10);
@@ -150,7 +156,16 @@ class AutoTrader extends ChangeNotifier {
   }
 
   /// 1회 한도보다 조금 작게 (전날 종가로 수량을 정하므로 오늘 값이 오르면 한도를 넘을 수 있어서)
-  Future<int> _maxOrder() async => ((await api.get('/api/policy') as Map)['max_order_krw'] as int) * 97 ~/ 100;
+  Future<int> _maxOrder() async {
+    final policy = ((await api.get('/api/policy') as Map)['max_order_krw'] as int) * 97 ~/ 100;
+    return realMode.value && policy > autoRealMaxOrder ? autoRealMaxOrder : policy; // 실전 자동 주문은 1건 30만 원까지
+  }
+
+  /// 긴급 중단: 자동매매를 끄고 오늘 계획을 거둔다 (서버의 예약·승인 대기는 safety_page가 함께 정리)
+  Future<void> stopAll() async {
+    if (plan != null) await cancelPlan();
+    if (on) await setOn(false);
+  }
 
   Future<void> _buy(int budget) async {
     if (budget <= 0) return;

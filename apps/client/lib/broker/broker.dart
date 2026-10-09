@@ -28,6 +28,12 @@ abstract class Broker {
   String get name;
   bool get isFake; // 가짜 증권사는 폰 잠금 확인을 하지 않는다 (개발용)
 
+  /// 실제 돈 계좌에 연결된 증권사 (KB증권). 실전 모드에서만 주문하고, 모의 모드에서는 주문하지 않는다 (4-1)
+  bool get isReal;
+
+  /// 이 증권사로 실전 주문을 낼 준비가 됐는지 (주문 명세 확인·구현). 아니면 실전 모드를 켤 수 없다
+  bool get realOrdersReady;
+
   /// 서버로 보내는 잔고 형식 (계좌번호 없음)
   Future<Map<String, dynamic>> balance();
   Future<int> price(String stockCode);
@@ -55,6 +61,9 @@ abstract class Broker {
 
 /// 지금 고른 증권사. 웹이나 연결 전이면 null
 final currentBroker = ValueNotifier<Broker?>(null);
+
+/// 4-1 실전 모드 (실제 돈). 사용자가 설정 > 실전 모드에서 조건을 확인하고 직접 켠다. 켜져 있는 동안 모든 화면에 빨간 "실전투자"
+final realMode = ValueNotifier<bool>(false);
 
 /// 주문 전 폰 잠금 확인 (생체인증 또는 PIN, NFR-04). 잠금이 설정되지 않은 폰이면 false
 Future<bool> phoneUnlock() async {
@@ -118,6 +127,18 @@ class OrderJournal {
 
 final orderJournal = OrderJournal(secureBox);
 
+/// 처리안 모드와 증권사·실전 모드가 맞지 않으면 이유, 맞으면 null
+String? modeMismatch(Broker? broker, String mode, bool realOn) {
+  if (broker == null) return null; // 아래에서 "증권사가 연결되지 않아"로 실패한다
+  if (mode == 'real') {
+    if (!realOn) return '실전 모드가 꺼져 있어 실전 처리안을 실행하지 않았어요';
+    if (!broker.isReal || !broker.realOrdersReady) return '실전 주문을 낼 수 있는 증권사가 연결되지 않아 실행하지 않았어요';
+  } else if (broker.isReal) {
+    return '실전 계좌가 연결돼 있어 모의투자 처리안을 실행하지 않았어요';
+  }
+  return null;
+}
+
 /// execute 멈춤의 답: 가격 재확인 → 폰 잠금 확인 → 주문 → (불확실하면) 주문 내역 확인
 Future<Map<String, dynamic>> executeOrder(
   Broker? broker,
@@ -127,6 +148,9 @@ Future<Map<String, dynamic>> executeOrder(
   DateTime Function() now = DateTime.now,
 }) async {
   final key = request['idempotency_key'] as String;
+  // 4-1: 처리안의 모드와 지금 증권사·실전 모드가 맞을 때만 주문한다 (실전 키로 모의 처리안을, 모의 키로 실전 처리안을 실행하지 않게)
+  final mismatch = modeMismatch(broker, request['mode'] as String? ?? 'mock', realMode.value);
+  if (mismatch != null) return {'idempotency_key': key, 'status': 'failed', 'message': mismatch};
   if (request['order_change'] != null) return _revise(broker, request, unlock: unlock, journal: journal);
   final code = request['stock_code'] as String;
   final side = request['side'] as String;

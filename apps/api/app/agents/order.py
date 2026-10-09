@@ -46,7 +46,12 @@ RESULT_LABELS = {
     "accepted": "주문이 접수됐어요", "filled": "주문이 체결됐어요", "partially_filled": "주문이 일부 체결됐어요",
     "failed": "주문이 실패했어요", "unknown_checked": "응답이 불확실해 주문 내역을 확인했어요",
 }
-BROKER, MODE = "kis_mock", "mock"  # MVP는 KIS 모의투자만 (실전은 로드맵 4단계에서)
+MODE_LABELS = {"mock": "모의투자", "real": "실전투자"}
+BROKERS = {"mock": "kis_mock", "real": "kb"}  # 모의는 KIS 모의투자, 실전은 KB증권 (4-1, 2026-10-09 사용자 결정)
+
+
+def mode_of(state) -> str:
+    return "real" if state.get("real_mode") else "mock"
 
 
 def parse_qty(text: str) -> int | None:
@@ -240,6 +245,12 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         confirm.append(f"투자 AI가 지금은 {SIDE_LABELS[side]}하지 말고 관찰하자고 했어요 (자동매매 주문).")
     if verification["verdict"] in ("reject", "user_judgement"):
         confirm.append(f"검증 AI 판정이 '{VERDICT_LABELS[verification['verdict']]}'이에요: {verification['summary']}")
+    if state.get("real_mode"):  # 4-2 실전 안전장치
+        confirm.append("실전 주문이에요. 실제 돈이 나가고 손실이 날 수 있어요.")
+        if amount >= orders.REAL_HIGH_AMOUNT:
+            confirm.append(f"고액 실전 주문이에요 ({won(amount)}). 금액을 한 번 더 확인해 주세요.")
+        if state.get("auto_origin") and amount > orders.REAL_AUTO_MAX:
+            confirm.append(f"실전 자동 주문은 {won(orders.REAL_AUTO_MAX)}까지만 자동으로 승인해요.")
     # 퀴즈 답이든 실제 습관이든 급등주를 바로 사는 편이면 급등 매수 때 한 번 더 확인한다
     if orders.needs_hot_confirm(warnings, bool({"chases_hot_stocks", "hot_buys"} & set(state["flags"]))):
         confirm.append("급등 직후 매수예요. 한 번 더 생각해 보셨나요?")
@@ -255,7 +266,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "counter_arguments": [with_titles(x, state["sources"]) for x in state["proposal"]["counter_arguments"]],
         "risks": [with_titles(x, state["sources"]) for x in state["proposal"]["risks"]],
         "policy": result["rules"], "warnings": warnings, "confirm_required": confirm,
-        "broker": BROKER, "mode": MODE, "user_directed": state["user_directed"],
+        "broker": BROKERS[mode_of(state)], "mode": mode_of(state), "user_directed": state["user_directed"],
         "order_change": change, "original_order_no": target and target["broker_order_no"],
         "original_price": target and target["price"],
     }
@@ -333,13 +344,13 @@ def format_card(card: dict) -> str:
     if change:
         what = (f"지정가 {won(card['original_price'])} → {won(card['limit_price'])}" if change == "modify"
                 else f"지정가 {won(card['limit_price'])}")
-        lines = [f"[처리안 · 모의투자] {card['stock_name']}({card['stock_code']}) {side} 주문 {CHANGE_LABELS[change]}"
+        lines = [f"[처리안 · {MODE_LABELS[card['mode']]}] {card['stock_name']}({card['stock_code']}) {side} 주문 {CHANGE_LABELS[change]}"
                  f" · 미체결 {card['qty']:,}주 · {what} (주문번호 {card['original_order_no']})"]
         if change == "modify":
             lines.append(f"정정 후 금액 {won(card['amount'])} · 수수료 추정 {fee}")
     else:
         lines = [
-            f"[처리안 · 모의투자] {card['stock_name']}({card['stock_code']}) {card['qty']:,}주 {side} · 지정가 {won(card['limit_price'])}",
+            f"[처리안 · {MODE_LABELS[card['mode']]}] {card['stock_name']}({card['stock_code']}) {card['qty']:,}주 {side} · 지정가 {won(card['limit_price'])}",
             f"예상 금액 {won(card['amount'])} · 수수료 추정 {fee}" + (f" · 세금 {won(card['tax'])}" if card["side"] == "sell" else ""),
         ]
     if card["weight_after"] is not None:
@@ -416,7 +427,7 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     request = {
         "approval_id": state["approval_id"], "stock_code": state["stock_code"], "side": state["side"],
         "qty": state["qty"], "limit_price": state["limit_price"], "approved_price": state["limit_price"],
-        "max_price_drift_pct": orders.MAX_PRICE_DRIFT_PCT, "idempotency_key": state["approval_id"],
+        "max_price_drift_pct": orders.MAX_PRICE_DRIFT_PCT, "idempotency_key": state["approval_id"], "mode": mode_of(state),
         **({"order_change": state["order_change"], "original_order_no": state["target_order"]["broker_order_no"],
             "all_qty": state["qty"] == state["target_order"]["qty"]} if state.get("order_change") else {}),
     }
@@ -431,7 +442,7 @@ def execute_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             " filled_qty, filled_price, message, kind, original_order_id)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (idempotency_key) DO NOTHING",
-            (state["approval_id"], result["idempotency_key"], BROKER, MODE, state["side"], state["qty"],
+            (state["approval_id"], result["idempotency_key"], BROKERS[mode_of(state)], mode_of(state), state["side"], state["qty"],
              state["limit_price"], result.get("broker_order_no"), result["status"], result.get("filled_qty", 0),
              result.get("filled_price"), result.get("message"), state.get("order_change") or "new",
              state["target_order"]["id"] if state.get("target_order") else None),
@@ -453,7 +464,7 @@ def route_after_execute(state: InvestState) -> str:
 def format_result(state: InvestState, result: dict) -> str:
     change = state.get("order_change")
     head = (f"{CHANGE_LABELS[change]} {'요청이 접수됐어요' if result['status'] == 'accepted' else RESULT_LABELS[result['status']]}"
-            if change else RESULT_LABELS[result["status"]]) + " (모의투자)"
+            if change else RESULT_LABELS[result["status"]]) + f" ({MODE_LABELS[mode_of(state)]})"
     order = f"{state['stock_name']} {state['qty']:,}주 {SIDE_LABELS[state['side']]} · 지정가 {won(state['limit_price'])}"
     if change:
         order += f" {CHANGE_LABELS[change]} (원래 주문번호 {state['target_order']['broker_order_no']})"

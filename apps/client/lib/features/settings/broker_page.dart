@@ -8,6 +8,7 @@ import '../../broker/fake_broker.dart';
 import '../../broker/kis_mock_broker.dart';
 import '../../common/common.dart';
 import '../../secure/key_store.dart';
+import 'safety_page.dart';
 
 /// 저장된 선택으로 증권사를 정한다 (앱을 켤 때). 디버그 빌드는 아무것도 연결 안 했으면 가짜 증권사를 쓴다
 Future<void> loadBroker() async {
@@ -20,6 +21,7 @@ Future<void> loadBroker() async {
     'fake' when kDebugMode => FakeBroker(),
     _ => null,
   };
+  await loadRealMode(); // 실전 주문 준비가 안 된 증권사면 실전 모드를 끈다
 }
 
 // 개발용 모의 키: apps/client/dev_keys.json (git 제외)을 --dart-define-from-file로 넘기면 디버그 빌드에서만 쓴다.
