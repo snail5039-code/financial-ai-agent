@@ -6,14 +6,16 @@
 """
 
 import json
+import os
 from pathlib import Path
 
 import torch
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
-ADAPTER = ROOT / "out" / "adapter"
-BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+# 원본 모델은 BASE_MODEL 환경변수로 바꾼다 (예: Qwen/Qwen2.5-1.5B-Instruct). 어댑터는 모델마다 따로 저장
+BASE_MODEL = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")  # 0.5B보다 test +5%p, hard +23%p
+ADAPTER = ROOT / "out" / BASE_MODEL.split("/")[-1]
 
 LABELS = {
     "none": "위험 신호 없음. 평범한 질문·분석 요청·주문, 투자와 상관없는 말",

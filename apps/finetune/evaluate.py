@@ -14,9 +14,10 @@ from datetime import date
 
 import torch
 
-from common import DATA, LABELS, ROOT, classify, load, read
+from common import BASE_MODEL, DATA, LABELS, ROOT, classify, load, read
 
-REPORT = ROOT.parents[1] / "docs" / "reports" / f"signal-finetune-{date.today():%Y%m%d}.md"
+SIZE = BASE_MODEL.split("-")[-2]  # 0.5B, 1.5B
+REPORT = ROOT.parents[1] / "docs" / "reports" / f"signal-finetune-{SIZE}-{date.today():%Y%m%d}.md"
 METHODS = ["키워드 규칙", "Gemini 프롬프트", "학습 전 모델", "학습 후 모델(LoRA)"]
 
 
@@ -68,7 +69,7 @@ def main() -> None:
              f"- 학습: Gemini가 만든 가상 문장 {len(read(DATA / 'train.jsonl'))}개 (말투 8가지), 검증 {len(read(DATA / 'val.jsonl'))}개",
              f"- 시험 test: 학습에 안 쓴 말투 2가지로 만든 {len(sets['test'])}개. 생성 의도와 다시 확인한 라벨이 다른 문장은 Claude가 직접 정했다",
              f"- 시험 hard: Claude가 직접 쓴 헷갈리는 문장 {len(sets['hard'])}개",
-             "- 학습 모델: Qwen2.5-0.5B-Instruct + LoRA (r=16, 3에폭, RTX 5060 Ti). 라벨 6개의 확률을 비교해 하나를 고른다",
+             f"- 학습 모델: {BASE_MODEL} + LoRA (r=16, 3에폭, RTX 5060 Ti). 라벨 6개의 확률을 비교해 하나를 고른다",
              "- 놓침: 실제 위험 신호를 '없음'으로 본 비율 (낮을수록 좋다, 이 앱에서 가장 중요). 오경보: 신호 없는 문장에 경고한 비율", ""]
     for name in sets:
         gold = [r["label"] for r in sets[name]]
