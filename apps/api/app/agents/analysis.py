@@ -30,7 +30,7 @@ from app.db import connect
 from app.functions import metrics
 from app.functions.profile import LABELS
 from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk
-from app import config
+from app import config, signals
 from app.integrations import google_news
 from app.integrations.opendart import disclosure_url
 
@@ -502,6 +502,10 @@ def invest_context(state: InvestState) -> str:
     elif state.get("user_directed"):
         parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
                      "행동은 지시대로 쓰고, 이 주문의 근거와 함께 반대 근거·위험을 경고 위주로 쓴다 (FR-21).")
+    if signal := state.get("conversation_signal"):
+        if signal in signals.WARNINGS:  # 투자 AI에게만 준다. 검증 AI는 원문으로 따로 본다
+            parts.append(f"[대화 신호] {signals.WARNINGS[signal]} 이 위험을 위험(risks)에 쓰고, "
+                         "매수를 고르려 했다면 관찰(watch)이 더 맞는지 따져 근거에 쓴다.")
     if state.get("verifications"):
         last = state["verifications"][-1]
         parts.append("[검증 AI 반박] 아래를 고쳐 다시 써라\n" + "\n".join(f"- {c}" for c in last["challenges"]))
@@ -633,6 +637,8 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         if state.get("user_directed") else allowed_actions(*profile, holds, rank),
         "buy_block_reason": buy_block_reason(*profile, rank),
         "verifications": [], "revision_round": 0,
+        # 5-4 대화 속 성향 신호 (모델이 꺼져 있으면 None). 사람이 쓴 말만 본다
+        "conversation_signal": None if state.get("auto_origin") else signals.model_signal(state["query"]),
     }
 
 

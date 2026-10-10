@@ -438,6 +438,21 @@ def report() -> None:
               "- '막음' = 반려 또는 사용자 판단. 조건부 승인은 통과로 센다 (엄격한 기준)",
               f"- **막음 {len(caught)}/{len(injected)}** · 코드 검사로는 못 잡는 오류 {len(ai_alone)}개 중 "
               f"검증 AI가 막은 것 {sum(1 for j in ai_alone if j['result']['final'] in CAUGHT)}개", ""]
+    runs = sorted(RESULTS.glob("inject_run*.json"))
+    if len(runs) > 1:  # 같은 평가를 여러 번: 제안서·Gemini 답이 매번 달라서 한 번 결과는 흔들린다
+        per_run = [[j for j in json.loads(r.read_text(encoding="utf-8"))["injected"] if j["result"]] for r in runs]
+        totals = [sum(1 for j in run if j["result"]["final"] in CAUGHT) for run in per_run]
+        lines += [f"- **{len(runs)}번 반복: 막음 {' · '.join(f'{t}/{len(run)}' for t, run in zip(totals, per_run))}, "
+                  f"평균 {sum(totals) / len(totals):.1f}/{len(per_run[0])}** (아래 표는 마지막 실행)", "",
+                  "| 넣은 오류 | " + " | ".join(f"{n}회" for n in range(1, len(runs) + 1)) + " |",
+                  "|---|" + "---|" * len(runs)]
+        for label, _ in MUTATIONS:
+            marks = []
+            for run in per_run:
+                hit = next((j for j in run if j["label"] == label), None)
+                marks.append("—" if hit is None else "막음" if hit["result"]["final"] in CAUGHT else f"**놓침({VERDICT_KO[hit['result']['final']]})**")
+            lines.append(f"| {label} | " + " | ".join(marks) + " |")
+        lines.append("")
     if (RESULTS / "inject_before.json").exists():
         before = [j for j in load("inject_before")["injected"] if j["result"]]
         lines += [f"- 코드 검사 보강 전(첫 평가): 막음 {sum(1 for j in before if j['result']['final'] in CAUGHT)}/{len(before)}. "
@@ -485,7 +500,7 @@ def report() -> None:
         lines.append("")
     lines += ["## 한계", "",
               "- 골든 세트·오류 사례를 만든 사람(Claude)이 평가 대상 프롬프트를 알고 있다. 실제 사용자 문장으로 다시 재야 한다",
-              "- 오류 주입은 오류 한 종류당 한 번이다. 같은 오류도 문장·종목에 따라 결과가 달라질 수 있다 (반복 측정은 미확인)",
+              "- 오류 주입은 같은 평가를 3번 반복했다 (실행마다 제안서를 새로 쓴다). 더 많이 반복하거나 다른 오류 유형을 넣으면 숫자가 달라질 수 있다",
               "- Gemini 답은 매번 조금씩 다르다. 같은 평가를 다시 돌리면 숫자가 달라질 수 있다",
               "- 모의 체결까지의 데모와 증권사 응답 시간은 장중에 확인해야 한다"]
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")

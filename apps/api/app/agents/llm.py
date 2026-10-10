@@ -162,6 +162,8 @@ VERIFY_PROMPT = """너는 한국 주식 앱의 검증 AI다. 투자 AI가 쓴 �
 7. 뉴스(news:…)는 제목뿐인 미확인 보도다. 뉴스를 사실처럼 쓰거나 뉴스만으로 매수 근거를 세웠으면 지적한다.
    [원문]에 있는 악재 뉴스를 제안서가 빠뜨렸으면 반대 근거에 넣으라고 한다 (target: counter_arguments)
 [코드 검사]에 fail이 있으면 승인하지 않는다.
+[코드 검사]에 warn이 있으면 그 항목을 [원문]과 다시 대조하고 결과를 checks에 남긴다 (target은 warn의 target 그대로).
+특히 금액·숫자가 원문과 다르다는 warn은 원문의 어느 값에서 나왔는지 찾지 못하면 승인하지 않는다.
 
 판정
 - approve: 문제 없음 / conditional: 조건을 지키면 괜찮음 (conditions에 조건) / reject: 고쳐야 함 (challenges에 반박)

@@ -254,8 +254,8 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     # 퀴즈 답이든 실제 습관이든 급등주를 바로 사는 편이면 급등 매수 때 한 번 더 확인한다
     if orders.needs_hot_confirm(warnings, bool({"chases_hot_stocks", "hot_buys"} & set(state["flags"]))):
         confirm.append("급등 직후 매수예요. 한 번 더 생각해 보셨나요?")
-    # 5-4 대화 속 성향 신호 (학습한 로컬 모델, 꺼져 있으면 None). 사람이 쓴 말만 본다
-    signal = None if state.get("auto_origin") or change == "cancel" else signals.model_signal(state["query"])
+    # 5-4 대화 속 성향 신호 (분석 자료를 모을 때 본 것). 취소는 새로 사고팔지 않으니 보지 않는다
+    signal = None if change == "cancel" else state.get("conversation_signal")
     if signal_text := signals.signal_warning(signal, side):
         warnings.append(signal_text)
         if side == "buy":

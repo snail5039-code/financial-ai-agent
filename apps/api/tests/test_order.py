@@ -346,8 +346,9 @@ def test_conversation_signal_adds_warning_and_confirm(client, custom_user, ai, m
     seen = []
     monkeypatch.setattr(signals, "model_signal", lambda text: seen.append(text) or "borrowed_money")
     card = first(to_approval(client, custom_user), "interrupt")["card"]
-    assert seen and signals.WARNINGS["borrowed_money"] in card["warnings"]
+    assert len(seen) == 1 and signals.WARNINGS["borrowed_money"] in card["warnings"]  # 한 번만 본다
     assert any("위험 신호" in c for c in card["confirm_required"])
+    assert "[대화 신호]" in ai["invest"][-1] and all("[대화 신호]" not in v for v in ai["verify"])  # 투자 AI만 받는다
 
 
 def test_signal_warning_only_matches_side() -> None:
