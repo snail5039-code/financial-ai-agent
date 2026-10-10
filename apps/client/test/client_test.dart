@@ -358,7 +358,7 @@ void main() {
     expect(find.textContaining('이러면 판단이 틀린 것: 실적 개선'), findsOneWidget);
   });
 
-  test('KB증권: 토큰 → 현재가(IVU10140), 잔고·주문은 하지 않는다', () async {
+  test('KB증권: 토큰 → 현재가(IVU10140), 토큰은 다시 받지 않는다', () async {
     final sent = <http.Request>[];
     final broker = KbBroker(BrokerKeys(appKey: 'ak', appSecret: 'as', account: '12345678-01'), box: SecureBox.memory(),
         client: MockClient((request) async {
@@ -377,9 +377,49 @@ void main() {
         ('$kbBaseUrl/api/v1/ivu10140', 'bearer tok', 'ak'));
     expect(jsonDecode(quote.body)['dataBody'], {'excg_clsf': '1', 'shrt_cd': '005930'});
     await expectLater(broker.price('999999'), throwsA(isA<BrokerError>().having((e) => e.message, 'message', contains('종목 없음'))));
-    await expectLater(broker.balance(), throwsA(isA<BrokerError>()));
-    await expectLater(broker.order('buy', '005930', 1, 276000), throwsA(isA<BrokerError>()));
-    expect(sent.length, 4); // 잔고·주문은 KB로 아무것도 보내지 않았다
+  });
+
+  test('KIS 모의 키와 KB 키는 따로 저장한다 (하나를 지워도 다른 쪽은 남는다)', () async {
+    final box = SecureBox.memory();
+    await BrokerKeys(appKey: 'kis', appSecret: 's1', account: '12345678-01').save(box);
+    await BrokerKeys(appKey: 'kb', appSecret: 's2', needsAccount: false).save(box, prefix: 'kb');
+    await BrokerKeys.delete(box, prefix: 'kb');
+    expect((await BrokerKeys.load(box))?.appKey, 'kis');
+    expect(await BrokerKeys.load(box, prefix: 'kb'), isNull);
+    expect(() => BrokerKeys(appKey: 'a', appSecret: 'b', account: ''), throwsFormatException); // KIS는 계좌번호가 있어야 한다
+  });
+
+  test('KB증권: 잔고(SSQM2952)·주문 내역(SSQM2341)·주문(SSAM1802)과 업무 거절', () async {
+    final sent = <String, Map>{};
+    final broker = KbBroker(BrokerKeys(appKey: 'ak', appSecret: 'as', account: '12345678-01'), box: SecureBox.memory(),
+        client: MockClient((request) async {
+      if (request.url.path == '/oauth2/token') return jsonResponse({'dataBody': {'access_token': 'tok', 'expires_in': 86400}});
+      final tr = request.url.pathSegments.last;
+      sent[tr] = jsonDecode(request.body)['dataBody'] as Map;
+      return jsonResponse(switch (tr) {
+        'ssqm2952' => {'dataHeader': {'resultCode': '200', 'processFlag': 'A'}, 'dataBody': {
+            'nxt2_dy_tfnd': '0000000150000', 'Record1': [
+              {'is_cd': 'A005930', 'is_nm': '삼성전자 ', 'hld_q': '3', 'byng_avr_prc': '70000.00', 'now_prc': '72000'},
+              {'is_cd': 'A000660', 'is_nm': 'SK하이닉스', 'hld_q': '0', 'byng_avr_prc': '0', 'now_prc': '200000'}]}},
+        'ssqm2341' => {'dataHeader': {'resultCode': '200'}, 'dataBody': {'Record1': {
+            'ordr_no': '0000012', 'stnd_is_no': 'KR7005930003', 'hngl_shrt_nm': '삼성전자', 'trd_dl_ccd_nm': '현금매도',
+            'ordr_q': '1', 'tl_ccls_q': '1', 'ordr_uprc': '72000', 'ccls_uprc': '72000', 'ordr_tm': '093015'}}},
+        // 돈이 없으면 KB는 HTTP 200에 거절 코드를 준다
+        _ => {'dataHeader': {'resultCode': '200', 'processFlag': 'B', 'processCode': '1234', 'processMessage': '주문가능금액이 부족합니다'},
+            'dataBody': {}},
+      });
+    }));
+    expect(await broker.balance(), allOf(containsPair('cash_krw', 150000), containsPair('holdings', [
+      {'stock_code': '005930', 'stock_name': '삼성전자', 'qty': 3, 'avg_price': 70000}])));
+    expect(broker.lastPrices['005930'], 72000);
+    final [o] = await broker.todayOrders('005930');
+    expect((o.orderNo, o.side, o.qty, o.filledQty, o.filledPrice, o.time), ('0000012', 'sell', 1, 1, 72000, '093015'));
+    expect(await broker.todayOrders('000660'), isEmpty);
+    await expectLater(broker.order('buy', '005930', 1, 1000),
+        throwsA(isA<BrokerError>().having((e) => e.message, 'message', contains('주문가능금액이 부족'))));
+    expect(sent['ssam1802'], {'mkt_tm_clsf': '1', 'is_cd': '005930', 'ordr_q': '1', 'ordr_uprc': '1000', 'ordr_ccd': '00', 'sor_ordr_ccd': 'K'});
+    await expectLater(broker.revise('0000012', '005930', null), throwsA(isA<BrokerError>()));
+    expect(sent['ssam1806'], {'is_cd': '005930', 'ordr_q': '', 'crct_clsf': '2', 'orgn_ordr_no': '0000012'}); // 남은 수량 전부 취소
   });
 
   test('자동매매는 모의투자(가짜·KIS 모의)에서만 켤 수 있다', () {
@@ -409,11 +449,11 @@ void main() {
     expect(reservationDue({...below, 'direction': 'above'}, now, 100100), isTrue);
   });
 
-  test('실전 모드: 처리안 모드와 증권사가 맞을 때만 실행하고, KB 실전 주문은 준비 전이라 켤 수 없다', () async {
+  test('실전 모드: 처리안 모드와 증권사가 맞을 때만 실행한다', () async {
     final keys = BrokerKeys(appKey: 'a', appSecret: 'b', account: '12345678');
     final kb = KbBroker(keys, box: SecureBox.memory());
     final mock = KisMockBroker(keys, box: SecureBox.memory());
-    expect(kb.isReal && !kb.realOrdersReady, isTrue);
+    expect(kb.isReal && kb.realOrdersReady, isTrue);
     expect(modeMismatch(mock, 'mock', false), isNull);
     expect(modeMismatch(mock, 'real', true), contains('실전 주문을 낼 수 있는 증권사'));
     expect(modeMismatch(kb, 'real', false), contains('실전 모드가 꺼져'));
@@ -424,7 +464,8 @@ void main() {
     expect(AutoTrader.allowed(kb), isFalse);
     realMode.value = true;
     expect(AutoTrader.budgets, autoRealBudgets);
-    expect(AutoTrader.allowed(kb), isFalse); // 실전 모드여도 실전 주문 준비가 안 된 증권사는 자동매매 불가
+    expect(modeMismatch(kb, 'real', true), isNull);
+    expect(AutoTrader.allowed(kb), isTrue); // 실전 모드를 직접 켰을 때만, 실전 소액 한도로
     realMode.value = false;
   });
 

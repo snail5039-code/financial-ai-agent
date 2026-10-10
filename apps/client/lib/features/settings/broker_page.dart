@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../broker/broker.dart';
 import '../../broker/fake_broker.dart';
+import '../../broker/kb_broker.dart';
 import '../../broker/kis_mock_broker.dart';
 import '../../common/common.dart';
 import '../../secure/key_store.dart';
@@ -16,8 +17,10 @@ Future<void> loadBroker() async {
   await _saveDevKeys();
   final choice = await secureBox.read('broker_choice') ?? (kDebugMode ? 'fake' : null);
   final keys = await BrokerKeys.load(secureBox);
+  final kbKeys = await BrokerKeys.load(secureBox, prefix: 'kb');
   currentBroker.value = switch (choice) {
     'kis_mock' when keys != null => KisMockBroker(keys),
+    'kb' when kbKeys != null => KbBroker(kbKeys), // 실전 계좌. 주문은 실전 모드를 직접 켰을 때만 나간다
     'fake' when kDebugMode => FakeBroker(),
     _ => null,
   };
@@ -29,8 +32,18 @@ Future<void> loadBroker() async {
 const _devAppKey = String.fromEnvironment('KIS_APP_KEY');
 const _devAppSecret = String.fromEnvironment('KIS_APP_SECRET');
 const _devAccount = String.fromEnvironment('KIS_ACCOUNT');
+// KB 키(실전 계좌)도 같은 파일에 넣을 수 있다. 저장만 하고 연결은 사용자가 증권사 연결 화면에서 KB를 골라야 바뀐다
+const _devKbKey = String.fromEnvironment('KB_APP_KEY');
+const _devKbSecret = String.fromEnvironment('KB_APP_SECRET');
 
 Future<void> _saveDevKeys() async {
+  if (kDebugMode && _devKbKey.isNotEmpty && _devKbSecret.isNotEmpty) {
+    final kb = await BrokerKeys.load(secureBox, prefix: 'kb');
+    if (kb?.appKey != _devKbKey || kb?.appSecret != _devKbSecret) {
+      await BrokerKeys.delete(secureBox, prefix: 'kb');
+      await BrokerKeys(appKey: _devKbKey, appSecret: _devKbSecret, needsAccount: false).save(secureBox, prefix: 'kb');
+    }
+  }
   if (!kDebugMode || _devAppKey.isEmpty || _devAppSecret.isEmpty) return;
   final saved = await BrokerKeys.load(secureBox);
   if (saved != null && saved.appKey == _devAppKey && saved.appSecret == _devAppSecret && saved.account == _devAccount) return;
@@ -63,34 +76,47 @@ class _BrokerPageState extends State<BrokerPage> {
     _load();
   }
 
+  String get _prefix => _choice == 'kb' ? 'kb' : 'kis';
+
   Future<void> _load() async {
-    final keys = await BrokerKeys.load(secureBox);
     final choice = await secureBox.read('broker_choice');
+    _choice = choice ?? (currentBroker.value is FakeBroker ? 'fake' : 'kis_mock');
+    await _loadKeys();
+  }
+
+  /// 고른 증권사의 저장된 키를 입력칸에 채운다 (시크리트는 보여주지 않는다)
+  Future<void> _loadKeys() async {
+    final keys = await BrokerKeys.load(secureBox, prefix: _prefix);
     setState(() {
       _hasSavedKeys = keys != null;
       _appKey.text = keys?.appKey ?? '';
+      _appSecret.clear();
       _account.text = keys?.account ?? '';
-      _choice = choice ?? (currentBroker.value is FakeBroker ? 'fake' : 'kis_mock');
     });
   }
 
   /// 입력한 값으로 만든 키. 시크리트를 비워 두면 저장된 값을 그대로 쓴다
   Future<BrokerKeys> _keys() async {
-    final saved = await BrokerKeys.load(secureBox);
+    final saved = await BrokerKeys.load(secureBox, prefix: _prefix);
     final secret = _appSecret.text.trim().isEmpty ? saved?.appSecret ?? '' : _appSecret.text.trim();
     if (_appKey.text.trim().isEmpty || secret.isEmpty) throw const FormatException('앱키와 시크리트를 입력해 주세요');
-    return BrokerKeys(appKey: _appKey.text.trim(), appSecret: secret, account: _account.text.trim());
+    return BrokerKeys(appKey: _appKey.text.trim(), appSecret: secret, account: _account.text.trim(), needsAccount: _choice == 'kis_mock');
   }
 
-  /// 연결 테스트: 잔고를 한 번 조회한다 (FR-06)
+  /// 연결 테스트: 잔고와 주문 가능 금액을 조회한다 (FR-06). 주문은 내지 않는다
   Future<void> _test() async {
     setState(() => _busy = true);
     try {
-      final Broker broker = _choice == 'fake' ? FakeBroker() : KisMockBroker(await _keys());
+      final Broker broker = switch (_choice) {
+        'fake' => FakeBroker(),
+        'kb' => KbBroker(await _keys()),
+        _ => KisMockBroker(await _keys()),
+      };
       final balance = await broker.balance();
+      final power = await broker.buyingPower();
       setState(() {
         _testOk = true;
-        _status = '연결됨 · 예수금 ${won(balance['cash_krw'] as int)} · 보유 ${(balance['holdings'] as List).length}종목';
+        _status = '연결됨 · 예수금 ${won(balance['cash_krw'] as int)} · 주문 가능 ${won(power)} · 보유 ${(balance['holdings'] as List).length}종목';
       });
     } catch (error) {
       setState(() {
@@ -104,11 +130,11 @@ class _BrokerPageState extends State<BrokerPage> {
 
   Future<void> _save() async {
     try {
-      if (_choice == 'kis_mock') {
+      if (_choice != 'fake') {
         final keys = await _keys();
-        final saved = await BrokerKeys.load(secureBox);
-        if (saved?.appKey != keys.appKey) await BrokerKeys.delete(secureBox); // 다른 키면 예전 토큰도 버린다
-        await keys.save(secureBox);
+        final saved = await BrokerKeys.load(secureBox, prefix: _prefix);
+        if (saved?.appKey != keys.appKey) await BrokerKeys.delete(secureBox, prefix: _prefix); // 다른 키면 예전 토큰도 버린다
+        await keys.save(secureBox, prefix: _prefix);
       }
       await secureBox.write('broker_choice', _choice);
       await loadBroker();
@@ -119,7 +145,7 @@ class _BrokerPageState extends State<BrokerPage> {
   }
 
   Future<void> _delete() async {
-    await BrokerKeys.delete(secureBox);
+    await BrokerKeys.delete(secureBox, prefix: _prefix);
     await secureBox.delete('broker_choice');
     await loadBroker();
     if (mounted) Navigator.of(context).pop();
@@ -133,23 +159,28 @@ class _BrokerPageState extends State<BrokerPage> {
             child: ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('키와 계좌번호는 이 폰에만 저장되고 서버로 보내지 않아요'),
-              subtitle: Text('주문도 이 폰에서 증권사로 직접 나가요. 지금은 모의투자만 돼요.'),
+              subtitle: Text('주문도 이 폰에서 증권사로 직접 나가요. KB증권은 실전 계좌라 실전 모드를 직접 켜야만 주문해요.'),
             ),
           ),
           RadioGroup<String>(
             groupValue: _choice,
-            onChanged: (value) => setState(() {
-              _choice = value!;
-              _status = null;
-            }),
+            onChanged: (value) {
+              setState(() {
+                _choice = value!;
+                _status = null;
+              });
+              _loadKeys();
+            },
             child: Column(children: [
               const RadioListTile(value: 'kis_mock', title: Text('KIS 모의투자'), subtitle: Text('한국투자증권 모의계좌 (주문 개발·검증용)')),
+              const RadioListTile(value: 'kb', title: Text('KB증권 (실전 계좌)'),
+                  subtitle: Text('연결 테스트는 조회만 해요. 주문은 설정 > 실전 모드를 켰을 때만 나가요')),
               if (kDebugMode)
                 const RadioListTile(value: 'fake', title: Text('가짜 증권사 (개발용)'), subtitle: Text('키 없이 화면 흐름만 확인')),
             ]),
           ),
-          if (_choice == 'kis_mock') ...[
-            TextField(controller: _appKey, decoration: const InputDecoration(labelText: '앱키 (모의투자용)')),
+          if (_choice != 'fake') ...[
+            TextField(controller: _appKey, decoration: InputDecoration(labelText: _choice == 'kb' ? 'appKey (KB증권)' : '앱키 (모의투자용)')),
             TextField(
               controller: _appSecret,
               obscureText: true,
@@ -158,11 +189,12 @@ class _BrokerPageState extends State<BrokerPage> {
                 helperText: _hasSavedKeys ? '저장돼 있어요. 바꿀 때만 입력하세요' : null,
               ),
             ),
-            TextField(
-              controller: _account,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '모의계좌번호', hintText: '12345678-01'),
-            ),
+            if (_choice == 'kis_mock')
+              TextField(
+                controller: _account,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '모의계좌번호', hintText: '12345678-01'),
+              ),
           ],
           const SizedBox(height: 16),
           if (_status != null)

@@ -204,7 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: () => Navigator.of(context).push(pageRoute(const BrokerPage())),
                   ),
                 ),
-              const Text('투자 모드: 모의투자 (MVP에서는 바꿀 수 없어요)'),
+              const Text('투자 모드는 위의 "실전 모드"에서 바꿔요 (기본은 모의투자)'),
               const Divider(height: 32),
               OutlinedButton(onPressed: _logout, child: const Text('로그아웃')),
               TextButton(onPressed: _deleteAccount, child: const Text('탈퇴', style: TextStyle(color: Colors.red))),
