@@ -267,6 +267,33 @@ def test_code_checks_catch_changed_metric_values() -> None:
     assert checks["metrics"]["result"] == "fail"
 
 
+def test_amounts_read_korean_units_only() -> None:
+    assert analysis.amounts("시가총액 10조 2,092억 1,490만 500원, 29.06% 증가, 3단계, 2026년") == [10_209_214_900_500]
+    assert analysis.amounts("1,500억 원과 103,300원") == [150_000_000_000, 103_300]
+
+
+def test_code_checks_catch_other_stock_unit_errors_and_denied_risks() -> None:
+    """평가(2026-10-10)에서 검증 AI가 놓친 것: 다른 종목 출처, 억→조, '위험·비용 없다'."""
+    known = {"fin:A": {"stock_code": "000001", "content": "매출액: 이번 기간 34,928,000,000,000원"},
+             "dart:B": {"stock_code": "999999", "content": "공시 제목: 남의 회사 공시"}}
+
+    def run(claim_text, sources=("fin:A",), risks=("주가 하락으로 손실이 날 수 있다",), counter=("경쟁 심화",)):
+        draft = proposal(claims=[{"text": claim_text, "type": "fact", "source_ids": list(sources)}]).model_dump()
+        draft |= {"risks": list(risks), "counter_arguments": list(counter)}
+        return {c["target"]: c for c in analysis.code_checks(draft, known, [], [], stock_code="000001")}
+
+    ok = run("매출액은 약 34조 9,280억 원이다")
+    assert all(c["result"] == "pass" for c in ok.values())  # 반올림한 금액은 통과
+    assert run("매출액은 34조 9,280조 원이다")["claim:0:amount"]["result"] == "fail"   # 같은 단위 두 번
+    assert run("매출액은 34조 9,280억 원이다".replace("조 9,280억", "만"))["claim:0:amount"]["result"] == "fail"  # 34만 원: 1억 배 차이
+    assert run("매출액은 100조 원이다")["claim:0:amount"]["result"] == "warn"           # 3배: 주의만
+    assert run("남의 회사가 공시했다", sources=("dart:B",))["source_stock"]["result"] == "fail"
+    assert run("매출이 늘었다", risks=("특별한 위험은 없다",))["denies_risk"]["result"] == "fail"
+    assert run("매출이 늘었다", risks=("거래 비용(수수료·세금)은 없다",))["denies_risk"]["result"] == "fail"
+    assert run("매출이 늘었다", counter=("특별한 반대 근거는 없다",))["denies_risk"]["result"] == "fail"
+    assert "denies_risk" not in run("매출이 늘었다", risks=("손실 가능성을 배제할 수 없다",))
+
+
 # ---------- 재무 기준: 최근 정기보고서 ----------
 
 def test_financial_basis_uses_latest_report_and_trailing_four_quarters(migrated) -> None:

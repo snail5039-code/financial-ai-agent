@@ -256,7 +256,7 @@ def verify_once(state: dict, proposal: dict) -> dict:
         reloaded = load_sources(conn, cited_ids(proposal), state)
         recomputed = json.loads(json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
     checks = code_checks(proposal, reloaded, state["metrics"], recomputed,
-                         offered_chunks=any("#" in sid for sid in state["sources"]))
+                         offered_chunks=any("#" in sid for sid in state["sources"]), stock_code=state["stock_code"])
     draft = llm.verify_proposal(verify_context(state, proposal, reloaded, recomputed, checks)).model_dump()
     code_failed = [c["target"] for c in checks if c["result"] == "fail"]
     final = "reject" if code_failed and draft["verdict"] in ("approve", "conditional") else draft["verdict"]
@@ -437,7 +437,13 @@ def report() -> None:
               "검증은 실제 순서대로: 원문 다시 읽기 → 코드 검사 → 검증 AI → 코드 fail이면 반려. 반박-수정 반복은 돌리지 않고 첫 판정만 본다",
               "- '막음' = 반려 또는 사용자 판단. 조건부 승인은 통과로 센다 (엄격한 기준)",
               f"- **막음 {len(caught)}/{len(injected)}** · 코드 검사로는 못 잡는 오류 {len(ai_alone)}개 중 "
-              f"검증 AI가 막은 것 {sum(1 for j in ai_alone if j['result']['final'] in CAUGHT)}개", "",
+              f"검증 AI가 막은 것 {sum(1 for j in ai_alone if j['result']['final'] in CAUGHT)}개", ""]
+    if (RESULTS / "inject_before.json").exists():
+        before = [j for j in load("inject_before")["injected"] if j["result"]]
+        lines += [f"- 코드 검사 보강 전(첫 평가): 막음 {sum(1 for j in before if j['result']['final'] in CAUGHT)}/{len(before)}. "
+                  "보강: 출처 종목 대조, 금액 단위·크기 대조, '위험·반대 근거·비용 없다' 문구 검사 "
+                  "(제안서는 매번 새로 써서 두 실행의 제안서가 같지는 않다)", ""]
+    lines += [
               "| # | 넣은 오류 | 종목 | 판정 | 누가 잡았나 |", "|---|---|---|---|---|"]
     for n, j in enumerate(inj["injected"], 1):
         r = j["result"]

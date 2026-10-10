@@ -91,18 +91,18 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
     if kind == "dart" and "#" in rest:
         rcept_no, seq = rest.split("#", 1)
         row = conn.execute(
-            "SELECT d.title, d.url, d.filed_at, c.section, c.content FROM disclosure_chunks c"
+            "SELECT d.stock_code, d.title, d.url, d.filed_at, c.section, c.content FROM disclosure_chunks c"
             " JOIN disclosures d USING (rcept_no) WHERE c.rcept_no = %s AND c.seq::text = %s", (rcept_no, seq),
         ).fetchone()
         return row and {"kind": "dart", "title": f"{row['title']} · {row['section']}", "url": row["url"],
-                        "as_of": str(row["filed_at"]), "content": row["content"]}
+                        "as_of": str(row["filed_at"]), "content": row["content"], "stock_code": row["stock_code"]}
     if kind == "dart":
-        row = conn.execute("SELECT title, url, filed_at FROM disclosures WHERE rcept_no = %s", (rest,)).fetchone()
-        return row and {"kind": "dart", "title": row["title"], "url": row["url"],
+        row = conn.execute("SELECT stock_code, title, url, filed_at FROM disclosures WHERE rcept_no = %s", (rest,)).fetchone()
+        return row and {"kind": "dart", "title": row["title"], "url": row["url"], "stock_code": row["stock_code"],
                         "as_of": str(row["filed_at"]), "content": f"공시 제목: {row['title']} (접수일 {row['filed_at']})"}
     if kind == "fin":
         rows = conn.execute(
-            "SELECT bsns_year, reprt_code, account, amount, prev_amount, add_amount, prev_add_amount FROM financials"
+            "SELECT stock_code, bsns_year, reprt_code, account, amount, prev_amount, add_amount, prev_add_amount FROM financials"
             " WHERE rcept_no = %s AND fs_div = 'CFS' ORDER BY account", (rest,),
         ).fetchall()
         if not rows:
@@ -113,13 +113,13 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
                  + (f" (누적 {fmt_amount(r['prev_add_amount'])})" if r["prev_add_amount"] is not None else "")
                  for r in rows]
         return {"kind": "dart", "title": f"OpenDART 주요 재무 ({report_name(rows[0]['bsns_year'], rows[0]['reprt_code'])}, 연결)",
-                "url": disclosure_url(rest), "as_of": None, "content": "\n".join(lines)}
+                "url": disclosure_url(rest), "as_of": None, "content": "\n".join(lines), "stock_code": rows[0]["stock_code"]}
     if kind == "price":
         code, _, day = rest.partition(":")
         row = conn.execute("SELECT close, market_cap FROM stock_prices WHERE stock_code = %s AND trade_date::text = %s",
                            (code, day)).fetchone()
         return row and {"kind": "price", "title": f"{day} 종가 (금융위원회_주식시세정보)", "url": None, "as_of": day,
-                        "content": f"종가 {won(row['close'])}, 시가총액 {won(row['market_cap'])}"}
+                        "content": f"종가 {won(row['close'])}, 시가총액 {won(row['market_cap'])}", "stock_code": code}
     if kind == "news":
         row = conn.execute("SELECT stock_code, title, press, url, published_at FROM news WHERE id::text = %s", (rest,)).fetchone()
         if row is None:
@@ -128,6 +128,7 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
         check = (f"같은 무렵 공시가 있다: {nearby['title']} ({nearby['filed_at']}, 출처 dart:{nearby['rcept_no']}). 내용이 같은지는 공시로 확인한다"
                  if nearby else "공시로 확인되지 않은 보도다")
         return {"kind": "news", "title": f"{row['title']} ({row['press'] or '언론사 미확인'})", "url": row["url"],
+                "stock_code": row["stock_code"],
                 "as_of": row["published_at"].isoformat(),
                 "content": f"뉴스 제목: {row['title']}. 언론사 {row['press'] or '미확인'}, "
                            f"발행 {row['published_at']:%Y-%m-%d %H:%M}. 본문은 없다. {check}"}
@@ -360,13 +361,63 @@ def with_titles(text: str, sources: dict) -> str:
 
 # ---------- 코드 검사 (검증 AI 전에) ----------
 
+# 금액 표기: "305조 3,729억원", "10조 2,092억 1,490만 500원", "1,500억 원", "48,494,209,688,700원"
+AMOUNT = re.compile(r"(?:(\d[\d,]*(?:\.\d+)?)\s*조\s*)?(?:(\d[\d,]*(?:\.\d+)?)\s*억\s*)?(?:(\d[\d,]*)\s*만\s*)?(?:(\d[\d,]*)\s*)?(원)?")
+AMOUNT_UNITS = (1e12, 1e8, 1e4, 1)
+# "78조 9,548조"처럼 같은 단위가 두 번 나오면 표기 오류다 (평가 때 투자 AI가 실제로 쓴 실수)
+REPEATED_UNIT = re.compile(r"(조|억)\s*\d[\d,]*\s*\1")
+AMOUNT_WARN_RATIO = 2      # 원문 금액과 2배 넘게 다르면 주의 (반올림·"약"은 통과)
+AMOUNT_FAIL_RATIO = 1000   # 1000배 넘게 다르면 단위 오류(억↔조)로 보고 막는다
+# "위험은 없다", "반대 근거는 없다", "비용(수수료·세금)은 없다" 같은 부정. "배제할 수 없다"는 걸리지 않는다
+DENIAL = re.compile(r"(위험|리스크|손실|반대\s*근거|수수료|세금|비용)\)?\s*(?:은|는|이|가)\s*(?:사실상\s*|전혀\s*|특별히\s*)?없")
+
+
+def amounts(text: str) -> list[float]:
+    """글 속 금액(원). 조·억·만 단위나 '원'이 붙은 것만 본다 ("29.06%", "3단계", "2026년"은 금액이 아니다)."""
+    found = []
+    for m in AMOUNT.finditer(text):
+        if not (m[1] or m[2] or m[3] or m[5]):
+            continue
+        value = sum(float(g.replace(",", "")) * unit for g, unit in zip(m.groups()[:4], AMOUNT_UNITS) if g)
+        if value > 0:
+            found.append(value)
+    return found
+
+
+def amount_check(target: str, claim: dict, known_sources: dict) -> dict | None:
+    """근거의 금액이 인용한 원문의 금액 중 하나와 비슷한지. 원문에 금액이 없으면 보지 않는다."""
+    if repeated := REPEATED_UNIT.search(claim["text"]):
+        return {"target": f"{target}:amount", "result": "fail", "source_ids": claim["source_ids"],
+                "detail": f"금액 단위 표기 오류: '{repeated.group()}'"}
+    source_values = [v for sid in claim["source_ids"] if sid in known_sources
+                     for v in amounts(known_sources[sid].get("content") or "")]
+    if not source_values:
+        return None
+    worst = max((min(max(v / s, s / v) for s in source_values) for v in amounts(claim["text"])), default=1)
+    if worst <= AMOUNT_WARN_RATIO:
+        return None
+    return {"target": f"{target}:amount", "result": "fail" if worst > AMOUNT_FAIL_RATIO else "warn",
+            "detail": f"근거의 금액이 인용한 원문 금액과 {worst:,.0f}배 다름" + (" (단위 오류로 보임)" if worst > AMOUNT_FAIL_RATIO else ""),
+            "source_ids": claim["source_ids"]}
+
+
 def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict],
-                offered_chunks: bool = False) -> list[dict]:
+                offered_chunks: bool = False, stock_code: str | None = None) -> list[dict]:
     """AI 없이 확실히 잡을 수 있는 것: 출처·지표 ID가 실제로 있는지, 사실·계산에 출처가 붙었는지,
     지표를 다시 계산하면 같은 값인지, 반대 근거·위험이 있는지. 하나라도 fail이면 승인하지 않는다.
-    offered_chunks: 투자 AI에게 공시 본문 조각을 줬는지. 줬는데 하나도 인용하지 않으면 warn (막지는 않는다)."""
+    offered_chunks: 투자 AI에게 공시 본문 조각을 줬는지. 줬는데 하나도 인용하지 않으면 warn (막지는 않는다).
+    stock_code: 이 종목. 다른 종목의 공시·시세를 출처로 달았으면 fail (평가 2026-10-10에서 검증 AI가 놓친 것들을 코드로 막는다)."""
     metric_ids = {m["metric_id"] for m in recomputed if m["value"] is not None}
     checks = [claim_check(f"claim:{n}", c, known_sources, metric_ids) for n, c in enumerate(proposal["claims"])]
+    checks += [a for n, c in enumerate(proposal["claims"]) if (a := amount_check(f"claim:{n}", c, known_sources))]
+    if stock_code and (others := sorted({sid for sid in cited_ids(proposal)
+                                         if known_sources.get(sid, {}).get("stock_code") not in (None, stock_code)})):
+        checks.append({"target": "source_stock", "result": "fail",
+                       "detail": f"다른 종목의 자료를 출처로 씀: {', '.join(others)}", "source_ids": others})
+    texts = [c["text"] for c in proposal["claims"]] + proposal["counter_arguments"] + proposal["risks"]
+    if denied := [t for t in texts if DENIAL.search(t)]:
+        checks.append({"target": "denies_risk", "result": "fail",
+                       "detail": f"위험·반대 근거·비용이 없다고 씀: {denied[0]}", "source_ids": []})
     tags = tagged_ids(proposal["counter_arguments"] + proposal["risks"])
     if missing := [sid for sid in tags if sid not in known_sources]:
         checks.append({"target": "risk_sources", "result": "fail",
@@ -603,7 +654,7 @@ def verify_agent_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         reloaded = load_sources(conn, cited_ids(proposal), state)  # 투자 AI가 본 자료가 아니라 원문을 다시 읽는다
         recomputed = json.loads(json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
     checks = code_checks(proposal, reloaded, state["metrics"], recomputed,
-                         offered_chunks=any("#" in sid for sid in state["sources"]))
+                         offered_chunks=any("#" in sid for sid in state["sources"]), stock_code=state["stock_code"])
     draft = llm.verify_proposal(verify_context(state, proposal, reloaded, recomputed, checks)).model_dump()
 
     failed = [c for c in checks if c["result"] == "fail"]
