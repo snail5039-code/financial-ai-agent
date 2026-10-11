@@ -108,21 +108,12 @@ class BriefingPage extends StatelessWidget {
               Tag(approved ? '검증 승인' : '검증 조건부', approved ? const Color(0xFF137A33) : const Color(0xFF8A5A00)),
             ]),
             if (pick['last_close'] != null)
-              Text('${pick['close_date']} 종가 ${won(pick['last_close'] as int)} · 1주가 10% 내리면 −${won(pick['worst_case_loss'] as int)}',
+              Text('${pick['close_date']} 종가 ${won(pick['last_close'] as int)} · 10% 하락 시 −${won(pick['worst_case_loss'] as int)}',
                   style: const TextStyle(fontSize: 13, color: mutedText)),
-            const SizedBox(height: 8),
-            for (final claim in (pick['claims'] as List).cast<Map<String, dynamic>>())
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('· (${claim['type']}) ${claim['text']}'
-                    '${(claim['sources'] as List).isEmpty ? '' : ' [${(claim['sources'] as List).join(', ')}]'}'),
-              ),
-            for (final risk in (pick['risks'] as List).cast<String>())
-              Text('· 위험: $risk', style: const TextStyle(color: downBlue)),
-            for (final condition in (pick['conditions'] as List).cast<String>())
-              Text('· 조건: $condition', style: const TextStyle(color: Color(0xFF8A5A00))),
-            const SizedBox(height: 6),
-            Text('검증 AI: ${pick['summary']}', style: const TextStyle(fontSize: 13, color: mutedText)),
+            VerdictSummary('검증 AI: ${pick['summary']}'),
+            for (final claim in (pick['claims'] as List).cast<Map<String, dynamic>>()) ClaimLine(claim, maxLines: 2),
+            NoteBox.risks((pick['risks'] as List).cast<String>(), maxLines: 2),
+            NoteBox.conditions((pick['conditions'] as List).cast<String>(), maxLines: 3),
           ]),
         ),
         const Divider(height: 1),
@@ -235,11 +226,7 @@ class CloseSummaryPage extends StatelessWidget {
   List<Widget> _review(Map<String, dynamic> review, Widget Function(String) title, Widget Function(List<Widget>) card) {
     final verdict = review['verdict'] as String;
     final passed = verdict == 'approve' || verdict == 'conditional';
-    Widget claim(Map<String, dynamic> c) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text('· (${c['type']}) ${c['text']}'
-              '${(c['sources'] as List).isEmpty ? '' : ' [${(c['sources'] as List).join(', ')}]'}'),
-        );
+    Widget claim(Map<String, dynamic> c) => ClaimLine(c);
     return [
       title('AI 회고 · 내일 계획'),
       card([
@@ -249,8 +236,7 @@ class CloseSummaryPage extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         for (final c in (review['retrospective'] as List).cast<Map<String, dynamic>>()) claim(c),
-        for (final risk in (review['risks'] as List).cast<String>())
-          Text('· 위험: $risk', style: const TextStyle(color: downBlue)),
+        NoteBox.risks((review['risks'] as List).cast<String>()),
       ]),
       if (review['general'] == true)
         card([const Text('일반 모드라 사라·팔라 판단은 하지 않고 볼 것만 정리했어요. 성향 퀴즈를 하면 맞춤 계획을 받을 수 있어요.',
@@ -260,13 +246,12 @@ class CloseSummaryPage extends StatelessWidget {
           Text('내일 ${t['stock_name']} · ${t['action']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
           const SizedBox(height: 6),
           for (final c in (t['reasons'] as List).cast<Map<String, dynamic>>()) claim(c),
-          for (final x in (t['invalid_if'] as List).cast<String>())
-            Text('· 이러면 판단이 틀린 것: $x', style: const TextStyle(color: Color(0xFF8A5A00))),
+          NoteBox('이러면 판단이 틀린 것', (t['invalid_if'] as List).cast<String>(), color: const Color(0xFF8A5A00), icon: Icons.flag_outlined),
         ]),
       card([
-        Text('검증 AI: ${review['summary']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        for (final x in (review['conditions'] as List).cast<String>()) Text('· 조건: $x'),
-        for (final x in (review['disagreements'] as List).cast<String>()) Text('· 의견 차이: $x'),
+        VerdictSummary('검증 AI: ${review['summary']}'),
+        NoteBox.conditions((review['conditions'] as List).cast<String>()),
+        NoteBox('의견 차이', (review['disagreements'] as List).cast<String>(), color: mutedText, icon: Icons.forum_outlined),
         if (!passed) const Text('검증을 통과하지 못했어요. 참고만 하고 직접 판단해 주세요.', style: TextStyle(color: coachOrange)),
       ]),
       for (final src in (review['sources'] as List).cast<Map<String, dynamic>>())

@@ -327,7 +327,7 @@ void main() {
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
     expect(find.text('LG전자 매수 검토'), findsOneWidget);
-    expect(find.textContaining('1주가 10% 내리면 −21,150원'), findsOneWidget);
+    expect(find.textContaining('10% 하락 시 −21,150원'), findsOneWidget);
     expect(find.textContaining('일반 모드라'), findsNothing); // 맞춤 모드 안내 문구가 없다
     await tester.tap(find.text('주문하기'));
     await tester.pumpAndSettle();
@@ -355,7 +355,8 @@ void main() {
     await tester.scrollUntilVisible(find.textContaining('검증을 통과하지 못했어요'), 200);
     expect(find.text('내일 기아 · 매도 검토'), findsOneWidget);
     expect(find.text('검증 사용자 판단 필요'), findsOneWidget);
-    expect(find.textContaining('이러면 판단이 틀린 것: 실적 개선'), findsOneWidget);
+    expect(find.text('이러면 판단이 틀린 것'), findsOneWidget);
+    expect(find.textContaining('실적 개선'), findsWidgets);
   });
 
   test('KB증권: 토큰 → 현재가(IVU10140), 토큰은 다시 받지 않는다', () async {
@@ -481,6 +482,13 @@ void main() {
     expect(sellReason(-3.2, 11 * 60, {'n': 3}, now), isNull); // 하루 3번까지
     expect(sellReason(-3.2, 11 * 60, {'at': now.subtract(const Duration(minutes: 10)).toIso8601String()}, now), isNull); // 30분 간격
     expect(sellReason(-7.5, 11 * 60, {'n': 3}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+  });
+
+  test('출처 제목 줄이기: 언론사는 괄호 속, 공시·재무는 앞부분', () {
+    expect(shortSource("셀트리온 3분기 영업익 5천100억원…69.2%↑ '역대 최대'(종합) (연합뉴스)"), '연합뉴스');
+    expect(shortSource('OpenDART 주요 재무 (2026년 반기보고서, 연결)'), 'OpenDART 주요 재무');
+    expect(shortSource('반기보고서 (2026.06) · II. 사업의 내용'), '반기보고서');
+    expect(shortSource('2026-10-07 종가 (금융위원회_주식시세정보)'), '금융위원회_주식시세정보');
   });
 
   test('자동 매도는 1회 한도 안으로 나눈다', () {

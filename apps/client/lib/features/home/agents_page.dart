@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../../api/api.dart';
 import '../../common/common.dart';
-import '../approvals/approval_detail_page.dart';
 import '../history/history_page.dart';
 
 const investAiColor = Color(0xFF7B5CFF);
@@ -67,9 +66,8 @@ class AgentFeedPage extends StatelessWidget {
           ymdHm(p['created_at'] as String),
           verdict == null ? const SizedBox() : Tag('검증 ${verdictLabels[verdict] ?? verdict}', verdictColors[verdict] ?? Colors.grey)),
       const SizedBox(height: 6),
-      for (final claim in claims.take(3))
-        Text('· [${claimLabels[claim['type']] ?? claim['type']}] ${claim['text']}', maxLines: 2, overflow: TextOverflow.ellipsis),
-      if (risks.isNotEmpty) Text('· 위험: ${risks.first}', style: const TextStyle(color: downBlue)),
+      for (final claim in claims.take(3)) ClaimLine(claim, maxLines: 2),
+      NoteBox.risks(risks.take(1).toList(), maxLines: 2),
     ]);
   }
 
@@ -82,11 +80,10 @@ class AgentFeedPage extends StatelessWidget {
       _head('${v['stock_name']} · ${(v['round'] as int) + 1}차 검증', ymdHm(v['created_at'] as String),
           Tag(verdictLabels[verdict] ?? verdict, verdictColors[verdict] ?? Colors.grey)),
       const SizedBox(height: 6),
-      Text('${v['summary']}', maxLines: 3, overflow: TextOverflow.ellipsis),
+      VerdictSummary('${v['summary']}'),
       if (failed > 0) Text('· 코드 검사에서 틀린 항목 $failed개', style: const TextStyle(color: upRed)),
-      for (final text in challenges.take(2)) Text('· 반박: $text', maxLines: 2, overflow: TextOverflow.ellipsis),
-      for (final text in conditions.take(2))
-        Text('· 조건: $text', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF8A5A00))),
+      NoteBox('반박', challenges.take(2).toList(), color: upRed, icon: Icons.reply, maxLines: 2),
+      NoteBox.conditions(conditions.take(2).toList(), maxLines: 2),
     ]);
   }
 }

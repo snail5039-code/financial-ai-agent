@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import '../../common/common.dart';
 import '../chat/conversation.dart';
 
-const claimLabels = {'fact': '사실', 'calc': '계산', 'inference': '추론', 'opinion': '의견'};
 
 class VerdictTag extends StatelessWidget {
   const VerdictTag(this.verdict, {super.key});
@@ -110,17 +109,16 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
         Align(alignment: Alignment.centerLeft, child: VerdictTag(card['verdict'] as String)),
         if (card['user_directed'] == true) const SourceText('직접 지시한 주문이에요. 검증 AI가 한 번 더 확인했어요.'),
         // 3. 투자 AI 제안
+        VerdictSummary('검증 AI: ${card['summary']}'),
         _section('투자 AI 제안', [
-          for (final claim in (card['claims'] as List).cast<Map<String, dynamic>>())
-            _bullet('[${claimLabels[claim['type']] ?? claim['type']}] ${claim['text']}'),
-          for (final text in (card['counter_arguments'] as List).cast<String>()) _bullet('반대 근거: $text'),
-          for (final text in (card['risks'] as List).cast<String>()) _bullet('위험: $text'),
+          for (final claim in (card['claims'] as List).cast<Map<String, dynamic>>()) ClaimLine(claim),
+          NoteBox.counters((card['counter_arguments'] as List).cast<String>()),
+          NoteBox.risks((card['risks'] as List).cast<String>()),
         ]),
         // 4. 검증 AI 의견
         _section('검증 AI 의견', [
-          Text(card['summary'] as String),
-          for (final text in (card['conditions'] as List).cast<String>()) _bullet('조건: $text'),
-          for (final text in (card['disagreements'] as List).cast<String>()) _bullet('두 AI 의견 차이: $text'),
+          NoteBox.conditions((card['conditions'] as List).cast<String>()),
+          NoteBox('두 AI 의견 차이', (card['disagreements'] as List).cast<String>(), color: mutedText, icon: Icons.forum_outlined),
         ]),
         // 5. 최악의 경우
         if (card['worst_case_loss'] != null)

@@ -209,3 +209,109 @@ class CountBadge extends StatelessWidget {
         child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
       );
 }
+
+// ---------- AI 제안·검증 표시 (2026-10-12: 근거·위험·조건을 읽기 쉽게) ----------
+
+const claimLabels = {'fact': '사실', 'calc': '계산', 'inference': '추론', 'opinion': '의견'};
+// 색은 한글 이름으로 찾는다 (브리핑은 유형을 이미 한글로 준다)
+const _claimColors = {'사실': Color(0xFF137A33), '계산': brandBlue, '추론': Color(0xFF7A4FD8), '의견': mutedText};
+
+/// 출처 제목을 짧게: "기사 제목 (연합뉴스)" → "연합뉴스", "OpenDART 주요 재무 (2026년 반기보고서, 연결)" → "OpenDART 주요 재무"
+String shortSource(String title) {
+  final paren = RegExp(r'\(([^()]+)\)$').firstMatch(title.trim());
+  if (paren != null && !RegExp(r'\d|보고서|연결|별도').hasMatch(paren.group(1)!)) return paren.group(1)!;
+  final head = title.split(RegExp(r' \(| · ')).first.trim();
+  return head.length > 22 ? '${head.substring(0, 22)}…' : head;
+}
+
+/// 근거 한 줄: [사실] 배지 + 문장(maxLines까지) + 아래에 짧은 출처
+class ClaimLine extends StatelessWidget {
+  const ClaimLine(this.claim, {super.key, this.maxLines});
+  final Map<String, dynamic> claim;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = claimLabels['${claim['type']}'] ?? '${claim['type']}';
+    final sources = {for (final s in (claim['sources'] as List? ?? [])) shortSource('$s')};
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          margin: const EdgeInsets.only(top: 2, right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(color: (_claimColors[label] ?? mutedText).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+          child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _claimColors[label] ?? mutedText)),
+        ),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${claim['text']}', maxLines: maxLines, overflow: maxLines == null ? null : TextOverflow.ellipsis,
+                style: const TextStyle(height: 1.35)),
+            if (sources.isNotEmpty) Text(sources.join(' · '), style: const TextStyle(fontSize: 12, color: mutedText)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// 위험·조건·반대 근거 같은 목록을 색 박스로 묶는다
+class NoteBox extends StatelessWidget {
+  const NoteBox(this.title, this.items, {super.key, required this.color, required this.icon, this.maxLines});
+  final String title;
+  final List<String> items;
+  final Color color;
+  final IconData icon;
+  final int? maxLines;
+
+  static NoteBox risks(List<String> items, {int? maxLines}) =>
+      NoteBox('위험', items, color: downBlue, icon: Icons.warning_amber_rounded, maxLines: maxLines);
+  static NoteBox conditions(List<String> items, {int? maxLines}) =>
+      NoteBox('검증 조건', items, color: const Color(0xFF8A5A00), icon: Icons.rule, maxLines: maxLines);
+  static NoteBox counters(List<String> items, {int? maxLines}) =>
+      NoteBox('반대 근거', items, color: coachOrange, icon: Icons.compare_arrows, maxLines: maxLines);
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(10)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+        ]),
+        const SizedBox(height: 4),
+        for (final item in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Text('• $item', maxLines: maxLines, overflow: maxLines == null ? null : TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, height: 1.35)),
+          ),
+      ]),
+    );
+  }
+}
+
+/// 검증 AI 한 줄 결론 (카드 맨 위)
+class VerdictSummary extends StatelessWidget {
+  const VerdictSummary(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: const Color(0xFFF1F3F5), borderRadius: BorderRadius.circular(10)),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.verified_user_outlined, size: 16, color: mutedText),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, height: 1.35))),
+        ]),
+      );
+}

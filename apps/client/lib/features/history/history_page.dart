@@ -198,11 +198,11 @@ class HistoryDetailPage extends StatelessWidget {
       case 'proposal':
         return [
           if (data['qty'] != null) _line('${comma(data['qty'] as int)}주 · 지정가 ${won(data['limit_price'] as int)}'),
-          for (final claim in (data['claims'] as List).cast<Map<String, dynamic>>())
-            _line('· [${claimLabels[claim['type']] ?? claim['type']}] ${claim['text']}'),
-          for (final text in texts(data['counter_arguments'])) _line('· 반대 근거: $text'),
-          for (final text in texts(data['risks'])) _line('· 위험: $text'),
-          for (final text in texts(data['invalid_if'])) _line('· 이러면 틀린 판단: $text'),
+          const SizedBox(height: 4),
+          for (final claim in (data['claims'] as List).cast<Map<String, dynamic>>()) ClaimLine(claim),
+          NoteBox.counters(texts(data['counter_arguments'])),
+          NoteBox.risks(texts(data['risks'])),
+          NoteBox('이러면 틀린 판단', texts(data['invalid_if']), color: const Color(0xFF8A5A00), icon: Icons.flag_outlined),
           if ((data['sources'] as List).isNotEmpty) _line('출처'),
           for (final source in (data['sources'] as List).cast<Map<String, dynamic>>())
             SourceText('${source['source_id']} · ${source['title']} · 기준 ${source['as_of'] ?? '미확인'}'
@@ -213,9 +213,9 @@ class HistoryDetailPage extends StatelessWidget {
           _line('${data['summary']}'),
           for (final check in (data['checks'] as List).cast<Map<String, dynamic>>())
             _line('${switch (check['result']) { 'pass' => '✅', 'warn' => '⚠️', _ => '❌' }} ${checkTarget('${check['target']}')}: ${check['detail']}'),
-          for (final text in texts(data['challenges'])) _line('· 반박: $text'),
-          for (final text in texts(data['conditions'])) _line('· 조건: $text'),
-          for (final text in texts(data['disagreements'])) _line('· 의견 차이: $text'),
+          NoteBox('반박', texts(data['challenges']), color: upRed, icon: Icons.reply),
+          NoteBox.conditions(texts(data['conditions'])),
+          NoteBox('의견 차이', texts(data['disagreements']), color: mutedText, icon: Icons.forum_outlined),
         ];
       case 'policy_check':
         return [
