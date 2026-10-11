@@ -469,6 +469,20 @@ void main() {
     realMode.value = false;
   });
 
+  test('보유 종목 매도 판단: −7% 손절, −3% 급락·점검 시각엔 AI에게 묻기, 하루 횟수·간격 제한', () {
+    final now = DateTime.utc(2026, 10, 12, 1, 0);
+    expect(sellReason(-7.5, 9 * 60 + 30, {}, now), 'stop');
+    expect(sellReason(-7.5, 9 * 60 + 30, {'stopped': true}, now), 'drop'); // 손절은 한 번만, 그다음은 AI 판단
+    expect(sellReason(-3.2, 9 * 60 + 30, {}, now), 'drop');
+    expect(sellReason(-1.0, 9 * 60 + 30, {}, now), isNull); // 10:00 전, 급락 아님
+    expect(sellReason(-1.0, 10 * 60 + 1, {}, now), 'slot:600');
+    expect(sellReason(-1.0, 10 * 60 + 1, {'slots': [600]}, now), isNull);
+    expect(sellReason(-1.0, 14 * 60 + 31, {'slots': [600]}, now), 'slot:870');
+    expect(sellReason(-3.2, 11 * 60, {'n': 3}, now), isNull); // 하루 3번까지
+    expect(sellReason(-3.2, 11 * 60, {'at': now.subtract(const Duration(minutes: 10)).toIso8601String()}, now), isNull); // 30분 간격
+    expect(sellReason(-7.5, 11 * 60, {'n': 3}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+  });
+
   test('자동 매도는 1회 한도 안으로 나눈다', () {
     expect(splitQty(22, 106800, 1940000), [18, 4]); // 18주 = 1,922,400원
     expect(splitQty(93, 24800, 1940000), [78, 15]);
@@ -484,9 +498,9 @@ void main() {
     await trader.load();
     expect(trader.needsPlan, isTrue);
     expect(trader.positions['000720'], {'name': '현대건설', 'qty': 22});
-    await trader.approvePlan(0, ['000720']);
+    await trader.approvePlan(0);
     expect(trader.needsPlan, isFalse);
-    expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'sell': ['000720'], 'ai_sell': true});
+    expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'ai_sell': true});
     await trader.cancelPlan();
     expect(trader.needsPlan, isTrue);
   });
