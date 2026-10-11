@@ -250,11 +250,13 @@ def base_state(code: str, name: str) -> dict:
             "flags": [], "prices": None, "snapshot": None, "user_directed": False, "side": None, "auto_origin": False}
 
 
-def verify_once(state: dict, proposal: dict) -> dict:
-    """verify_agent_node와 같은 순서 (원문 다시 읽기 → 코드 검사 → 검증 AI → 코드 fail이면 반려). 반박-수정은 돌리지 않는다."""
+def verify_once(state: dict, proposal: dict, metrics_now: list | None = None) -> dict:
+    """verify_agent_node와 같은 순서 (원문 다시 읽기 → 코드 검사 → 검증 AI → 코드 fail이면 반려). 반박-수정은 돌리지 않는다.
+    metrics_now: 지표를 다시 계산하는 대신 쓸 값 (재현은 그날 지표를 써야 오늘 시세가 섞이지 않는다)"""
     with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
         reloaded = load_sources(conn, cited_ids(proposal), state)
-        recomputed = json.loads(json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
+        recomputed = metrics_now if metrics_now is not None else json.loads(
+            json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
     checks = code_checks(proposal, reloaded, state["metrics"], recomputed,
                          offered_chunks=any("#" in sid for sid in state["sources"]), stock_code=state["stock_code"])
     draft = llm.verify_proposal(verify_context(state, proposal, reloaded, recomputed, checks)).model_dump()
@@ -393,6 +395,72 @@ def run_scenario(client, headers, title, turns) -> dict:
     return {"title": title, "steps": steps}
 
 
+# ---------- 4. 10/8 재현: 지금 시스템이라면 그날 샀을까 ----------
+
+REPLAY_RUNS = 3
+REPLAY_NEWS = 5      # 분석할 때 넣는 뉴스 수와 같다 (analysis.NEWS_RESULTS)
+REPLAY_NEWS_DAYS = 3
+
+
+def replay_cases(conn) -> list[dict]:
+    """10/8 종목별 첫 자동 매수. 그때 투자 AI가 본 출처 ID·지표는 proposals에, 폰이 보낸 현재가·1분봉은 대화 체크포인트에 있다"""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    firsts = conn.execute(
+        "SELECT DISTINCT ON (stock_code) * FROM proposals WHERE created_at::date = '2026-10-08' AND action = 'buy' AND user_directed"
+        " ORDER BY stock_code, created_at").fetchall()
+    cases = []
+    with PostgresSaver.from_conn_string(config.DATABASE_URL) as saver:
+        for p in firsts:
+            values = next(t.checkpoint["channel_values"] for t in saver.list({"configurable": {"thread_id": str(p["thread_id"])}})
+                          if (t.checkpoint["channel_values"].get("prices") or [{}])[0].get("intraday")
+                          and t.checkpoint["channel_values"].get("stock_code") == p["stock_code"])
+            cases.append({"proposal": p, "values": values})
+    return cases
+
+
+def replay_state(conn, case: dict, with_news: bool) -> dict:
+    p, v = case["proposal"], case["values"]
+    state = {k: v.get(k) for k in ("query", "mode", "risk_level", "flags", "stock_code", "stock_name", "prices", "snapshot",
+                                    "risk_grade", "risk_reason", "buy_block_reason", "qty", "limit_price")}
+    state |= {"side": "buy", "user_directed": True, "auto_origin": True, "allowed_actions": ["buy", "watch"],
+              "verifications": [], "metrics": p["metrics"], "conversation_signal": None}
+    ids = [s["source_id"] for s in p["sources"]]
+    if with_news:  # 매수 시각 전에 나온 기사만 (미래 정보를 쓰지 않는다)
+        ids += [f"news:{r['id']}" for r in conn.execute(
+            "SELECT id FROM news WHERE stock_code = %s AND published_at < %s AND published_at >= %s - %s::interval"
+            " ORDER BY published_at DESC LIMIT %s",
+            (p["stock_code"], p["created_at"], p["created_at"], f"{REPLAY_NEWS_DAYS} days", REPLAY_NEWS))]
+    state["sources"] = load_sources(conn, ids, state)
+    return state
+
+
+def replay() -> None:
+    with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
+        cases = replay_cases(conn)
+        jobs = [(case, news, n) for case in cases for news in (False, True) for n in range(REPLAY_RUNS)]
+        states = {(id(case), news): replay_state(conn, case, news) for case in cases for news in (False, True)}
+
+    def run(job):
+        case, news, n = job
+        state = dict(states[(id(case), news)])
+        state |= invest_agent_node(state)
+        result = verify_once(state, state["proposal"], metrics_now=state["metrics"])
+        p = case["proposal"]
+        return {"stock": state["stock_name"], "stock_code": p["stock_code"], "time": p["created_at"].astimezone().strftime("%H:%M"),
+                "news": news, "run": n + 1, "action": state["proposal"]["action"], "verdict": result["final"],
+                "buys": state["proposal"]["action"] == "buy" and result["final"] in ("approve", "conditional"),
+                "code_failed": result["code_failed"], "summary": result["summary"],
+                "claims": [c["text"] for c in state["proposal"]["claims"]], "risks": state["proposal"]["risks"],
+                "news_titles": [s["title"] for sid, s in state["sources"].items() if sid.startswith("news:")],
+                "intraday": state["sources"].get(f"intraday:{p['stock_code']}", {}).get("content")}
+
+    with ThreadPoolExecutor(4) as pool:
+        rows = list(pool.map(run, jobs))
+    save("replay", rows)
+    for r in rows:
+        print(r["stock"], "뉴스" if r["news"] else "그때 자료", r["run"], r["action"], r["verdict"], "→ 매수" if r["buys"] else "→ 안 삼")
+
+
 # ---------- 리포트 ----------
 
 VERDICT_KO = {"approve": "승인", "conditional": "조건부", "reject": "반려", "user_judgement": "사용자 판단", None: "—"}
@@ -498,6 +566,19 @@ def report() -> None:
             else:
                 lines.append(f"- ❓ {step['kind']}: {json.dumps(step['data'], ensure_ascii=False)[:200]}")
         lines.append("")
+    if (RESULTS / "replay.json").exists():
+        rows = load("replay")
+        lines += ["## 4. 10/8 재현: 지금 시스템이라면 그날 샀을까", "",
+                  "10/8 첫 자동 매수 때 투자 AI가 본 자료(출처 ID·지표는 제안서 기록, 현재가·1분봉은 대화 체크포인트)를 그대로 넣고 "
+                  "지금 로직(자동 주문은 '관찰'로 거절 가능)으로 다시 돌렸다. 뉴스는 매수 시각 전에 나온 기사만 넣었다 (미래 정보 없음). "
+                  "지표 검사는 그날 값으로 했다", "",
+                  "| 종목 (그때 시각) | 조건 | 행동 | 검증 | 샀나 |", "|---|---|---|---|---|"]
+        for r in rows:
+            lines.append(f"| {r['stock']} ({r['time']}) | {'+ 뉴스' if r['news'] else '그때 자료'} {r['run']}회 | {r['action']} | "
+                         f"{VERDICT_KO[r['verdict']]} | {'샀음' if r['buys'] else '안 삼'} |")
+        bought = sum(r["buys"] for r in rows)
+        lines += ["", f"- {len(rows)}번 중 {bought}번 매수. 그날 실제로는 두 종목 모두 샀다 (현대건설 +2,200원, NH투자증권 −73,950원, 종가 기준)",
+                  "- 두 종목 모두 장중 하락 중이었다. 하락 중인 자동 매수를 거르는지만 본 것이다. 오르는 날에도 잘 사는지(너무 조심하지 않는지)는 미확인", ""]
     lines += ["## 한계", "",
               "- 골든 세트·오류 사례를 만든 사람(Claude)이 평가 대상 프롬프트를 알고 있다. 실제 사용자 문장으로 다시 재야 한다",
               "- 오류 주입은 같은 평가를 3번 반복했다 (실행마다 제안서를 새로 쓴다). 더 많이 반복하거나 다른 오류 유형을 넣으면 숫자가 달라질 수 있다",
@@ -508,4 +589,4 @@ def report() -> None:
 
 
 if __name__ == "__main__":
-    {"golden": golden, "inject": inject, "demo": demo, "report": report}[sys.argv[1]]()
+    {"golden": golden, "inject": inject, "demo": demo, "replay": replay, "report": report}[sys.argv[1]]()
