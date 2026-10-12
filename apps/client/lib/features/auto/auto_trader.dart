@@ -259,7 +259,8 @@ class AutoTrader extends ChangeNotifier {
     final tries = (jsonDecode(await _box.read('auto_tries:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final bought = (jsonDecode(await _box.read('auto_bought:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
-        .where((p) => autoApproves('buy', p['verdict'])).toList();
+        // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
+        .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
     // 오늘 이미 사기 시작한 종목이 autoMaxPerDay개면 새 종목은 사지 않는다
     bool skip(Map<String, dynamic> p) => done.contains(p['stock_code']) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries ||
         (!bought.containsKey(p['stock_code']) && bought.length >= autoMaxPerDay);

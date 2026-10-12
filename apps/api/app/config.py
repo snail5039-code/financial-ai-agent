@@ -22,11 +22,12 @@ GEMINI_EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "").strip() or
 # 공공데이터포털 금융위원회_주식시세정보 (4단계): 일별 종가와 시가총액
 DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY", "").strip() or None
 
-# 서버가 매일 이 시각(KST)에 분석용 데이터를 자동 수집한다. 시세는 영업일 다음 날 오후에 갱신된다.
-# 비우면 15시, "off"면 끈다
-AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "15"
-# 아침 브리핑 자동 실행 시각 (예: "08:30"). 비우면 안 함: 사용자마다 Gemini 호출이 생긴다
-MORNING_BRIEF_TIME = os.environ.get("MORNING_BRIEF_TIME", "").strip() or None
+# 서버가 매일 이 시각(KST)에 분석용 데이터(공시·재무·시세)를 자동 수집한다. 시세는 영업일 다음 날 오후에 갱신된다.
+# 비우면 7시 (아침 브리핑 전에 밤사이 공시를 받는다, 2026-10-13 사용자 요청), "off"면 끈다
+AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "7"
+# 아침 브리핑 자동 실행 시각. 비우면 08:20, "off"면 안 함 (사용자마다 Gemini 호출이 생긴다).
+# 2026-10-13 사용자 요청: 사람이 손으로 돌리지 않고 서버가 매일 만든다
+MORNING_BRIEF_TIME = None if (_brief := os.environ.get("MORNING_BRIEF_TIME", "").strip() or "08:20") == "off" else _brief
 # 장 마감 요약 시각. LLM이 없어 비용이 없으므로 기본으로 켠다. "off"면 안 함
 CLOSE_SUMMARY_TIME = os.environ.get("CLOSE_SUMMARY_TIME", "").strip() or "15:40"
 # 장 마감 AI 회고·내일 계획 시각 (예: "15:50", 장 마감 요약 뒤). Gemini 비용이 생겨 비어 있으면 끈다
