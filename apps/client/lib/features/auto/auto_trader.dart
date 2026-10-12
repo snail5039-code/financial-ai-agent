@@ -313,6 +313,10 @@ class AutoTrader extends ChangeNotifier {
         final conversation = Conversation(unlock: () async => false); // 분석만 한다. 주문은 아래에서 따로
         await conversation.send(sellQuestion(name, avg, pct));
         final answer = conversation.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '')).text;
+        if (answer.contains('번까지 할 수 있어요')) { // 서버 하루 분석 한도: AI 판단이 아니다
+          await _note('$name: 오늘 AI 분석 한도를 다 써서 판단을 못 받았어요. 손절(−$autoStopLossPct%)만 지켜요');
+          continue;
+        }
         if (!aiSaysSell(answer)) {
           await _note('$name: AI 판단은 매도가 아니에요 (${answer.split('\n').take(2).join(' / ')}). 들고 있어요');
           continue;

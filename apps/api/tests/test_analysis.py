@@ -224,7 +224,7 @@ def test_daily_limit(client, user, ai, migrated) -> None:
             conn.execute("INSERT INTO proposals (user_id, thread_id, stock_code, action) VALUES (%s, %s, %s, 'watch')",
                          (user["id"], thread, CODE))
     events, _ = analyze(client, user)
-    assert "오늘 분석은 20번까지" in text_of(events)
+    assert analysis.LIMIT_MESSAGE in text_of(events)
     assert ai["invest"] == []
 
 

@@ -35,7 +35,7 @@ from app.integrations import google_news
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
-MAX_ANALYSES_PER_DAY = 20  # Gemini 비용 관리 (NFR-14)
+MAX_ANALYSES_PER_DAY = 100  # Gemini 비용 관리 (NFR-14). 2026-10-12 사용자 결정: 장중 AI 매도 점검으로 20 → 100
 SEARCH_RESULTS = 6
 # 공시 본문 검색 (12-todo-by-stage.md 2-8). 요청 하나에 관점 3개를 더해 검색한다 ("사도 돼?"처럼 막연한 요청도 근거가 고르게)
 SEARCH_ASPECTS = ("실적과 수익성", "위험 요인", "사업 전망과 계획")
