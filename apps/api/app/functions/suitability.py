@@ -69,14 +69,13 @@ def allowed_actions(mode: str, risk_level: int | None, flags: list[str], grade: 
     """투자 AI가 낼 수 있는 행동.
 
     - 일반 모드(퀴즈 안 함): 판단하지 않으므로 '관찰'만
-    - 매도·보유: 이 종목을 갖고 있을 때만 (없으면 의미가 없음)
+    - 매도·보유: 이 종목을 갖고 있을 때만 (없으면 의미가 없음). 갖고 있으면 '관찰' 대신 보유·매도 중에서 고른다
+      (2026-10-12 보유 종목에 '관찰'이 나와 팔지 들고 있을지 모호했다)
     - 매수: buy_block_reason이 없을 때만
     """
     if mode != "custom":
         return ["watch"]
-    actions = ["watch"]
-    if holds_stock:
-        actions += ["hold", "sell"]
+    actions = ["hold", "sell"] if holds_stock else ["watch"]
     if buy_block_reason(mode, risk_level, flags, grade, volatility_rank) is None:
         actions.append("buy")
     return actions

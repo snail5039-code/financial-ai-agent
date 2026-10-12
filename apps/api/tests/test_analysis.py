@@ -424,3 +424,30 @@ def test_intraday_source_summarizes_minute_bars() -> None:
     assert source["content"] == ("전일 대비 -1.25%. 09:11~09:40 1분봉 3개: 112,000원 → 111,000원 (-0.89%), "
                                  "이 사이 고가 113,000원, 저가 111,000원")
     assert analysis.load_source(None, "intraday:000270", {"prices": [{**price, "intraday": None}]}) is None
+
+
+# 2026-10-12 기록에서 검증이 놓친 것들 (뉴스를 사실로, 묵은 종가, 보유 판단에 오늘 자료 안 씀)
+def proposal_with(action: str, claims: list[dict]) -> dict:
+    return {"action": action, "claims": claims, "counter_arguments": ["반대"], "risks": ["위험"]}
+
+
+def test_news_only_fact_claim_fails() -> None:
+    sources = {"news:1": {"stock_code": None}, "dart:1": {"stock_code": None}}
+    news_fact = {"type": "fact", "text": "3분기 영업이익 5,100억 원", "source_ids": ["news:1"], "metric_ids": []}
+    assert analysis.claim_check("claim:0", news_fact, sources, set())["result"] == "fail"
+    assert analysis.claim_check("claim:0", {**news_fact, "source_ids": ["news:1", "dart:1"]}, sources, set())["result"] == "pass"
+    assert analysis.claim_check("claim:0", {**news_fact, "type": "inference"}, sources, set())["result"] == "pass"
+
+
+def test_freshness_and_today_data_checks() -> None:
+    hold = proposal_with("hold", [{"type": "fact", "text": "실적 호조", "source_ids": ["fin:1"], "metric_ids": []}])
+    stale = {"price:000720:2026-10-07": {}, "fin:1": {}}
+    checks = analysis.freshness_checks(hold, stale, holds=False, today=date(2026, 10, 12))
+    assert [c["target"] for c in checks] == ["freshness"]  # 10/12 아침에 10/7 종가만
+    assert analysis.freshness_checks(hold, {"price:000720:2026-10-08": {}}, False, date(2026, 10, 12)) == []
+    live = {**stale, "quote:000720": {}, "market:KOSPI": {}}
+    assert analysis.freshness_checks(hold, live, holds=False, today=date(2026, 10, 12)) == []  # 오늘 시세가 있으면 괜찮다
+    checks = analysis.freshness_checks(hold, live, holds=True, today=date(2026, 10, 12))
+    assert [(c["target"], c["result"]) for c in checks] == [("today_data", "fail")]  # 보유 판단인데 오늘 자료를 안 씀
+    cited = proposal_with("hold", [{"type": "fact", "text": "코스피 -3.65%", "source_ids": ["market:KOSPI"], "metric_ids": []}])
+    assert analysis.freshness_checks(cited, live, holds=True, today=date(2026, 10, 12)) == []

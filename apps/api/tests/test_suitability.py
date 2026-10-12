@@ -22,7 +22,7 @@ def test_no_buy_flag_blocks_buy_even_for_aggressive() -> None:
 
 
 def test_sell_and_hold_only_when_holding() -> None:
-    assert set(allowed_actions("custom", 1, [], 2, holds_stock=True)) == {"watch", "hold", "sell"}
+    assert set(allowed_actions("custom", 1, [], 2, holds_stock=True)) == {"hold", "sell"}  # 보유 종목에 모호한 관찰은 없다
     assert allowed_actions("custom", 1, [], 2, holds_stock=False) == ["watch"]
 
 

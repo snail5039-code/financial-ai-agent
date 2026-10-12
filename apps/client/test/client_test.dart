@@ -478,7 +478,7 @@ void main() {
     realMode.value = false;
   });
 
-  test('보유 종목 매도 판단: −7% 손절, 급락은 바로, 그 밖에는 30분마다 AI에게, 하루 횟수 제한', () {
+  test('보유 종목 매도 판단: 손절선·급락·급등은 바로, 그 밖에는 30분마다 AI에게, 하루 횟수 제한', () {
     final now = DateTime.utc(2026, 10, 12, 1, 0);
     String ago(int minutes) => now.subtract(Duration(minutes: minutes)).toIso8601String();
     expect(sellReason(-7.5, {}, now), 'stop');
@@ -491,13 +491,27 @@ void main() {
     expect(sellReason(2.0, {'at': ago(20)}, now), isNull);
     expect(sellReason(2.0, {'at': ago(31)}, now), 'check');
     expect(sellReason(-3.2, {'n': 20}, now), isNull); // 하루 20번까지
-    expect(sellReason(-7.5, {'n': 20}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+    expect(sellReason(-7.5, {'n': 20}, now), 'stop'); // 손절선 질문은 횟수 제한과 상관없다 (팔지는 AI가 판단)
+    // 급등도 바로 AI에게 (팔지 말지는 AI가 판단), 지난번보다 1%p 더 올랐을 때만 다시
+    expect(sellReason(3.5, {'at': ago(15), 'pct': 1.0}, now), 'rise');
+    expect(sellReason(3.5, {'at': ago(15), 'pct': 3.2}, now), isNull);
+    expect(sellReason(4.4, {'at': ago(15), 'pct': 3.2}, now), 'rise');
+    expect(sellQuestion('셀트리온', 184000, '-7.2', reason: 'stop'), contains('손절선에 닿았어'));
+    expect(sellQuestion('셀트리온', 184000, '+3.5', reason: 'rise'), contains('이익을 지키고'));
     expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('떨어질 가능성이 크면 지금 미리 팔'));
     expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('시장 전체 흐름'));
     // 시장 급락: 30분을 기다리지 않고 묻는다. 그래도 10분 안에는 다시 안 묻는다
     expect(sellReason(-1.0, {'at': ago(15)}, now, marketDrop: true), 'market');
     expect(sellReason(-1.0, {'at': ago(5)}, now, marketDrop: true), isNull);
     expect(sellReason(-1.0, {'n': 20}, now, marketDrop: true), isNull);
+  });
+
+  test('자동 승인: 매수는 승인만, 매도는 조건부 승인까지', () {
+    expect(autoApproves('buy', 'approve'), isTrue);
+    expect(autoApproves('buy', 'conditional'), isFalse); // 10/12 셀트리온: 숫자를 고치라는 조건부 승인으로 샀다
+    expect(autoApproves('sell', 'conditional'), isTrue);
+    expect(autoApproves('sell', 'reject'), isFalse);
+    expect(autoApproves('buy', 'user_judgement'), isFalse);
   });
 
   test('시장 급락 알림: 코스피 −1.5% 아래, 지난 알림보다 1%p 더 빠질 때만', () {

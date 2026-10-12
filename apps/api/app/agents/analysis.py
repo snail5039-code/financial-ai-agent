@@ -433,11 +433,13 @@ def amount_check(target: str, claim: dict, known_sources: dict) -> dict | None:
 
 
 def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict], recomputed: list[dict],
-                offered_chunks: bool = False, stock_code: str | None = None) -> list[dict]:
+                offered_chunks: bool = False, stock_code: str | None = None, offered: dict | None = None,
+                holds: bool = False, today=None) -> list[dict]:
     """AI 없이 확실히 잡을 수 있는 것: 출처·지표 ID가 실제로 있는지, 사실·계산에 출처가 붙었는지,
     지표를 다시 계산하면 같은 값인지, 반대 근거·위험이 있는지. 하나라도 fail이면 승인하지 않는다.
     offered_chunks: 투자 AI에게 공시 본문 조각을 줬는지. 줬는데 하나도 인용하지 않으면 warn (막지는 않는다).
-    stock_code: 이 종목. 다른 종목의 공시·시세를 출처로 달았으면 fail (평가 2026-10-10에서 검증 AI가 놓친 것들을 코드로 막는다)."""
+    stock_code: 이 종목. 다른 종목의 공시·시세를 출처로 달았으면 fail (평가 2026-10-10에서 검증 AI가 놓친 것들을 코드로 막는다).
+    offered: 투자 AI에게 준 자료 전체. holds: 이 종목을 갖고 있는지. today: 오늘 날짜 (신선도 검사, 없으면 건너뜀)."""
     metric_ids = {m["metric_id"] for m in recomputed if m["value"] is not None}
     checks = [claim_check(f"claim:{n}", c, known_sources, metric_ids) for n, c in enumerate(proposal["claims"])]
     checks += [a for n, c in enumerate(proposal["claims"]) if (a := amount_check(f"claim:{n}", c, known_sources))]
@@ -457,6 +459,8 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
         checks.append({"target": "body_citations", "result": "warn",
                        "detail": "공시 본문 조각을 받았지만 근거·반대 근거·위험 어디에도 인용하지 않음", "source_ids": []})
 
+    checks += freshness_checks(proposal, offered or known_sources, holds, today)
+
     before = {m["metric_id"]: m["value"] for m in gathered_metrics}
     changed = [m["metric_id"] for m in recomputed if before.get(m["metric_id"]) != m["value"]]
     checks.append({"target": "metrics", "result": "fail" if changed else "pass",
@@ -469,6 +473,33 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
     return checks
 
 
+TODAY_SOURCES = ("quote:", "intraday:", "market:")
+
+
+def weekdays_between(start, end) -> int:
+    """start와 end 사이(둘 다 빼고) 평일 수. 휴장일은 모른다 (그만큼 경고가 넉넉하게 난다)"""
+    return sum(1 for n in range(1, (end - start).days) if (start + timedelta(days=n)).weekday() < 5)
+
+
+def freshness_checks(proposal: dict, offered: dict, holds: bool, today) -> list[dict]:
+    """자료가 오래됐는지와 오늘 자료를 썼는지 코드로 본다 (2026-10-12 아침 분석이 3거래일 전 종가를 썼는데 검증을 통과).
+    - 오늘 시세 없이 종가가 2거래일 넘게 묵었으면 warn (공개 종가는 하루 늦게 나오므로 1일은 정상)
+    - 보유 종목의 보유·매도 판단인데 오늘 자료(현재가·장중·시장)를 받고도 근거에 하나도 안 쓰면 fail"""
+    checks = []
+    has_today = any(sid.startswith(TODAY_SOURCES) for sid in offered)
+    closes = sorted(sid.rsplit(":", 1)[1] for sid in offered if sid.startswith("price:"))
+    if today and closes and not has_today:
+        last = datetime.strptime(closes[-1], "%Y-%m-%d").date()
+        if weekdays_between(last, today) >= 2:
+            checks.append({"target": "freshness", "result": "warn", "source_ids": [],
+                           "detail": f"오늘 시세 없이 {last} 종가 기준 (평일 {weekdays_between(last, today)}일 묵음). 지금 가격과 다를 수 있음"})
+    cited_today = [sid for sid in cited_ids(proposal) if sid.startswith(TODAY_SOURCES)]
+    if holds and has_today and proposal["action"] in ("hold", "sell") and not cited_today:
+        checks.append({"target": "today_data", "result": "fail", "source_ids": [],
+                       "detail": "보유 종목 판단인데 오늘 현재가·장중 흐름·시장 지수를 근거에 하나도 쓰지 않음"})
+    return checks
+
+
 def claim_check(target: str, claim: dict, known_sources: dict, metric_ids: set[str] | None) -> dict:
     """근거 하나의 출처·지표 ID 검사. metric_ids가 None이면 지표 없이 출처 원문의 숫자를 쓰는 글이다 (장 마감 회고)."""
     problems = []
@@ -476,6 +507,9 @@ def claim_check(target: str, claim: dict, known_sources: dict, metric_ids: set[s
         problems.append("사실·계산 근거인데 출처가 없음")
     if missing := [s for s in claim["source_ids"] if s not in known_sources]:
         problems.append(f"없는 출처 ID: {', '.join(missing)}")
+    if claim["type"] == "fact" and claim["source_ids"] and all(s.startswith("news:") for s in claim["source_ids"]):
+        # 2026-10-12 제안 36건 중 21건이 제목뿐인 보도를 사실로 써서 조건부 승인이 반복됐다. 보도는 추론·위험으로 쓴다
+        problems.append("뉴스(제목뿐인 미확인 보도)만 출처인 사실 근거")
     if metric_ids is not None:
         if claim["type"] == "calc" and not claim["metric_ids"]:
             problems.append("계산 근거인데 지표 ID가 없음")
@@ -692,8 +726,10 @@ def verify_agent_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         reloaded = load_sources(conn, cited_ids(proposal), state)  # 투자 AI가 본 자료가 아니라 원문을 다시 읽는다
         recomputed = json.loads(json.dumps(compute_metrics(conn, state["stock_code"]), default=str))
+    holds = bool(state.get("snapshot")) and any(h["stock_code"] == state["stock_code"] for h in state["snapshot"]["holdings"])
     checks = code_checks(proposal, reloaded, state["metrics"], recomputed,
-                         offered_chunks=any("#" in sid for sid in state["sources"]), stock_code=state["stock_code"])
+                         offered_chunks=any("#" in sid for sid in state["sources"]), stock_code=state["stock_code"],
+                         offered=state["sources"], holds=holds, today=datetime.now(KST).date())
     draft = llm.verify_proposal(verify_context(state, proposal, reloaded, recomputed, checks)).model_dump()
 
     failed = [c for c in checks if c["result"] == "fail"]
