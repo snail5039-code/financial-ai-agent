@@ -3,8 +3,8 @@
 // 매일 사용자 승인이 먼저다: 그날 "오늘 계획"(살 총액, AI 매도 허용)을 사용자가 승인해야 사고판다. 승인이 없으면 아무것도 안 한다.
 // 사는 것: 오늘 아침 브리핑에서 투자 AI가 매수 검토로 쓰고 검증 AI가 승인·조건부 승인한 종목만, 승인한 총액 안에서.
 //   장중 autoRescanSlots에 브리핑을 다시 만들어 새 후보도 산다. 종목당 총액/autoMaxPerDay, 하루 합계는 승인한 총액을 넘지 않는다
-// 파는 것 (AI 매도를 허용했을 때, 2026-10-12 사용자 결정: 팔 종목을 사람이 고르지 않고 AI가 판단): 자동매매로 산 종목(전날 이전 것 포함)을
-//   정해진 시각(autoReviewSlots)과 장중 급락(매입가 대비 −autoDropPct%) 때 투자 AI에게 "지금 팔아야 할까?"를 분석시키고,
+// 파는 것 (AI 매도를 허용했을 때, 2026-10-12 사용자 결정: 팔 종목·시점을 사람이 정하지 않고 AI가 앞을 보고 판단): 자동매매로 산 종목을
+//   autoReviewGap마다(장중 급락 −autoDropPct%면 바로) 투자 AI에게 "앞으로 떨어질 가능성이 크면 미리 팔지"를 분석시키고(sellQuestion),
 //   제안이 '매도 검토'이고 검증 AI가 승인·조건부 승인일 때만 판다. 매입가 대비 −autoStopLossPct% 이하면 AI에게 묻지 않고 판다(손절)
 // 사고파는 방법: 사람이 채팅에 "○○ N주 사줘/팔아줘"라고 한 것과 똑같은 주문 흐름을 앱이 대신 돌린다
 //   → 주문 때 다시 투자 AI → 검증 AI → 정책 검사(1회 한도, 비중, 장 시간) → 처리안
@@ -34,10 +34,9 @@ const autoRealBudgets = [0, 100000, 300000, 500000];
 const autoRealMaxOrder = 300000;
 const autoDropPct = 3; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 매도 판단을 묻는다
 const autoStopLossPct = 7; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 묻지 않고 판다 (2026-10-12 사용자 결정)
-const autoReviewSlots = [10 * 60, 11 * 60, 13 * 60, 14 * 60 + 30]; // 이 시각(KST 분)이 지나면 한 번씩 보유 종목 매도 여부를 AI에게 묻는다
 const autoRescanSlots = [12 * 60, 13 * 60 + 30]; // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지)
 const autoReviewGap = Duration(minutes: 30);
-const autoMaxReviews = 5; // 종목마다 하루에 묻는 횟수 (점검 4번 + 급락 1번)
+const autoMaxReviews = 12; // 종목마다 하루에 묻는 횟수 (30분마다 장중 약 6시간, Gemini 비용 상한)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
 
 /// 분석 답의 첫 두 줄("… 분석 · 검증: 승인", "제안: 매도 검토")로 AI가 지금 팔자고 했는지 본다
@@ -49,17 +48,22 @@ bool aiSaysSell(String analysis) {
   return verified && lines[1].trim() == '제안: 매도 검토';
 }
 
-/// 보유 종목 하나를 지금 어떻게 볼지: 'stop'(손절), 'drop'(급락이라 AI에게 묻기), 'slot:분'(정해진 점검 시각이라 AI에게 묻기), null(그대로).
-/// seen: 오늘 이 종목에 한 일 {n: AI에게 물은 횟수, at: 마지막으로 물은 시각, slots: 끝낸 점검 시각, stopped: 손절 시도함}
-String? sellReason(double dropPct, int minutes, Map<String, dynamic> seen, DateTime now) {
+/// 보유 종목 하나를 지금 어떻게 볼지: 'stop'(손절, AI에게 안 묻고 판다), 'drop'(급락, 바로 AI에게 묻기),
+/// 'check'(정기 점검, autoReviewGap마다 AI에게 묻기), null(아직 물을 때가 아님).
+/// seen: 오늘 이 종목에 한 일 {n: AI에게 물은 횟수, at: 마지막으로 물은 시각, stopped: 손절 시도함}
+String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now) {
   if (dropPct <= -autoStopLossPct && seen['stopped'] != true) return 'stop';
+  if ((seen['n'] as int? ?? 0) >= autoMaxReviews) return null;
   final last = DateTime.tryParse(seen['at'] as String? ?? '');
-  if ((seen['n'] as int? ?? 0) >= autoMaxReviews || (last != null && now.difference(last) < autoReviewGap)) return null;
-  if (dropPct <= -autoDropPct) return 'drop';
-  final done = ((seen['slots'] as List?) ?? []).cast<int>();
-  final slot = autoReviewSlots.lastWhere((s) => minutes >= s, orElse: () => -1);
-  return slot >= 0 && !done.contains(slot) ? 'slot:$slot' : null;
+  if (dropPct <= -autoDropPct && (last == null || now.difference(last) >= const Duration(minutes: 10))) return 'drop';
+  return last == null || now.difference(last) >= autoReviewGap ? 'check' : null;
 }
+
+/// AI에게 보내는 매도 판단 질문. 정해진 숫자가 아니라 앞으로의 흐름을 보고 판단하게 한다 (2026-10-12 사용자 요청)
+String sellQuestion(String name, int avg, String pct) =>
+    '$name 보유 중이야 (매입가 ${won(avg)}, 지금 $pct%). 앞으로 몇 시간~며칠 안에 떨어질 가능성이 크면 지금 미리 팔아서 '
+    '이익을 지키거나 손실을 막아야 하고, 더 오를 근거가 크면 계속 들고 있어야 해. 장중 흐름(고점에서 밀리는지, 하락이 이어지는지), '
+    '뉴스, 공시를 근거로 지금 팔아야 할까?';
 
 /// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액/autoMaxPerDay)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게
 int buyRoom({required int budget, required int spentToday, required int spentOnStock}) {
@@ -172,7 +176,7 @@ class AutoTrader extends ChangeNotifier {
         await _rescan(minutes);
         await _buy(plan!['budget'] as int);
       }
-      if (plan?['ai_sell'] == true) await _review(minutes);
+      if (plan?['ai_sell'] == true) await _review();
     } catch (error) {
       await _note('자동매매 중 오류: $error');
     } finally {
@@ -274,7 +278,7 @@ class AutoTrader extends ChangeNotifier {
   }
 
   /// 보유 종목 점검: 손절선 아래면 팔고, 급락했거나 점검 시각이면 AI에게 매도 판단을 묻고 팔자고 하면 판다
-  Future<void> _review(int minutes) async {
+  Future<void> _review() async {
     if (positions.isEmpty || (_lastWatch != null && _now().difference(_lastWatch!) < _watchGap)) return;
     _lastWatch = _now();
     final broker = currentBroker.value!;
@@ -288,22 +292,21 @@ class AutoTrader extends ChangeNotifier {
       if (held == null || avg <= 0 || price <= 0) continue;
       final drop = (price - avg) * 100 / avg;
       final seen = (reviews[code] as Map?)?.cast<String, dynamic>() ?? {};
-      final reason = sellReason(drop, minutes, seen, _now());
+      final reason = sellReason(drop, seen, _now());
       if (reason == null) continue;
       final name = (positions[code] as Map)['name'] as String;
       final pct = drop.toStringAsFixed(1);
       // 먼저 적어 둔다 (실패해도 같은 이유로 곧바로 다시 하지 않게)
       reviews[code] = reason == 'stop'
           ? {...seen, 'stopped': true}
-          : {...seen, 'n': (seen['n'] as int? ?? 0) + 1, 'at': _now().toIso8601String(),
-             if (reason.startsWith('slot:')) 'slots': [...((seen['slots'] as List?) ?? []), int.parse(reason.substring(5))]};
+          : {...seen, 'n': (seen['n'] as int? ?? 0) + 1, 'at': _now().toIso8601String()};
       await _box.write('auto_reviews:$_today', jsonEncode(reviews));
       if (reason == 'stop') {
         await _note('$name 매입가 대비 $pct%: 손절선(−$autoStopLossPct%) 아래라 팔아요');
       } else {
-        await _note('$name 매입가 대비 $pct%: ${reason == 'drop' ? '급락이라' : '점검 시각이라'} 투자 AI·검증 AI에게 매도 판단을 물어요');
+        await _note('$name 매입가 대비 $pct%: ${reason == 'drop' ? '급락이라' : '정기 점검으로'} 투자 AI·검증 AI에게 매도 판단을 물어요');
         final conversation = Conversation(unlock: () async => false); // 분석만 한다. 주문은 아래에서 따로
-        await conversation.send('$name 지금 팔아야 할까? 매입가 ${won(avg)} 대비 $pct%야');
+        await conversation.send(sellQuestion(name, avg, pct));
         final answer = conversation.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '')).text;
         if (!aiSaysSell(answer)) {
           await _note('$name: AI 판단은 매도가 아니에요 (${answer.split('\n').take(2).join(' / ')}). 들고 있어요');

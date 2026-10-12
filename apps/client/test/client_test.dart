@@ -470,19 +470,19 @@ void main() {
     realMode.value = false;
   });
 
-  test('보유 종목 매도 판단: −7% 손절, −3% 급락·점검 시각엔 AI에게 묻기, 하루 횟수·간격 제한', () {
+  test('보유 종목 매도 판단: −7% 손절, 급락은 바로, 그 밖에는 30분마다 AI에게, 하루 횟수 제한', () {
     final now = DateTime.utc(2026, 10, 12, 1, 0);
-    expect(sellReason(-7.5, 9 * 60 + 30, {}, now), 'stop');
-    expect(sellReason(-7.5, 9 * 60 + 30, {'stopped': true}, now), 'drop'); // 손절은 한 번만, 그다음은 AI 판단
-    expect(sellReason(-3.2, 9 * 60 + 30, {}, now), 'drop');
-    expect(sellReason(-1.0, 9 * 60 + 30, {}, now), isNull); // 10:00 전, 급락 아님
-    expect(sellReason(-1.0, 10 * 60 + 1, {}, now), 'slot:600');
-    expect(sellReason(-1.0, 10 * 60 + 1, {'slots': [600]}, now), isNull);
-    expect(sellReason(-1.0, 14 * 60 + 31, {'slots': [600]}, now), 'slot:870');
-    expect(sellReason(-1.0, 11 * 60 + 1, {'slots': [600]}, now), 'slot:660');
-    expect(sellReason(-3.2, 11 * 60, {'n': 5}, now), isNull); // 하루 5번까지
-    expect(sellReason(-3.2, 11 * 60, {'at': now.subtract(const Duration(minutes: 10)).toIso8601String()}, now), isNull); // 30분 간격
-    expect(sellReason(-7.5, 11 * 60, {'n': 5}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+    String ago(int minutes) => now.subtract(Duration(minutes: minutes)).toIso8601String();
+    expect(sellReason(-7.5, {}, now), 'stop');
+    expect(sellReason(-7.5, {'stopped': true}, now), 'drop'); // 손절은 한 번만, 그다음은 AI 판단
+    expect(sellReason(-3.2, {'at': ago(15)}, now), 'drop'); // 급락이면 30분을 기다리지 않는다
+    expect(sellReason(-3.2, {'at': ago(5)}, now), isNull); // 그래도 10분 안에 또 묻지는 않는다
+    expect(sellReason(2.0, {}, now), 'check'); // 오른 종목도 AI가 앞을 보고 판단
+    expect(sellReason(2.0, {'at': ago(20)}, now), isNull);
+    expect(sellReason(2.0, {'at': ago(31)}, now), 'check');
+    expect(sellReason(-3.2, {'n': 12}, now), isNull); // 하루 12번까지
+    expect(sellReason(-7.5, {'n': 12}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+    expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('떨어질 가능성이 크면 지금 미리 팔'));
   });
 
   test('출처 제목 줄이기: 언론사는 괄호 속, 공시·재무는 앞부분', () {

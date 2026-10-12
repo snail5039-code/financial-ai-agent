@@ -39,8 +39,8 @@ class _AutoTradePageState extends State<AutoTradePage> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: SourceText('매일 오늘 계획(살 총액, AI 매도 허용)을 승인해야 시작해요. 승인하지 않은 날은 사고팔지 않아요. '
                     '장중(평일 09:05~15:00) 앱이 켜져 있으면 1분마다 확인해서 오늘 아침 브리핑에서 검증 AI가 승인한 종목을 사요. '
-                    'AI 매도를 허용하면 자동매매로 산 종목을 10:00·14:30과 매입가 대비 −$autoDropPct% 급락 때 점검해서, '
-                    'AI가 매도를 제안하고 검증 AI가 승인한 경우에만 팔아요. −$autoStopLossPct% 아래면 손절해요. '
+                    'AI 매도를 허용하면 자동매매로 산 종목을 30분마다(−$autoDropPct% 급락이면 바로) 점검해서, '
+                    '곧 떨어질 것 같다고 AI가 매도를 제안하고 검증 AI가 승인한 경우에만 팔아요. −$autoStopLossPct% 아래면 손절해요. '
                     '사든 팔든 주문 때 다시 투자 AI → 검증 AI → 한도 검사를 거치고, 1회 한도를 넘으면 나눠 주문해요. '
                     '성향 초과·검증 반려·급등 재확인처럼 확인이 필요한 처리안은 자동으로 승인하지 않아요. 수익을 보장하지 않아요. '
                     '사고팔 때마다 수수료, 팔 때 세금(0.2%)이 들어요.'),
@@ -63,7 +63,7 @@ class _AutoTradePageState extends State<AutoTradePage> {
         child: ListTile(
           title: const Text('오늘 계획 (승인함)', style: TextStyle(fontWeight: FontWeight.w700)),
           subtitle: Text('매수: ${plan['budget'] == 0 ? '안 함' : '${won(plan['budget'] as int)}까지'}\n'
-              '매도: ${plan['ai_sell'] == true ? 'AI가 판단 (10:00·14:30 점검, 급락 시, −$autoStopLossPct% 손절)' : '안 함'}'),
+              '매도: ${plan['ai_sell'] == true ? 'AI가 앞을 보고 판단 (30분마다·급락 시, −$autoStopLossPct% 손절)' : '안 함'}'),
           isThreeLine: true,
           trailing: TextButton(onPressed: autoTrader.cancelPlan, child: const Text('계획 취소')),
         ),
@@ -93,8 +93,8 @@ class _AutoTradePageState extends State<AutoTradePage> {
             contentPadding: EdgeInsets.zero,
             value: _aiSell,
             title: const Text('보유 종목 매도는 AI가 판단'),
-            subtitle: const Text('10:00·14:30과 매입가 대비 −$autoDropPct% 급락 때 투자 AI·검증 AI가 팔지 판단해요. '
-                '−$autoStopLossPct% 아래면 손절해요'),
+            subtitle: const Text('30분마다(급락하면 바로) 투자 AI·검증 AI가 장중 흐름·뉴스·공시를 보고 '
+                '곧 떨어질 것 같으면 미리 팔아요. −$autoStopLossPct% 아래면 손절해요'),
             onChanged: (v) => setState(() => _aiSell = v),
           ),
           const SizedBox(height: 8),
