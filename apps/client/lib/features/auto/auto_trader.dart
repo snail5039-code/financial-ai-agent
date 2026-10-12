@@ -36,7 +36,7 @@ const autoDropPct = 3; // 매입가보다 이만큼(%) 넘게 내리면 AI에게
 const autoStopLossPct = 7; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 묻지 않고 판다 (2026-10-12 사용자 결정)
 const autoRescanSlots = [12 * 60, 13 * 60 + 30]; // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지)
 const autoReviewGap = Duration(minutes: 30);
-const autoMaxReviews = 12; // 종목마다 하루에 묻는 횟수 (30분마다 장중 약 6시간, Gemini 비용 상한)
+const autoMaxReviews = 20; // 종목마다 하루에 묻는 횟수 (30분마다 + 급락 재질문, 서버 하루 분석 한도 100 안)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
 
 /// 분석 답의 첫 두 줄("… 분석 · 검증: 승인", "제안: 매도 검토")로 AI가 지금 팔자고 했는지 본다
@@ -313,7 +313,9 @@ class AutoTrader extends ChangeNotifier {
         final conversation = Conversation(unlock: () async => false); // 분석만 한다. 주문은 아래에서 따로
         await conversation.send(sellQuestion(name, avg, pct));
         final answer = conversation.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '')).text;
-        if (answer.contains('번까지 할 수 있어요')) { // 서버 하루 분석 한도: AI 판단이 아니다
+        if (answer.contains('번까지 할 수 있어요')) { // 서버 하루 분석 한도: AI 판단이 아니다. 묻은 횟수에서 뺀다
+          reviews[code] = {...seen, 'at': _now().toIso8601String()};
+          await _box.write('auto_reviews:$_today', jsonEncode(reviews));
           await _note('$name: 오늘 AI 분석 한도를 다 써서 판단을 못 받았어요. 손절(−$autoStopLossPct%)만 지켜요');
           continue;
         }

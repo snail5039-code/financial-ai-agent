@@ -482,8 +482,8 @@ void main() {
     expect(sellReason(2.0, {}, now), 'check'); // 오른 종목도 AI가 앞을 보고 판단
     expect(sellReason(2.0, {'at': ago(20)}, now), isNull);
     expect(sellReason(2.0, {'at': ago(31)}, now), 'check');
-    expect(sellReason(-3.2, {'n': 12}, now), isNull); // 하루 12번까지
-    expect(sellReason(-7.5, {'n': 12}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+    expect(sellReason(-3.2, {'n': 20}, now), isNull); // 하루 20번까지
+    expect(sellReason(-7.5, {'n': 20}, now), 'stop'); // 손절은 횟수 제한과 상관없다
     expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('떨어질 가능성이 크면 지금 미리 팔'));
   });
 
