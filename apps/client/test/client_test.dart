@@ -477,6 +477,8 @@ void main() {
     expect(sellReason(-7.5, {'stopped': true}, now), 'drop'); // 손절은 한 번만, 그다음은 AI 판단
     expect(sellReason(-3.2, {'at': ago(15)}, now), 'drop'); // 급락이면 30분을 기다리지 않는다
     expect(sellReason(-3.2, {'at': ago(5)}, now), isNull); // 그래도 10분 안에 또 묻지는 않는다
+    expect(sellReason(-3.5, {'at': ago(15), 'pct': -3.2}, now), isNull); // 급락이 이어지기만 하면 30분 점검까지 기다린다
+    expect(sellReason(-4.3, {'at': ago(15), 'pct': -3.2}, now), 'drop'); // 1%p 더 빠지면 바로
     expect(sellReason(2.0, {}, now), 'check'); // 오른 종목도 AI가 앞을 보고 판단
     expect(sellReason(2.0, {'at': ago(20)}, now), isNull);
     expect(sellReason(2.0, {'at': ago(31)}, now), 'check');

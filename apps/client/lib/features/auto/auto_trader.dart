@@ -50,12 +50,17 @@ bool aiSaysSell(String analysis) {
 
 /// 보유 종목 하나를 지금 어떻게 볼지: 'stop'(손절, AI에게 안 묻고 판다), 'drop'(급락, 바로 AI에게 묻기),
 /// 'check'(정기 점검, autoReviewGap마다 AI에게 묻기), null(아직 물을 때가 아님).
-/// seen: 오늘 이 종목에 한 일 {n: AI에게 물은 횟수, at: 마지막으로 물은 시각, stopped: 손절 시도함}
+/// seen: 오늘 이 종목에 한 일 {n: AI에게 물은 횟수, at: 마지막으로 물은 시각, pct: 그때 매입가 대비 %, stopped: 손절 시도함}
+/// 급락이 계속되는 종목을 10분마다 묻지 않게, 지난번보다 1%p 더 빠졌을 때만 30분 전에 다시 묻는다 (하루 횟수가 금방 바닥나서)
 String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now) {
   if (dropPct <= -autoStopLossPct && seen['stopped'] != true) return 'stop';
   if ((seen['n'] as int? ?? 0) >= autoMaxReviews) return null;
   final last = DateTime.tryParse(seen['at'] as String? ?? '');
-  if (dropPct <= -autoDropPct && (last == null || now.difference(last) >= const Duration(minutes: 10))) return 'drop';
+  final lastPct = (seen['pct'] as num?)?.toDouble();
+  if (dropPct <= -autoDropPct && (lastPct == null || dropPct <= lastPct - 1) &&
+      (last == null || now.difference(last) >= const Duration(minutes: 10))) {
+    return 'drop';
+  }
   return last == null || now.difference(last) >= autoReviewGap ? 'check' : null;
 }
 
@@ -299,7 +304,7 @@ class AutoTrader extends ChangeNotifier {
       // 먼저 적어 둔다 (실패해도 같은 이유로 곧바로 다시 하지 않게)
       reviews[code] = reason == 'stop'
           ? {...seen, 'stopped': true}
-          : {...seen, 'n': (seen['n'] as int? ?? 0) + 1, 'at': _now().toIso8601String()};
+          : {...seen, 'n': (seen['n'] as int? ?? 0) + 1, 'at': _now().toIso8601String(), 'pct': drop};
       await _box.write('auto_reviews:$_today', jsonEncode(reviews));
       if (reason == 'stop') {
         await _note('$name 매입가 대비 $pct%: 손절선(−$autoStopLossPct%) 아래라 팔아요');
