@@ -135,3 +135,20 @@ def test_watchlist_api_and_briefing(client, user, ai, migrated) -> None:
 
     assert client.delete("/api/watchlist/666668", headers=headers).status_code == 204
     assert client.get("/api/watchlist", headers=headers).json() == []
+
+
+def test_refresh_rebuilds_today_briefing_once_an_hour(client, user, monkeypatch, migrated) -> None:
+    """장중 매수 후보 다시 찾기: 이 사용자 것만 다시 만들고, 한 시간 안에 또 부르면 막는다 (Gemini 비용)"""
+    from app.routers import briefings as router
+    made = []
+
+    def fake_build(database_url, user_id):
+        made.append(user_id)
+        briefing.save_briefing(database_url, user_id, datetime.now(KST).date(), "morning",
+                               {"picks": [], "news": [], "checked": [], "limits": {}, "mode": "custom"})
+
+    monkeypatch.setattr(router, "build_briefing", fake_build)
+    first = client.post("/api/briefings/refresh", headers=user["headers"])
+    assert first.status_code == 200 and made == [user["id"]] and first.json()["kind"] == "morning"
+    again = client.post("/api/briefings/refresh", headers=user["headers"])
+    assert again.status_code == 429 and len(made) == 1

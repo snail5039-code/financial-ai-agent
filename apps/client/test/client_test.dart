@@ -479,9 +479,10 @@ void main() {
     expect(sellReason(-1.0, 10 * 60 + 1, {}, now), 'slot:600');
     expect(sellReason(-1.0, 10 * 60 + 1, {'slots': [600]}, now), isNull);
     expect(sellReason(-1.0, 14 * 60 + 31, {'slots': [600]}, now), 'slot:870');
-    expect(sellReason(-3.2, 11 * 60, {'n': 3}, now), isNull); // 하루 3번까지
+    expect(sellReason(-1.0, 11 * 60 + 1, {'slots': [600]}, now), 'slot:660');
+    expect(sellReason(-3.2, 11 * 60, {'n': 5}, now), isNull); // 하루 5번까지
     expect(sellReason(-3.2, 11 * 60, {'at': now.subtract(const Duration(minutes: 10)).toIso8601String()}, now), isNull); // 30분 간격
-    expect(sellReason(-7.5, 11 * 60, {'n': 3}, now), 'stop'); // 손절은 횟수 제한과 상관없다
+    expect(sellReason(-7.5, 11 * 60, {'n': 5}, now), 'stop'); // 손절은 횟수 제한과 상관없다
   });
 
   test('출처 제목 줄이기: 언론사는 괄호 속, 공시·재무는 앞부분', () {
@@ -489,6 +490,14 @@ void main() {
     expect(shortSource('OpenDART 주요 재무 (2026년 반기보고서, 연결)'), 'OpenDART 주요 재무');
     expect(shortSource('반기보고서 (2026.06) · II. 사업의 내용'), '반기보고서');
     expect(shortSource('2026-10-07 종가 (금융위원회_주식시세정보)'), '금융위원회_주식시세정보');
+  });
+
+  test('자동 매수 금액: 종목당 총액의 1/3, 하루 합계는 총액 안', () {
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0), 1666666);
+    expect(buyRoom(budget: 5000000, spentToday: 1840000, spentOnStock: 1840000), 0); // 이 종목 몫을 다 씀
+    expect(buyRoom(budget: 5000000, spentToday: 4000000, spentOnStock: 0), 1000000); // 하루 남은 총액이 더 작다
+    expect(buyRoom(budget: 5000000, spentToday: 5200000, spentOnStock: 0), 0);
+    expect(buyRoom(budget: 0, spentToday: 0, spentOnStock: 0), 0);
   });
 
   test('자동 매도는 1회 한도 안으로 나눈다', () {

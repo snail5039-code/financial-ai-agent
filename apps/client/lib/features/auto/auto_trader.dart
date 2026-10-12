@@ -2,6 +2,7 @@
 //
 // 매일 사용자 승인이 먼저다: 그날 "오늘 계획"(살 총액, AI 매도 허용)을 사용자가 승인해야 사고판다. 승인이 없으면 아무것도 안 한다.
 // 사는 것: 오늘 아침 브리핑에서 투자 AI가 매수 검토로 쓰고 검증 AI가 승인·조건부 승인한 종목만, 승인한 총액 안에서.
+//   장중 autoRescanSlots에 브리핑을 다시 만들어 새 후보도 산다. 종목당 총액/autoMaxPerDay, 하루 합계는 승인한 총액을 넘지 않는다
 // 파는 것 (AI 매도를 허용했을 때, 2026-10-12 사용자 결정: 팔 종목을 사람이 고르지 않고 AI가 판단): 자동매매로 산 종목(전날 이전 것 포함)을
 //   정해진 시각(autoReviewSlots)과 장중 급락(매입가 대비 −autoDropPct%) 때 투자 AI에게 "지금 팔아야 할까?"를 분석시키고,
 //   제안이 '매도 검토'이고 검증 AI가 승인·조건부 승인일 때만 판다. 매입가 대비 −autoStopLossPct% 이하면 AI에게 묻지 않고 판다(손절)
@@ -25,7 +26,7 @@ import '../../secure/key_store.dart';
 import '../chat/conversation.dart';
 import '../../common/common.dart';
 
-const autoMaxPerDay = 3; // 하루에 자동으로 사는 종목 수 (아침 브리핑 후보도 최대 3개)
+const autoMaxPerDay = 3; // 하루에 자동으로 사는 종목 수. 총액을 이만큼 나눠 종목당 금액으로 쓴다 (한 종목에 몰지 않게)
 const autoMaxTries = 3; // 처리안까지 못 간 오류(서버·통신)는 종목마다 하루 이만큼 다시 시도한다
 const autoBudgets = [0, 1000000, 3000000, 5000000]; // 0 = 오늘은 사지 않음
 // 4-3 실전 자동매매 (사용자 결정: 앱이 켜져 있을 때만 소액). 하루 총액과 1건 금액을 모의보다 작게 (서버 REAL_AUTO_MAX와 같은 30만 원)
@@ -33,9 +34,10 @@ const autoRealBudgets = [0, 100000, 300000, 500000];
 const autoRealMaxOrder = 300000;
 const autoDropPct = 3; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 매도 판단을 묻는다
 const autoStopLossPct = 7; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 묻지 않고 판다 (2026-10-12 사용자 결정)
-const autoReviewSlots = [10 * 60, 14 * 60 + 30]; // 이 시각(KST 분)이 지나면 하루 한 번씩 보유 종목 매도 여부를 AI에게 묻는다
+const autoReviewSlots = [10 * 60, 11 * 60, 13 * 60, 14 * 60 + 30]; // 이 시각(KST 분)이 지나면 한 번씩 보유 종목 매도 여부를 AI에게 묻는다
+const autoRescanSlots = [12 * 60, 13 * 60 + 30]; // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지)
 const autoReviewGap = Duration(minutes: 30);
-const autoMaxReviews = 3; // 종목마다 하루에 묻는 횟수
+const autoMaxReviews = 5; // 종목마다 하루에 묻는 횟수 (점검 4번 + 급락 1번)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
 
 /// 분석 답의 첫 두 줄("… 분석 · 검증: 승인", "제안: 매도 검토")로 AI가 지금 팔자고 했는지 본다
@@ -57,6 +59,14 @@ String? sellReason(double dropPct, int minutes, Map<String, dynamic> seen, DateT
   final done = ((seen['slots'] as List?) ?? []).cast<int>();
   final slot = autoReviewSlots.lastWhere((s) => minutes >= s, orElse: () => -1);
   return slot >= 0 && !done.contains(slot) ? 'slot:$slot' : null;
+}
+
+/// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액/autoMaxPerDay)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게
+int buyRoom({required int budget, required int spentToday, required int spentOnStock}) {
+  final perStock = budget ~/ autoMaxPerDay - spentOnStock;
+  final left = budget - spentToday;
+  final room = perStock < left ? perStock : left;
+  return room > 0 ? room : 0;
 }
 
 /// qty주를 1회 한도(maxOrder원) 안으로 나눈 주문 수량들. 1주 값이 한도보다 비싸면 빈 목록
@@ -158,7 +168,10 @@ class AutoTrader extends ChangeNotifier {
     if (plan == null) return; // 사용자가 오늘 계획을 승인하기 전에는 아무것도 하지 않는다
     _busy = true;
     try {
-      if (minutes < 15 * 60) await _buy(plan!['budget'] as int);
+      if (minutes < 15 * 60) {
+        await _rescan(minutes);
+        await _buy(plan!['budget'] as int);
+      }
       if (plan?['ai_sell'] == true) await _review(minutes);
     } catch (error) {
       await _note('자동매매 중 오류: $error');
@@ -179,6 +192,23 @@ class AutoTrader extends ChangeNotifier {
     if (on) await setOn(false);
   }
 
+  /// 장중 매수 후보 다시 찾기: 정해진 시각이 지나면 한 번씩 서버에 브리핑을 다시 만들게 한다 (실패해도 아침 후보로 계속)
+  Future<void> _rescan(int minutes) async {
+    if ((plan!['budget'] as int) <= 0) return;
+    final done = ((jsonDecode(await _box.read('auto_rescan:$_today') ?? '[]') as List)).cast<int>();
+    final slot = autoRescanSlots.lastWhere((s) => minutes >= s, orElse: () => -1);
+    if (slot < 0 || done.contains(slot)) return;
+    await _box.write('auto_rescan:$_today', jsonEncode([...done, slot])); // 먼저 적어 둔다 (실패해도 같은 시각에 다시 부르지 않게)
+    await _note('장중 매수 후보를 다시 찾아요 (투자 AI → 검증 AI)');
+    try {
+      final briefing = await api.post('/api/briefings/refresh') as Map<String, dynamic>;
+      final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>();
+      await _note(picks.isEmpty ? '새로 검증을 통과한 매수 후보가 없어요' : '새 매수 후보: ${picks.map((p) => p['stock_name']).join(', ')}');
+    } on ApiError catch (error) {
+      await _note('매수 후보 다시 찾기 실패: $error');
+    }
+  }
+
   Future<void> _buy(int budget) async {
     if (budget <= 0) return;
     final Map<String, dynamic> briefing;
@@ -191,11 +221,16 @@ class AutoTrader extends ChangeNotifier {
     final done = ((jsonDecode(await _box.read('auto_settled:$_today') ?? '[]') as List)).cast<String>();
     final tries = (jsonDecode(await _box.read('auto_tries:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final bought = (jsonDecode(await _box.read('auto_bought:$_today') ?? '{}') as Map).cast<String, dynamic>();
-    bool skip(Map<String, dynamic> p) => done.contains(p['stock_code']) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries;
     final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
-        .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).take(autoMaxPerDay).toList();
+        .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
+    // 오늘 이미 사기 시작한 종목이 autoMaxPerDay개면 새 종목은 사지 않는다
+    bool skip(Map<String, dynamic> p) => done.contains(p['stock_code']) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries ||
+        (!bought.containsKey(p['stock_code']) && bought.length >= autoMaxPerDay);
     if (picks.every(skip)) return;
-    final perStock = budget ~/ picks.length;
+    // 오늘 쓴 금액 (예전 기록에 없으면 산 수량 × 브리핑 종가로 처음 한 번 계산)
+    var spent = int.tryParse(await _box.read('auto_spent:$_today') ?? '') ??
+        bought.entries.fold<int>(0, (sum, e) => sum + ((e.value as Map)['qty'] as int) *
+            (picks.where((p) => p['stock_code'] == e.key).firstOrNull?['last_close'] as int? ?? 0));
     final maxOrder = await _maxOrder();
     for (final pick in picks.where((p) => !skip(p))) {
       if (!on || plan == null) break;
@@ -203,8 +238,8 @@ class AutoTrader extends ChangeNotifier {
       final close = pick['last_close'] as int? ?? 0;
       tries[code] = (tries[code] as int? ?? 0) + 1;
       await _box.write('auto_tries:$_today', jsonEncode(tries)); // 먼저 적어 둔다 (앱이 죽어도 횟수가 남게)
-      // 오늘 이미 산 만큼은 빼고 산다 (다시 시도할 때 두 번 사지 않게)
-      var left = perStock - ((bought[code] as Map?)?['qty'] as int? ?? 0) * close;
+      // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
+      var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close);
       var failed = false;
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
@@ -214,6 +249,8 @@ class AutoTrader extends ChangeNotifier {
         if (result != true) break;
         bought[code] = {'name': name, 'qty': ((bought[code] as Map?)?['qty'] as int? ?? 0) + qty};
         await _box.write('auto_bought:$_today', jsonEncode(bought));
+        spent += qty * close;
+        await _box.write('auto_spent:$_today', '$spent');
         await _addPosition(code, name, qty);
         left -= qty * close;
       }
