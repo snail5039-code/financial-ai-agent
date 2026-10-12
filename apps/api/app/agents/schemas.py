@@ -28,6 +28,8 @@ class ProposalDraft(BaseModel):
     counter_arguments: list[str] = Field(description="반대 근거")
     risks: list[str] = Field(description="주요 위험. 손실 가능성, 수수료·세금도 본다")
     invalid_if: list[str] = Field(description="이 판단이 틀린 것이 되는 조건")
+    sell_portion: Literal["all", "half"] | None = Field(
+        default=None, description="매도 검토일 때만: all 전부 / half 절반 (일부만 덜어 위험을 줄일 때). 다른 행동이면 null")
 
 
 class Check(BaseModel):

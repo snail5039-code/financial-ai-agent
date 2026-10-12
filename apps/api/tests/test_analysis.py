@@ -76,14 +76,14 @@ def ai(monkeypatch):
     return record
 
 
-def analyze(client, user, client_kind="app", holdings=None, name=NAME):
+def analyze(client, user, client_kind="app", holdings=None, name=NAME, market=None):
     events = events_of(client.post("/api/chat", headers=user["headers"],
                                    json={"text": f"{name} 사도 돼?", "client": client_kind}))
     if first(events, "interrupt") is None:
         return events, None
     fetch = first(events, "interrupt")
     payload = {"balance": {**BALANCE, "holdings": holdings or [], "fetched_at": now_iso()},
-               "prices": [{"stock_code": CODE, "price": 10_100, "as_of": now_iso()}]}
+               "prices": [{"stock_code": CODE, "price": 10_100, "as_of": now_iso()}], **({"market": market} if market else {})}
     return events, events_of(resume(client, user, events, payload)), fetch
 
 
@@ -111,7 +111,7 @@ def test_analysis_flow_with_sources_and_independent_verification(client, user, a
 
     _, answer, fetch = analyze(client, user)
 
-    assert fetch["needs"] == [{"type": "balance"}, {"type": "price", "stock_code": CODE}]
+    assert fetch["needs"] == [{"type": "balance"}, {"type": "price", "stock_code": CODE}, {"type": "market"}]
     text = text_of(answer)
     assert "검증: 승인" in text and "제안: 매수 검토" in text
     assert "OpenDART 주요 재무 (2025년 사업보고서, 연결)" in text
@@ -389,6 +389,31 @@ def test_counter_argument_source_tags() -> None:
     checks = {c["target"]: c for c in analysis.code_checks(plain, known, [], [], offered_chunks=True)}
     assert checks["body_citations"]["result"] == "warn"  # 본문을 받고도 인용하지 않으면 주의 (막지는 않음)
     assert all(c["result"] != "fail" for c in checks.values())
+
+
+# 2026-10-12 실제 KIS 지수 (코스피 3거래일 연속 하락)
+KOSPI_1012 = {"index": "KOSPI", "value": 6384.24, "change_pct": -3.65, "open": 6578.17, "high": 6589.69, "low": 6368.49,
+              "up": 166, "down": 720, "flat": 32, "as_of": "2026-10-12T15:40:00+09:00",
+              "daily": [["20261012", 6384.24], ["20261008", 6625.93], ["20261007", 6803.90], ["20261006", 6941.39],
+                        ["20261002", 7003.74], ["20261001", 6971.35]]}
+
+
+def test_market_source_summarizes_index_and_trend() -> None:
+    source = analysis.load_source(None, "market:KOSPI", {"market": [KOSPI_1012]})
+    assert source["title"] == "코스피 지수 (앱 실시간 조회)" and source["stock_code"] is None
+    assert source["content"] == ("코스피 6,384.24 (전일 대비 -3.65%), 오늘 시가 6,578.17 고가 6,589.69 저가 6,368.49, "
+                                 "오른 종목 166 · 내린 종목 720 · 보합 32. 최근 흐름: 1거래일 -3.65%, 5거래일 -8.42%, "
+                                 "20거래일 미확인, 4거래일 연속 하락")
+    assert analysis.load_source(None, "market:KOSDAQ", {"market": [KOSPI_1012]}) is None
+    assert analysis.load_source(None, "market:KOSPI", {"market": None}) is None
+
+
+def test_analysis_gives_market_index_to_both_ais(client, user, ai) -> None:
+    events, resumed, fetch = analyze(client, user, market=[KOSPI_1012])
+    assert {"type": "market"} in fetch["needs"]
+    assert "market:KOSPI" in ai["invest"][0] and "4거래일 연속 하락" in ai["invest"][0]
+    _, _, fetch = analyze(client, user)  # 예전 앱처럼 시장 지수를 안 보내도 분석한다
+    assert "market:" not in ai["invest"][-1]
 
 
 def test_intraday_source_summarizes_minute_bars() -> None:

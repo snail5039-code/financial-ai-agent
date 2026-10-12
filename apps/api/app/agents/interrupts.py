@@ -60,11 +60,28 @@ class Price(Strict):
     intraday: Intraday | None = None
 
 
+class MarketIndex(Strict):
+    """폰이 증권사에서 받은 시장 지수. daily는 최근 거래일 [날짜 "YYYYMMDD", 종가] (최신부터)."""
+
+    index: Literal["KOSPI", "KOSDAQ"]
+    value: float = Field(gt=0, le=10**6)
+    change_pct: float | None = Field(default=None, ge=-100, le=100)
+    open: float | None = Field(default=None, ge=0, le=10**6)
+    high: float | None = Field(default=None, ge=0, le=10**6)
+    low: float | None = Field(default=None, ge=0, le=10**6)
+    up: int | None = Field(default=None, ge=0, le=10**5)
+    down: int | None = Field(default=None, ge=0, le=10**5)
+    flat: int | None = Field(default=None, ge=0, le=10**5)
+    daily: list[tuple[Annotated[str, Field(pattern=r"^\d{8}$")], Annotated[float, Field(gt=0, le=10**6)]]] = Field(default=[], max_length=40)
+    as_of: FetchedAt
+
+
 class FetchAnswer(Strict):
     """fetch 멈춤에 대한 폰의 답: 조회 결과 또는 실패 사유 중 하나."""
 
     balance: Balance | None = None
     prices: list[Price] | None = Field(default=None, max_length=20)
+    market: list[MarketIndex] | None = Field(default=None, max_length=2)  # 시장 자료는 덤이라 결과 판정에 넣지 않는다
     error: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")

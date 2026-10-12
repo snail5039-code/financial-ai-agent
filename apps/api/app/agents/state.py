@@ -37,6 +37,7 @@ class InvestState(TypedDict, total=False):
     stock_code: str | None   # 찾아낸 종목 코드
     snapshot: dict | None    # 계좌: cash_krw, holdings, fetched_at, source(app / server)
     prices: list | None      # [{stock_code, price, as_of}]
+    market: list | None      # 폰이 보낸 시장 지수 [{index, value, change_pct, open, high, low, up, down, flat, daily, as_of}]
 
     # 분석 (4단계, docs/plan/05-schemas.md)
     sources: dict            # 출처 ID → {kind, title, url, as_of, content}
@@ -81,7 +82,7 @@ def new_request(query: str, history: list, profile: dict) -> dict:
     return {
         "query": query, "history": history, "intent": None, "answer": None,
         "mode": profile["mode"], "risk_level": profile.get("risk_level"), "flags": profile.get("flags", []),
-        "query_kind": None, "term": None, "period": None, "history_kind": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None,
+        "query_kind": None, "term": None, "period": None, "history_kind": None, "room_stock": None, "stock_name": None, "stock_code": None, "snapshot": None, "prices": None, "market": None,
         "sources": {}, "metrics": [], "risk_grade": None, "risk_reason": None, "allowed_actions": [], "buy_block_reason": None, "proposal": None,
         "verifications": [], "revision_round": 0,
         "side": None, "qty": None, "limit_price": None, "order_change": None, "target_order": None,

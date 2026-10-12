@@ -42,6 +42,11 @@ abstract class Broker {
   /// 분석 근거로 서버에 보낸다 (출처 intraday:{종목}). 못 받으면 null (현재가만으로 분석한다)
   Future<Map<String, dynamic>?> intraday(String stockCode);
 
+  /// 시장 지수 (코스피·코스닥): [{index: KOSPI|KOSDAQ, value, change_pct, open, high, low, up, down, flat,
+  /// daily: [[날짜 "YYYYMMDD", 종가], ...] 최신부터, as_of}]. 분석 근거로 서버에 보낸다 (출처 market:{index}).
+  /// 자동매매가 시장 급락을 볼 때도 쓴다. 못 받으면 null
+  Future<List<Map<String, dynamic>>?> market();
+
   /// 마지막 잔고 조회 때 알게 된 현재가 (홈 평가금액용, 없으면 평균 매입가로 본다)
   Map<String, int> get lastPrices;
 
@@ -91,6 +96,14 @@ Future<Map<String, dynamic>> answerFetch(Broker? broker, List<dynamic> needs) as
   try {
     for (final need in needs.cast<Map<String, dynamic>>()) {
       if (need['type'] == 'balance') answer['balance'] = await broker.balance();
+      if (need['type'] == 'market') {
+        try {
+          final market = await broker.market();
+          if (market != null && market.isNotEmpty) answer['market'] = market;
+        } catch (_) {
+          // 시장 지수도 덤이다. 못 받아도 분석한다
+        }
+      }
       if (need['type'] == 'price') {
         final code = need['stock_code'] as String;
         Map<String, dynamic>? flow;

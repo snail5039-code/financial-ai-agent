@@ -52,6 +52,7 @@ NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에�
                       "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
+SELL_PORTIONS = {"all": "전부", "half": "절반"}  # 앱 자동매매가 이 말을 보고 판다 (auto_trader.dart sellPortion)
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
 CLAIM_LABELS = {"fact": "사실", "calc": "계산", "inference": "추론", "opinion": "의견"}
 FLAG_GUIDES = {
@@ -75,6 +76,7 @@ GENERAL_MODE_GUIDE = "일반 모드다 (성향 퀴즈 안 함). 판단하지 말
 #   quote:{종목}            폰이 증권사에서 받은 현재가  snapshot                  폰이 보낸 내 계좌 요약
 #   intraday:{종목}         폰이 받은 오늘 1분봉 최근 30분과 전일 대비 등락률 (장중 흐름)
 #   news:{번호}             뉴스 제목·언론사·발행 시각·링크 (Google 뉴스 RSS, 본문 없음, 미확인 보도)
+#   market:{KOSPI|KOSDAQ}   폰이 받은 시장 지수: 지금 지수·등락률·오른/내린 종목 수, 최근 거래일 종가 (시장 전체 흐름)
 
 def load_sources(conn, ids: list[str], state: InvestState) -> dict[str, dict]:
     """출처 ID → {kind, title, url, as_of, content}. 없는 ID는 결과에서 빠진다 (검증에서 '없는 출처'로 잡힘)."""
@@ -138,6 +140,9 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
                 "content": f"현재가 {won(price['price'])}"}
     if kind == "intraday" and state.get("prices") and state["prices"][0].get("intraday"):
         return intraday_source(state["prices"][0])
+    if kind == "market":
+        found = next((m for m in state.get("market") or [] if m.get("index") == rest), None)
+        return found and market_source(found)
     if source_id == "snapshot" and state.get("snapshot"):
         snapshot = state["snapshot"]
         held = [h for h in snapshot["holdings"] if h["stock_code"] == state["stock_code"]]
@@ -160,6 +165,32 @@ def intraday_source(price: dict) -> dict | None:
             "content": f"{day}{start_time[:2]}:{start_time[2:4]}~{end_time[:2]}:{end_time[2:4]} 1분봉 {len(bars)}개: "
                        f"{won(start)} → {won(end)} ({(end - start) * 100 / start:+.2f}%), "
                        f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}"}
+
+
+MARKET_NAMES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
+
+
+def market_source(m: dict) -> dict | None:
+    """폰이 보낸 지수 → 시장 전체 흐름 요약. 며칠 흐름(최근 종가 대비 등락률)은 코드가 계산한다 (2026-10-12: 10/8·10/12 손실 원인이 시장 급락)."""
+    value = float(m.get("value") or 0)
+    if value <= 0 or m.get("index") not in MARKET_NAMES:
+        return None
+    daily = [float(c) for _, c in (m.get("daily") or []) if float(c) > 0]  # 최신부터. 오늘 장중이면 첫 값이 지금 값과 같다
+
+    def since(days: int) -> str:
+        return f"{days}거래일 {(value - daily[days]) * 100 / daily[days]:+.2f}%" if len(daily) > days else f"{days}거래일 미확인"
+    streak = 0
+    while streak + 1 < len(daily) and daily[streak] < daily[streak + 1]:
+        streak += 1
+    breadth = (f", 오른 종목 {int(m['up']):,} · 내린 종목 {int(m['down']):,} · 보합 {int(m.get('flat') or 0):,}"
+               if m.get("up") is not None and m.get("down") is not None else "")
+    day_range = (f", 오늘 시가 {float(m['open']):,.2f} 고가 {float(m['high']):,.2f} 저가 {float(m['low']):,.2f}"
+                 if m.get("open") and m.get("high") and m.get("low") else "")
+    name = MARKET_NAMES[m["index"]]
+    return {"kind": "price", "title": f"{name} 지수 (앱 실시간 조회)", "url": None, "stock_code": None, "as_of": m.get("as_of"),
+            "content": f"{name} {value:,.2f} (전일 대비 {float(m.get('change_pct') or 0):+.2f}%){day_range}{breadth}. "
+                       f"최근 흐름: {since(1)}, {since(5)}, {since(20)}"
+                       + (f", {streak}거래일 연속 하락" if streak >= 2 else "")}
 
 
 def fmt_amount(value: int | None) -> str:
@@ -497,7 +528,7 @@ def invest_context(state: InvestState) -> str:
     ]
     if state.get("auto_origin") and state.get("user_directed"):
         parts.append(f"[자동매매 주문] {directed_order_text(state)}. 사용자가 지금 직접 지시한 것이 아니라 앱의 자동매매·예약이 낸 주문이다. "
-                     "[자료]의 장중 흐름(intraday), 뉴스, 공시를 보고 지금 이 행동이 적절한지 판단한다. "
+                     "[자료]의 장중 흐름(intraday), 시장 지수(market), 뉴스, 공시를 보고 지금 이 행동이 적절한지 판단한다. "
                      "매수인데 하락 중이거나 악재 보도가 있는 등 지금 사기 적절하지 않으면 행동을 watch(관찰)로 쓰고 이유를 근거에 쓴다.")
     elif state.get("user_directed"):
         parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
@@ -555,15 +586,16 @@ def get_account_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         with connect(runtime.context.database_url, row_factory=dict_row) as conn:
             snapshot = latest_snapshot(conn, state["user_id"])
         if snapshot is None or datetime.now(KST) - snapshot["fetched_at"] > SNAPSHOT_MAX_AGE:
-            return {"snapshot": None, "prices": None}  # 계좌 없이도 분석은 한다 (보유 여부는 모름)
-        return {"snapshot": {**snapshot, "fetched_at": snapshot["fetched_at"].isoformat(), "source": "server"}}
+            return {"snapshot": None, "prices": None, "market": None}  # 계좌 없이도 분석은 한다 (보유 여부는 모름)
+        return {"snapshot": {**snapshot, "fetched_at": snapshot["fetched_at"].isoformat(), "source": "server"}, "market": None}
 
-    reply = pause("fetch", needs=[{"type": "balance"}, {"type": "price", "stock_code": state["stock_code"]}])
+    # market: 시장 지수. 예전 앱은 모르는 요청이라 빼고 답한다 (그러면 시장 자료 없이 분석)
+    reply = pause("fetch", needs=[{"type": "balance"}, {"type": "price", "stock_code": state["stock_code"]}, {"type": "market"}])
     if reply.get("error"):
         return {"answer": f"증권사 조회에 실패했어요 ({reply['error']}). 잠시 후 다시 시도해 주세요."}
     price = next((p for p in reply.get("prices") or [] if p["stock_code"] == state["stock_code"]), None)
     return {"snapshot": reply.get("balance") and {**reply["balance"], "source": "app"},
-            "prices": [price] if price else None}
+            "prices": [price] if price else None, "market": reply.get("market") or None}
 
 
 def news_disclosure(conn, code: str, published_at) -> dict | None:
@@ -618,6 +650,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             ids.append(f"quote:{code}")
             if state["prices"][0].get("intraday"):
                 ids.append(f"intraday:{code}")
+        ids += [f"market:{m['index']}" for m in state.get("market") or [] if m.get("index")]
         if state.get("snapshot"):
             ids.append("snapshot")
         sources = load_sources(conn, ids, state)
@@ -719,7 +752,8 @@ def format_analysis(state: InvestState) -> str:
     if state["mode"] != "custom":
         lines.append("일반 모드라 사라·말라 판단은 하지 않고 정보만 정리했어요. 성향 퀴즈를 하면 맞춤 제안을 받을 수 있어요.")
     else:
-        lines.append(f"제안: {ACTION_LABELS[proposal['action']]}")
+        portion = SELL_PORTIONS.get(proposal.get("sell_portion")) if proposal["action"] == "sell" else None
+        lines.append(f"제안: {ACTION_LABELS[proposal['action']]}" + (f" ({portion})" if portion else ""))
     if state.get("risk_reason"):
         lines.append(f"위험등급 1등급(매우 높음): {state['risk_reason'].split(', 출처')[0]})")
 

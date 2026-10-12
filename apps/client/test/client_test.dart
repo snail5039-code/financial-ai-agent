@@ -437,6 +437,14 @@ void main() {
     expect(aiSaysSell('현대건설(000720) 분석 · 검증: 반려\n제안: 매도 검토'), isFalse);
     expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 보유'), isFalse);
     expect(aiSaysSell('오늘 분석 횟수를 다 썼어요'), isFalse);
+    // AI가 매도 수량을 정한다 (전부 / 절반)
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 매도 검토 (절반)'), isTrue);
+    expect(aiSaysSell('현대건설(000720) 분석 · 검증: 승인\n제안: 매도 검토 (전부)'), isTrue);
+    expect(sellQty('… 검증: 승인\n제안: 매도 검토 (절반)', 22), 11);
+    expect(sellQty('… 검증: 승인\n제안: 매도 검토 (절반)', 93), 46);
+    expect(sellQty('… 검증: 승인\n제안: 매도 검토 (절반)', 1), 1); // 1주는 나눌 수 없어 전부
+    expect(sellQty('… 검증: 승인\n제안: 매도 검토 (전부)', 22), 22);
+    expect(sellQty('… 검증: 승인\n제안: 매도 검토', 22), 22);
   });
 
   test('예약 조건: 분할은 시각, 가격은 방향대로', () {
@@ -485,6 +493,19 @@ void main() {
     expect(sellReason(-3.2, {'n': 20}, now), isNull); // 하루 20번까지
     expect(sellReason(-7.5, {'n': 20}, now), 'stop'); // 손절은 횟수 제한과 상관없다
     expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('떨어질 가능성이 크면 지금 미리 팔'));
+    expect(sellQuestion('셀트리온', 184000, '+2.1'), contains('시장 전체 흐름'));
+    // 시장 급락: 30분을 기다리지 않고 묻는다. 그래도 10분 안에는 다시 안 묻는다
+    expect(sellReason(-1.0, {'at': ago(15)}, now, marketDrop: true), 'market');
+    expect(sellReason(-1.0, {'at': ago(5)}, now, marketDrop: true), isNull);
+    expect(sellReason(-1.0, {'n': 20}, now, marketDrop: true), isNull);
+  });
+
+  test('시장 급락 알림: 코스피 −1.5% 아래, 지난 알림보다 1%p 더 빠질 때만', () {
+    expect(marketDropped(-3.65, null), isTrue); // 10/12 종가
+    expect(marketDropped(-1.2, null), isFalse);
+    expect(marketDropped(null, null), isFalse); // 지수를 못 받으면 종목별 판단만
+    expect(marketDropped(-2.0, -1.6), isFalse);
+    expect(marketDropped(-2.7, -1.6), isTrue);
   });
 
   test('출처 제목 줄이기: 언론사는 괄호 속, 공시·재무는 앞부분', () {

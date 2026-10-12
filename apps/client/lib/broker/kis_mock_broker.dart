@@ -176,6 +176,53 @@ class KisMockBroker implements Broker {
     return {'change_pct': double.tryParse('${(data['output1'] as Map?)?['prdy_ctrt']}'), 'bars': bars};
   }
 
+  /// 시장 지수: 국내업종 현재지수(FHPUP02100000)와 일자별지수(FHPUP02120000). 코스피 0001, 코스닥 1001.
+  /// 2026-10-12 모의투자에서 둘 다 받는 것을 확인. 지금 지수는 1분, 일별 종가는 하루 동안 다시 쓴다 (초당 호출 제한)
+  @override
+  Future<List<Map<String, dynamic>>?> market() async {
+    final now = DateTime.now();
+    if (_market != null && now.difference(_marketAt!) < const Duration(minutes: 1)) return _market;
+    final today = _kstDate(now);
+    final result = <Map<String, dynamic>>[];
+    for (final (index, code) in const [('KOSPI', '0001'), ('KOSDAQ', '1001')]) {
+      final o = (await _call('GET', '/uapi/domestic-stock/v1/quotations/inquire-index-price', 'FHPUP02100000',
+          query: {'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': code}))['output'] as Map? ?? {};
+      final value = double.tryParse('${o['bstp_nmix_prpr']}') ?? 0;
+      if (value <= 0) continue;
+      if (_dailyDate != today || !_daily.containsKey(index)) {
+        final rows = ((await _call('GET', '/uapi/domestic-stock/v1/quotations/inquire-index-daily-price', 'FHPUP02120000',
+            query: {'FID_PERIOD_DIV_CODE': 'D', 'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': code, 'FID_INPUT_DATE_1': today}))
+            ['output2'] as List?) ?? [];
+        _daily[index] = [
+          for (final r in rows.cast<Map<String, dynamic>>().take(25))
+            if ((double.tryParse('${r['bstp_nmix_prpr']}') ?? 0) > 0) ['${r['stck_bsop_date']}', double.parse('${r['bstp_nmix_prpr']}')],
+        ];
+        _dailyDate = today;
+      }
+      double? num(String key) => double.tryParse('${o[key]}');
+      int? count(String key) => int.tryParse('${o[key]}');
+      result.add({
+        'index': index, 'value': value, 'change_pct': num('bstp_nmix_prdy_ctrt'),
+        'open': num('bstp_nmix_oprc'), 'high': num('bstp_nmix_hgpr'), 'low': num('bstp_nmix_lwpr'),
+        'up': count('ascn_issu_cnt'), 'down': count('down_issu_cnt'), 'flat': count('stnr_issu_cnt'),
+        'daily': _daily[index], 'as_of': nowIso(),
+      });
+    }
+    _market = result.isEmpty ? null : result;
+    _marketAt = now;
+    return _market;
+  }
+
+  List<Map<String, dynamic>>? _market;
+  DateTime? _marketAt;
+  String? _dailyDate;
+  final _daily = <String, List<List<Object>>>{};
+
+  static String _kstDate(DateTime t) {
+    final k = t.toUtc().add(const Duration(hours: 9));
+    return '${k.year}${k.month.toString().padLeft(2, '0')}${k.day.toString().padLeft(2, '0')}';
+  }
+
   // ---------- 주문 ----------
 
   @override

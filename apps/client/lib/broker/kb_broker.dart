@@ -118,6 +118,9 @@ class KbBroker implements Broker {
   Future<Map<String, dynamic>?> intraday(String stockCode) async => null; // KB 분봉 TR(IVU10080 등)은 키를 붙일 때 확인
 
   @override
+  Future<List<Map<String, dynamic>>?> market() async => null; // KB 지수 TR은 키를 붙일 때 확인
+
+  @override
   Future<Map<String, dynamic>> balance() async {
     // ponytail: 첫 페이지만 읽는다 (다음키 없음). 보유 종목이 많아지면 이어 읽기를 붙인다
     final body = await _tr('ssqm2952', {'excg_mktpr_ccd': 'K'});

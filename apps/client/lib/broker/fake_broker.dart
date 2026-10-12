@@ -74,6 +74,9 @@ class FakeBroker implements Broker {
   Future<Map<String, dynamic>?> intraday(String stockCode) async => null; // 가짜 증권사는 장중 흐름이 없다
 
   @override
+  Future<List<Map<String, dynamic>>?> market() async => null; // 가짜 증권사는 시장 지수가 없다
+
+  @override
   Future<int> price(String stockCode) async =>
       priceOf(stockCode) ?? (throw BrokerError('$fakeBrokerName에 없는 종목이에요 ($stockCode)'));
 
