@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from psycopg.types.json import Jsonb
 
 from app.agents.interrupts import Balance
+from app.agents.query import latest_snapshot
 from app.db import Conn
 from app.routers.auth import UserId
 
@@ -25,11 +26,7 @@ def post_snapshot(body: Balance, conn: Conn, user_id: UserId) -> None:
 
 @router.get("/snapshot")
 def get_snapshot(conn: Conn, user_id: UserId) -> dict:
-    row = conn.execute(
-        "SELECT cash_krw, holdings, fetched_at FROM account_snapshots WHERE user_id = %s"
-        " ORDER BY fetched_at DESC LIMIT 1",
-        (user_id,),
-    ).fetchone()
+    row = latest_snapshot(conn, user_id)
     if row is None:
         raise HTTPException(404, "아직 동기화된 계좌가 없어요. 폰 앱을 열어 주세요.")
     return row

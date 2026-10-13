@@ -182,7 +182,7 @@ class KisMockBroker implements Broker {
   Future<List<Map<String, dynamic>>?> market() async {
     final now = DateTime.now();
     if (_market != null && now.difference(_marketAt!) < const Duration(minutes: 1)) return _market;
-    final today = _kstDate(now);
+    final today = kstYmd(now);
     final result = <Map<String, dynamic>>[];
     for (final (index, code) in const [('KOSPI', '0001'), ('KOSDAQ', '1001')]) {
       final o = (await _call('GET', '/uapi/domestic-stock/v1/quotations/inquire-index-price', 'FHPUP02100000',
@@ -236,11 +236,6 @@ class KisMockBroker implements Broker {
   String? _dailyDate;
   final _daily = <String, List<List<Object>>>{};
 
-  static String _kstDate(DateTime t) {
-    final k = t.toUtc().add(const Duration(hours: 9));
-    return '${k.year}${k.month.toString().padLeft(2, '0')}${k.day.toString().padLeft(2, '0')}';
-  }
-
   // ---------- 주문 ----------
 
   @override
@@ -293,8 +288,7 @@ class KisMockBroker implements Broker {
 
   /// 주식일별주문체결조회 VTTC0081R, 오늘 것만. 모의는 한 번에 15건이라 종목으로 거른다
   Future<Map<String, dynamic>> _dailyOrders(String stockCode) {
-    final kst = DateTime.now().toUtc().add(const Duration(hours: 9));
-    final today = '${kst.year}${kst.month.toString().padLeft(2, '0')}${kst.day.toString().padLeft(2, '0')}';
+    final today = kstYmd(DateTime.now());
     return _call('GET', '/uapi/domestic-stock/v1/trading/inquire-daily-ccld', 'VTTC0081R', query: {
       'CANO': keys.cano, 'ACNT_PRDT_CD': keys.productCode, 'INQR_STRT_DT': today, 'INQR_END_DT': today,
       'SLL_BUY_DVSN_CD': '00', 'PDNO': stockCode, 'CCLD_DVSN': '00', 'INQR_DVSN': '00', 'INQR_DVSN_1': '',

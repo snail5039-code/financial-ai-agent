@@ -41,11 +41,6 @@ class _NewsPageState extends State<NewsPage> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('원문 링크를 복사했어요')));
   }
 
-  static String _when(String iso) {
-    final t = DateTime.parse(iso).toUtc().add(const Duration(hours: 9));
-    return '${t.month}/${t.day} ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  }
-
   Widget _item(String title, String sub, String url, {Widget? extra}) => ListTile(
         title: Text(title),
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -78,7 +73,7 @@ class _NewsPageState extends State<NewsPage> {
                     _header('뉴스'),
                     if (news.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('최근 3일 뉴스가 없어요', style: TextStyle(color: mutedText))),
                     for (final n in news)
-                      _item(n['title'] as String, '${n['press'] ?? '언론사 미확인'} · ${_when(n['published_at'] as String)}', n['url'] as String,
+                      _item(n['title'] as String, '${n['press'] ?? '언론사 미확인'} · ${ymdHm(n['published_at'] as String)}', n['url'] as String,
                           extra: n['disclosure'] == null
                               ? const Text('공시로 확인되지 않은 보도', style: TextStyle(fontSize: 12, color: mutedText))
                               : Text('같은 무렵 공시: ${(n['disclosure'] as Map)['title']}',

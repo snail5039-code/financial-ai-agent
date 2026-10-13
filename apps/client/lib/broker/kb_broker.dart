@@ -148,8 +148,7 @@ class KbBroker implements Broker {
 
   @override
   Future<List<BrokerOrder>> todayOrders(String stockCode) async {
-    final k = DateTime.now().toUtc().add(const Duration(hours: 9));
-    final day = '${k.year}${k.month.toString().padLeft(2, '0')}${k.day.toString().padLeft(2, '0')}';
+    final day = kstYmd(DateTime.now());
     final body = await _tr('ssqm2341', {'ccls_clsf': '0', 'ordr_dt': day, 'nxt_key': ''});
     return [
       for (final r in _records(body))

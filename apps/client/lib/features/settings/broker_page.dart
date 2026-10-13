@@ -27,7 +27,7 @@ Future<void> loadBroker() async {
   await loadRealMode(); // 실전 주문 준비가 안 된 증권사면 실전 모드를 끈다
 }
 
-// 개발용 모의 키: apps/client/dev_keys.json (git 제외)을 --dart-define-from-file로 넘기면 디버그 빌드에서만 쓴다.
+// 개발용 모의 키: apps/client/dev_keys.env (git 제외, 예시는 dev_keys.example.env)을 --dart-define-from-file로 넘기면 디버그 빌드에서만 쓴다.
 // 저장된 키가 없을 때 한 번 폰 보안 저장소에 넣고 KIS 모의투자로 연결한다. 서버로는 보내지 않는다
 const _devAppKey = String.fromEnvironment('KIS_APP_KEY');
 const _devAppSecret = String.fromEnvironment('KIS_APP_SECRET');

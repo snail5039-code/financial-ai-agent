@@ -29,17 +29,13 @@ from app.agents.state import new_request
 from app.clock import KST
 from app.db import connect, jsonb
 from app.notify import notify
-from app.functions.orders import KRX_HOLIDAYS, WORST_CASE_DROP_PCT
+from app.functions.orders import WORST_CASE_DROP_PCT, is_trading_day
 from app.functions.suitability import buy_block_reason, stock_risk_grade
 from app.routers.orders import today as today_summary
 from app.routers.policy import profile_summary
 
 MAX_CANDIDATES = 3   # 하루에 분석하는 후보 수 = Gemini 비용 상한 (후보마다 투자·검증 AI, 재검토 최대 2번)
 NEWS_DAYS = 3        # 이 날 수 안의 공시를 "최근 소식"으로 본다 (주말을 넘겨도 금요일 공시가 보이게)
-
-
-def is_trading_day(day) -> bool:
-    return day.weekday() < 5 and day not in KRX_HOLIDAYS
 
 
 def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (), movers: list[str] = ()) -> list[dict]:

@@ -33,7 +33,7 @@ class ReservationWatcher {
   Future<void> tick() async {
     final broker = currentBroker.value;
     if (_busy || kIsWeb || broker == null) return;
-    final k = _now().toUtc().add(const Duration(hours: 9));
+    final k = toKst(_now());
     final minutes = k.hour * 60 + k.minute;
     if (k.weekday > 5 || minutes < 9 * 60 + 5 || minutes > 15 * 60 + 20) return; // 휴장일은 서버 정책 검사가 막는다
     _busy = true;

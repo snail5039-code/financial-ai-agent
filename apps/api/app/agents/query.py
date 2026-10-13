@@ -45,8 +45,12 @@ def won(amount: int) -> str:
     return f"{amount:,}원"
 
 
+def hhmm(value: datetime) -> str:
+    return f"{value.astimezone(KST):%m-%d %H:%M}"
+
+
 def as_of(iso_time: str) -> str:
-    return f"{datetime.fromisoformat(iso_time).astimezone(KST):%m-%d %H:%M} 기준"
+    return f"{hhmm(datetime.fromisoformat(iso_time))} 기준"
 
 
 def format_balance(snapshot: dict) -> str:
@@ -101,6 +105,14 @@ def latest_snapshot(conn, user_id: str) -> dict | None:
     ).fetchone()
 
 
+def fresh_snapshot(conn, user_id: str) -> dict | None:
+    """폰이 최근 SNAPSHOT_MAX_AGE 안에 올린 계좌 스냅샷 (웹 응답용, source=server). 없거나 오래됐으면 None."""
+    snapshot = latest_snapshot(conn, user_id)
+    if snapshot is None or datetime.now(KST) - snapshot["fetched_at"] > SNAPSHOT_MAX_AGE:
+        return None
+    return {**snapshot, "fetched_at": snapshot["fetched_at"].isoformat(), "source": "server"}
+
+
 # ---------- 노드 ----------
 
 def find_stock_node(state: InvestState, runtime: Runtime[Context]) -> dict:
@@ -138,10 +150,8 @@ def get_market_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             return {"answer": f"{state['stock_name']}({state['stock_code']}) 최근 종가 {won(last['close'])} "
                               f"(금융위원회_주식시세정보, {last['trade_date']} 기준). 실시간 현재가는 폰 앱에서 볼 수 있어요."}
         with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-            snapshot = latest_snapshot(conn, state["user_id"])
-        if snapshot is None or datetime.now(KST) - snapshot["fetched_at"] > SNAPSHOT_MAX_AGE:
-            return {"answer": SYNC_MESSAGE}
-        return {"snapshot": {**snapshot, "fetched_at": snapshot["fetched_at"].isoformat(), "source": "server"}}
+            snapshot = fresh_snapshot(conn, state["user_id"])
+        return {"snapshot": snapshot} if snapshot else {"answer": SYNC_MESSAGE}
 
     needs = [{"type": "balance"}] if kind == "balance" else [{"type": "price", "stock_code": state["stock_code"]}]
     reply = pause("fetch", needs=needs)

@@ -19,7 +19,7 @@ from psycopg.rows import dict_row
 from app.agents import llm
 from app.agents.analysis import (ACTION_LABELS, CLAIM_LABELS, MAX_REVISIONS, VERDICT_LABELS, claim_check, load_source,
                                  source_lines, source_time, user_lines, volatility_ranks)
-from app.agents.query import latest_close, latest_snapshot, won
+from app.agents.query import SIDE_LABELS, latest_close, latest_snapshot, won
 from app.briefing import NEWS_DAYS, build_close, run_all
 from app.clock import KST
 from app.db import connect, jsonb
@@ -77,7 +77,7 @@ def today_text(conn, user_id: str, content: dict) -> str:
     fees, taxes = [], 0
     for o in content["orders"]:
         filled = f", {o['filled_qty']:,}주 × {won(o['filled_price'])} 체결" if o["filled_qty"] else ""
-        lines.append(f"주문: {o['stock_name']} {o['qty']:,}주 {'매수' if o['side'] == 'buy' else '매도'} {won(o['price'])}"
+        lines.append(f"주문: {o['stock_name']} {o['qty']:,}주 {SIDE_LABELS[o['side']]} {won(o['price'])}"
                      f" · {STATUS_LABELS.get(o['status'], o['status'])}{filled}")
         if o["filled_qty"]:
             amount = o["filled_qty"] * o["filled_price"]

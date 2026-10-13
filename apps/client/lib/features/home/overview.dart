@@ -72,10 +72,10 @@ Future<Overview> loadOverview() async {
 }
 
 /// 한국 날짜 "2026-10-07" (브리핑이 오늘 것인지 볼 때)
-String kstToday() => DateTime.now().toUtc().add(const Duration(hours: 9)).toIso8601String().substring(0, 10);
+String kstToday() => toKst(DateTime.now()).toIso8601String().substring(0, 10);
 
 /// 서버 시각(ISO) → 한국 날짜 "2026-10-07"
-String toKstDate(String iso) => DateTime.parse(iso).toUtc().add(const Duration(hours: 9)).toIso8601String().substring(0, 10);
+String toKstDate(String iso) => toKst(DateTime.parse(iso)).toIso8601String().substring(0, 10);
 
 List<Map<String, dynamic>> holdingsOf(Map<String, dynamic> balance) => (balance['holdings'] as List).cast<Map<String, dynamic>>();
 

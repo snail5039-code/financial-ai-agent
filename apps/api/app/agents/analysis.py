@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb
 
 from app.agents import llm
 from app.agents.interrupts import pause
-from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_node, latest_close, latest_snapshot, won
+from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_node, fresh_snapshot, latest_close, won
 from app.agents.state import Context, InvestState
 from app.clock import KST
 from app.db import connect
@@ -46,7 +46,6 @@ MIN_HANGUL_SHARE = 0.3      # 한글이 이보다 적은 조각은 깨진 표 �
 RECENT_DISCLOSURES = 5
 # 뉴스 (12-todo-by-stage.md 2-2): 종목마다 최근 NEWS_DAYS일 기사 NEWS_RESULTS개. 같은 종목은 NEWS_REFRESH 안에 다시 받지 않는다
 NEWS_DAYS, NEWS_RESULTS, NEWS_REFRESH = 3, 5, timedelta(minutes=30)
-SNAPSHOT_MAX_AGE = timedelta(minutes=30)
 
 NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 100개, "
                       "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
@@ -618,10 +617,9 @@ def get_account_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     """앱이면 폰에 잔고·현재가를 부탁하고, 웹이면 최근 스냅샷을 쓴다. 웹은 실시간 현재가 없이 전일 종가로 본다."""
     if state["client"] == "web":
         with connect(runtime.context.database_url, row_factory=dict_row) as conn:
-            snapshot = latest_snapshot(conn, state["user_id"])
-        if snapshot is None or datetime.now(KST) - snapshot["fetched_at"] > SNAPSHOT_MAX_AGE:
-            return {"snapshot": None, "prices": None, "market": None}  # 계좌 없이도 분석은 한다 (보유 여부는 모름)
-        return {"snapshot": {**snapshot, "fetched_at": snapshot["fetched_at"].isoformat(), "source": "server"}, "market": None}
+            snapshot = fresh_snapshot(conn, state["user_id"])
+        # 계좌 없이도 분석은 한다 (보유 여부는 모름)
+        return {"snapshot": snapshot, "market": None} if snapshot else {"snapshot": None, "prices": None, "market": None}
 
     # market: 시장 지수. 예전 앱은 모르는 요청이라 빼고 답한다 (그러면 시장 자료 없이 분석)
     reply = pause("fetch", needs=[{"type": "balance"}, {"type": "price", "stock_code": state["stock_code"]}, {"type": "market"}])

@@ -86,12 +86,6 @@ def test_account_values_use_close_then_avg_price() -> None:
     assert (held, position, total) == (2, 400_000, 2_000_000 + 400_000 + 700_000)
 
 
-def test_price_drift() -> None:
-    assert not orders.price_drifted(100_000, 101_000)  # 정확히 1%
-    assert orders.price_drifted(100_000, 101_001)
-    assert orders.price_drifted(100_000, 98_900)
-
-
 def warnings(**kwargs) -> list[str]:
     base = dict(side="buy", recent_trades=0, hot_rank=None, five_day_return=None, chases_hot_stocks=False,
                 weight_after=None, max_weight_pct=Decimal("30"), gain_pct=None, losing_holdings=[], cost_krw=None)

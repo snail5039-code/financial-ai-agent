@@ -29,7 +29,6 @@ import '../../common/common.dart';
 // 한 종목에 쓰는 최대 몫 (살 총액의 %). 서버의 한 종목 비중 40% 규칙에 막히지 않게 그 아래로.
 // 2026-10-13 사용자 결정: 하루 3종목 제한을 없애고 몇 종목을 살지는 AI가 판단한다
 const autoMaxStockPct = 35;
-const autoMaxTries = 3; // 처리안까지 못 간 오류(서버·통신)는 종목마다 하루 이만큼 다시 시도한다
 // 0 = 오늘은 사지 않음, autoAllCash = 주문 가능 금액 전부 (판 돈도 바로 다시 산다. 모의투자, 2026-10-13 사용자 결정)
 const autoAllCash = -1;
 const autoBudgets = [0, 1000000, 3000000, 5000000, autoAllCash];
@@ -85,7 +84,7 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   if (dropPct <= -autoStopLossPct && seen['stopped'] != true) return 'stop';
   if ((seen['n'] as int? ?? 0) >= autoMaxReviews) return null;
   // 장 시작 30분(09:00~09:30)은 손절선만 묻는다. 10/13 시초가 급락 때 판 종목이 모두 종가가 더 높았다 (공포성 매도)
-  final kst = now.toUtc().add(const Duration(hours: 9));
+  final kst = toKst(now);
   if (kst.hour == 9 && kst.minute < autoOpeningWaitMin) return null;
   final last = DateTime.tryParse(seen['at'] as String? ?? '');
   final lastPct = (seen['pct'] as num?)?.toDouble();
@@ -146,7 +145,7 @@ class AutoTrader extends ChangeNotifier {
 
   static List<int> get budgets => realMode.value ? autoRealBudgets : autoBudgets;
 
-  DateTime get _kst => _now().toUtc().add(const Duration(hours: 9));
+  DateTime get _kst => toKst(_now());
   String get _today => _kst.toIso8601String().substring(0, 10);
 
   /// 켜져 있고 평일인데 오늘 계획을 아직 승인하지 않았다 (화면이 사용자에게 묻는다)
@@ -282,7 +281,6 @@ class AutoTrader extends ChangeNotifier {
     final done = (jsonDecode(await _box.read('auto_settled2:$_today') ?? '{}') as Map).cast<String, dynamic>();
     bool settled(String code) => (DateTime.tryParse(done[code] as String? ?? '') ?? DateTime(2000))
         .isAfter(_now().subtract(autoBuyRetryGap));
-    final tries = (jsonDecode(await _box.read('auto_tries:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final bought = (jsonDecode(await _box.read('auto_bought:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
@@ -300,8 +298,6 @@ class AutoTrader extends ChangeNotifier {
       if (!on || plan == null) break;
       final code = pick['stock_code'] as String, name = pick['stock_name'] as String;
       final close = pick['last_close'] as int? ?? 0;
-      tries[code] = (tries[code] as int? ?? 0) + 1;
-      await _box.write('auto_tries:$_today', jsonEncode(tries)); // 먼저 적어 둔다 (앱이 죽어도 횟수가 남게)
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
       var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close);
       while (on && plan != null) {
@@ -320,9 +316,7 @@ class AutoTrader extends ChangeNotifier {
       // (2026-10-13: 오류도 하루 3번 횟수에 들어가 14:06 이후 다시 시도하지 않았다)
       if (on && plan != null) {
         done[code] = _now().toIso8601String();
-        tries.remove(code); // 오류 재시도 횟수는 판단을 끝내면 다시 센다
         await _box.write('auto_settled2:$_today', jsonEncode(done));
-        await _box.write('auto_tries:$_today', jsonEncode(tries));
       }
     }
   }
@@ -434,8 +428,7 @@ class AutoTrader extends ChangeNotifier {
       c.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '응답 없음')).text.split('\n').first;
 
   Future<void> _note(String text) async {
-    final k = _kst;
-    log = [...log, '${k.hour.toString().padLeft(2, '0')}:${k.minute.toString().padLeft(2, '0')} $text'];
+    log = [...log, '${hhmm(_now().toIso8601String())} $text'];
     await _box.write('auto_log:$_today', jsonEncode(log));
     notifyListeners();
   }

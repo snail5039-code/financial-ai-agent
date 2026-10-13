@@ -86,9 +86,18 @@ Future<bool> phoneUnlock() async {
 
 String nowIso() => DateTime.now().toUtc().toIso8601String();
 
+/// 한국 시각 (기기 시간대와 상관없이 장 시간·날짜를 KST로 본다)
+DateTime toKst(DateTime t) => t.toUtc().add(const Duration(hours: 9));
+
+/// 한국 날짜 "YYYYMMDD" (증권사 조회 날짜)
+String kstYmd(DateTime t) {
+  final k = toKst(t);
+  return '${k.year}${k.month.toString().padLeft(2, '0')}${k.day.toString().padLeft(2, '0')}';
+}
+
 /// 한국 시각 "HHmmss" (증권사 주문 시각과 비교용)
 String kstHhmmss(DateTime t) {
-  final k = t.toUtc().add(const Duration(hours: 9));
+  final k = toKst(t);
   return [k.hour, k.minute, k.second].map((v) => v.toString().padLeft(2, '0')).join();
 }
 

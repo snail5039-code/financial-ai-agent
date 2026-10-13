@@ -5,14 +5,13 @@ LLM 없이 DB 기록으로 답한다. 대상은 이 사용자의 가장 최근 �
 갱신한다(routers/orders.py). 그래서 폰에서 물으면 방금 확인한 값, 웹에서 물으면 폰이 마지막으로 확인한 값이다.
 """
 
-from datetime import datetime
 
 from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
 from app import clock
 from app.agents.analysis import VERDICT_LABELS
-from app.agents.query import SIDE_LABELS, stock_codes, won
+from app.agents.query import SIDE_LABELS, hhmm, stock_codes, won
 from app.agents.state import Context, InvestState
 from app.db import connect
 
@@ -40,10 +39,6 @@ LATEST_SQL = """
     WHERE p.user_id = %(user_id)s AND (%(codes)s::text[] IS NULL OR p.stock_code = ANY(%(codes)s))
     ORDER BY p.created_at DESC LIMIT 1
 """
-
-
-def hhmm(value: datetime) -> str:
-    return f"{value.astimezone(clock.KST):%m-%d %H:%M}"
 
 
 def result_node(state: InvestState, runtime: Runtime[Context]) -> dict:

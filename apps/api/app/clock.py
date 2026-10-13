@@ -16,12 +16,12 @@ def market_now() -> datetime:
     개발용: .env의 MARKET_CLOCK(예: "10:00")이 있으면 시각만 그 값으로 바꾸고, 주말·휴장일이면 직전 거래일로 본다.
     장이 닫힌 시간에도 주문 흐름을 확인하기 위한 것이다. 서버 시작 로그에 경고가 남는다.
     """
-    from app.functions.orders import KRX_HOLIDAYS
+    from app.functions.orders import is_trading_day
 
     current = now()
     if not config.MARKET_CLOCK:
         return current
     fixed = time.fromisoformat(config.MARKET_CLOCK)
-    while current.weekday() >= 5 or current.date() in KRX_HOLIDAYS:
+    while not is_trading_day(current.date()):
         current -= timedelta(days=1)
     return current.replace(hour=fixed.hour, minute=fixed.minute, second=0, microsecond=0)

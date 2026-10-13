@@ -3,6 +3,7 @@
 
 from fastapi import APIRouter, HTTPException
 
+from app.agents.query import SIDE_LABELS
 from app.db import Conn, audit
 from app.notify import notify
 from app.routers.auth import UserId
@@ -51,7 +52,7 @@ def trigger_reservation(reservation_id: str, conn: Conn, user_id: UserId) -> dic
         raise HTTPException(409, "이미 처리됐거나 만료된 예약이에요")
     audit(conn, user_id, "reservation_triggered", {"reservation_id": reservation_id})
     notify(conn, user_id, "reservation", "예약 조건이 됐어요",
-           f"{row['stock_name']} {row['qty']:,}주 {'매수' if row['side'] == 'buy' else '매도'}: 검증을 거쳐 처리안을 만들어요",
+           f"{row['stock_name']} {row['qty']:,}주 {SIDE_LABELS[row['side']]}: 검증을 거쳐 처리안을 만들어요",
            {"reservation_id": reservation_id})
     conn.commit()
     return {"stock_name": row["stock_name"], "side": row["side"], "qty": row["qty"]}

@@ -40,11 +40,6 @@ String checkTarget(String target) {
   return checkTargets[target] ?? target;
 }
 
-String ymdHm(String iso) {
-  final t = DateTime.parse(iso).toUtc().add(const Duration(hours: 9));
-  return '${t.month}/${t.day} ${hhmm(iso)}';
-}
-
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key, required this.active});
   final bool active;

@@ -57,8 +57,14 @@ Color? changeColor(num value) => value > 0 ? upRed : value < 0 ? downBlue : null
 
 /// 서버 시각(ISO) → 한국 시각 "10:32". 장 시간·만료가 한국 기준이라 기기 시간대와 상관없이 KST로 보여준다
 String hhmm(String iso) {
-  final t = DateTime.parse(iso).toUtc().add(const Duration(hours: 9));
+  final t = toKst(DateTime.parse(iso));
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
+/// 서버 시각(ISO) → 한국 시각 "10/14 10:32"
+String ymdHm(String iso) {
+  final t = toKst(DateTime.parse(iso));
+  return '${t.month}/${t.day} ${hhmm(iso)}';
 }
 
 const verdictLabels = {'approve': '승인', 'conditional': '조건부 승인', 'reject': '반려', 'user_judgement': '사용자 판단 필요'};

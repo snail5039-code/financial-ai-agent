@@ -72,8 +72,12 @@ KRX_HOLIDAYS = {
 }
 
 
+def is_trading_day(day) -> bool:
+    return day.weekday() < 5 and day not in KRX_HOLIDAYS
+
+
 def is_market_open(now: datetime) -> bool:
-    return now.weekday() < 5 and now.date() not in KRX_HOLIDAYS and MARKET_OPEN <= now.time() <= MARKET_CLOSE
+    return is_trading_day(now.date()) and MARKET_OPEN <= now.time() <= MARKET_CLOSE
 
 
 def account_values(snapshot: dict, stock_code: str, price: int, closes: dict[str, int]) -> tuple[int, int, int]:
@@ -168,6 +172,3 @@ def needs_hot_confirm(warnings: list[str], chases_hot_stocks: bool) -> bool:
     """급등 경고가 있고 퀴즈에서 급등주를 바로 산다고 답했으면 한 번 더 확인받는다."""
     return chases_hot_stocks and any("급등 직후" in w for w in warnings)
 
-
-def price_drifted(approved_price: int, current_price: int) -> bool:
-    return abs(Decimal(current_price - approved_price)) / approved_price * 100 > MAX_PRICE_DRIFT_PCT
