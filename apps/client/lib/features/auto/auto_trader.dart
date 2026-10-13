@@ -182,8 +182,8 @@ class AutoTrader extends ChangeNotifier {
     if (budget != 0) budgetKrw = budget;
     await _box.write('auto_plan:$_today', jsonEncode(plan));
     await _box.write('auto_budget_krw', '$budgetKrw');
-    await _note('오늘 계획 승인: ${budget > 0 ? '${won(budget)}까지 매수' : '매수 안 함'}'
-        '${aiSell ? ', 보유 종목은 AI가 매도 판단 (−$autoStopLossPct% 손절)' : ', 매도 안 함'}');
+    await _note('오늘 계획 승인: ${budget == 0 ? '매수 안 함' : '${budgetLabel(budget)}까지 매수'}'
+        '${aiSell ? ', 보유 종목은 AI가 매도 판단 (−$autoStopLossPct% 손절선 포함)' : ', 매도 안 함'}');
     unawaited(tick());
   }
 
