@@ -451,3 +451,12 @@ def test_freshness_and_today_data_checks() -> None:
     assert [(c["target"], c["result"]) for c in checks] == [("today_data", "fail")]  # 보유 판단인데 오늘 자료를 안 씀
     cited = proposal_with("hold", [{"type": "fact", "text": "코스피 -3.65%", "source_ids": ["market:KOSPI"], "metric_ids": []}])
     assert analysis.freshness_checks(cited, live, holds=True, today=date(2026, 10, 12)) == []
+
+
+def test_news_only_fact_becomes_reported_inference() -> None:
+    claims = [{"type": "fact", "text": "3분기 영업이익 5,100억 원", "source_ids": ["news:1"], "metric_ids": []},
+              {"type": "fact", "text": "부채비율 31%", "source_ids": ["fin:1"], "metric_ids": []}]
+    out = analysis.news_as_inference(claims)
+    assert out[0] == {"type": "inference", "text": "보도에 따르면 3분기 영업이익 5,100억 원", "source_ids": ["news:1"], "metric_ids": []}
+    assert out[1] == claims[1]
+    assert analysis.claim_check("claim:0", out[0], {"news:1": {}}, set())["result"] == "pass"  # 이제 반려되지 않는다

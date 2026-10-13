@@ -709,8 +709,20 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     }
 
 
+def news_as_inference(claims: list[dict]) -> list[dict]:
+    """뉴스(제목뿐인 미확인 보도)만 출처인 '사실' 근거를 '추론'으로 낮추고 보도라고 밝힌다. 뉴스는 근거로 계속 쓴다.
+    2026-10-13: 이 근거를 반려하자 투자 AI가 같은 실수를 반복해 반려 48건 중 35건, 최종 55건 중 33건이 결론 없이 끝났다"""
+    out = []
+    for c in claims:
+        if c["type"] == "fact" and c["source_ids"] and all(s.startswith("news:") for s in c["source_ids"]):
+            c = {**c, "type": "inference", "text": c["text"] if c["text"].startswith("보도에 따르면") else f"보도에 따르면 {c['text']}"}
+        out.append(c)
+    return out
+
+
 def invest_agent_node(state: InvestState) -> dict:
     draft = llm.write_proposal(invest_context(state)).model_dump()
+    draft["claims"] = news_as_inference(draft["claims"])
     if draft["action"] not in state["allowed_actions"]:
         # 성향 규칙은 AI가 아니라 코드가 지킨다
         reason = f" ({state['buy_block_reason']})" if draft["action"] == "buy" and state.get("buy_block_reason") else ""

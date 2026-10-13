@@ -506,6 +506,16 @@ void main() {
     expect(sellReason(-1.0, {'n': 20}, now, marketDrop: true), isNull);
   });
 
+  test('장 시작 30분은 손절선만 묻는다 (시초가 공포성 매도 방지)', () {
+    final open = DateTime.utc(2026, 10, 14, 0, 10); // 09:10 KST
+    expect(sellReason(-4.0, {}, open), isNull);
+    expect(sellReason(5.0, {}, open), isNull);
+    expect(sellReason(-1.0, {}, open, marketDrop: true), isNull);
+    expect(sellReason(-9.0, {}, open), 'stop');
+    expect(sellReason(-4.0, {}, DateTime.utc(2026, 10, 14, 0, 31)), 'drop'); // 09:31부터는 평소대로
+    expect(sellQuestion('셀트리온', 184000, '-4.0'), contains('저점에서 회복 중인지'));
+  });
+
   test('자동 승인: 매수는 승인만, 매도는 조건부 승인까지', () {
     expect(autoApproves('buy', 'approve'), isTrue);
     expect(autoApproves('buy', 'conditional'), isFalse); // 10/12 셀트리온: 숫자를 고치라는 조건부 승인으로 샀다

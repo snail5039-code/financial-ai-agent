@@ -41,6 +41,7 @@ const autoRealMaxOrder = 300000;
 const autoDropPct = 3; // 매입가보다 이만큼(%) 넘게 내리면 AI에게 매도 판단을 묻는다
 // 매입가보다 이만큼(%) 내리면 손절선이라 바로 AI에게 묻는다. 파는 것도 AI 판단·검증을 거친다 (2026-10-13 사용자 결정, 전에는 AI 없이 팔았다)
 const autoStopLossPct = 7;
+const autoOpeningWaitMin = 30; // 장 시작 뒤 이 분까지는 손절선 말고는 매도 판단을 묻지 않는다
 const autoRisePct = 3; // 매입가보다 이만큼(%) 넘게 오르면 바로 AI에게 "지금 팔아 이익을 지킬지" 묻는다 (2026-10-13 사용자 요청)
 // 코스피가 전일보다 이만큼(%) 넘게 빠지면 보유 종목 전부를 30분 기다리지 않고 AI에게 묻는다 (10/8 −2.62%, 10/12 −3.65% 날 손실)
 const autoMarketDropPct = 1.5;
@@ -83,6 +84,9 @@ bool marketDropped(double? kospiPct, double? lastAlertPct) =>
 String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {bool marketDrop = false}) {
   if (dropPct <= -autoStopLossPct && seen['stopped'] != true) return 'stop';
   if ((seen['n'] as int? ?? 0) >= autoMaxReviews) return null;
+  // 장 시작 30분(09:00~09:30)은 손절선만 묻는다. 10/13 시초가 급락 때 판 종목이 모두 종가가 더 높았다 (공포성 매도)
+  final kst = now.toUtc().add(const Duration(hours: 9));
+  if (kst.hour == 9 && kst.minute < autoOpeningWaitMin) return null;
   final last = DateTime.tryParse(seen['at'] as String? ?? '');
   final lastPct = (seen['pct'] as num?)?.toDouble();
   final waited = last == null || now.difference(last) >= const Duration(minutes: 10);
@@ -97,6 +101,7 @@ String sellQuestion(String name, int avg, String pct, {String reason = 'check'})
     '$name 보유 중이야 (매입가 ${won(avg)}, 지금 $pct%). ${_why[reason] ?? ''}앞으로 몇 시간~며칠 안에 떨어질 가능성이 크면 지금 미리 팔아서 '
     '이익을 지키거나 손실을 막아야 하고, 더 오를 근거가 크면 계속 들고 있어야 해. 장중 흐름(고점에서 밀리는지, 하락이 이어지는지), '
     '시장 전체 흐름(코스피·코스닥 지수, 며칠 연속 하락인지, 오른·내린 종목 수), 뉴스, 공시를 근거로 지금 팔아야 할까? '
+    '급락 직후라면 지금 가격이 오늘 저점 근처인지, 저점에서 회복 중인지도 봐 줘. 공포에 저점에서 파는 건 피해야 해. '
     '판다면 전부 팔지 절반만 덜지도 정해 줘';
 
 const _why = {

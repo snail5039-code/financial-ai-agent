@@ -15,12 +15,20 @@
 | `autoMarketDropPct` | −1.5% | 같은 파일 | 코스피가 이만큼 빠지면 보유 종목 전부 바로 AI에게 |
 | `autoStopLossPct` | −7% | 같은 파일 | 손절선. 바로 AI에게 묻는다 (AI 없이 팔지 않음) |
 | `autoMaxStockPct` | 35% | 같은 파일 | 한 종목에 쓰는 살 총액 최대 몫 (서버 비중 40% 아래) |
+| `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 손절선만 묻는다 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
 | `MAX_ANALYSES_PER_DAY` | 100 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용) |
 | `MOCK_ORDER_LIMITS` | 끔 | `apps/api/app/config.py` (.env) | 모의에도 금액 한도 적용할지 |
 | `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집, 아침 브리핑 자동 시각 |
+
+## 10/14 (4일차 장 전, 3일차 기록으로)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 10/13 검증 반려 48건 중 35건이 "뉴스를 사실로". 투자 AI가 반복해 최종 55건 중 33건이 결론 없이 끝남 | 뉴스는 계속 근거로 쓰되, 뉴스만 출처인 '사실' 근거는 코드가 '추론'으로 낮추고 "보도에 따르면"을 붙인다 (반려 대신) | `analysis.py` `news_as_inference`, `invest_agent_node` | `test_news_only_fact_becomes_reported_inference` |
+| 10/13 시초가 급락 때 판 3종목 모두 종가가 더 높았다 (약 7.9만 원) | 장 시작 30분은 손절선만 묻는다. 매도 질문에 "오늘 저점 근처인지, 회복 중인지"를 보게 | `auto_trader.dart` `sellReason`, `autoOpeningWaitMin`, `sellQuestion` | `client_test` 장 시작 30분 |
 
 ## 10/13 (3일차)
 
