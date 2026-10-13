@@ -273,7 +273,7 @@ class AutoTrader extends ChangeNotifier {
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
         .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
     // 오늘 이미 사기 시작한 종목이 autoMaxPerDay개면 새 종목은 사지 않는다
-    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries ||
+    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String) ||
         (!bought.containsKey(p['stock_code']) && bought.length >= autoMaxPerDay);
     if (picks.every(skip)) return;
     // 오늘 쓴 금액 (예전 기록에 없으면 산 수량 × 브리핑 종가로 처음 한 번 계산)
@@ -291,12 +291,10 @@ class AutoTrader extends ChangeNotifier {
       await _box.write('auto_tries:$_today', jsonEncode(tries)); // 먼저 적어 둔다 (앱이 죽어도 횟수가 남게)
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
       var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close);
-      var failed = false;
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
         final result = await _order(name, qty, 'buy');
-        failed = result == null;
         if (result != true) break;
         bought[code] = {'name': name, 'qty': ((bought[code] as Map?)?['qty'] as int? ?? 0) + qty};
         await _box.write('auto_bought:$_today', jsonEncode(bought));
@@ -305,8 +303,9 @@ class AutoTrader extends ChangeNotifier {
         await _addPosition(code, name, qty);
         left -= qty * close;
       }
-      // 오류(null)로 멈췄으면 다음 확인 때 남은 금액만큼 다시 시도한다 (하루 autoMaxTries번까지). 그 밖에는 오늘 끝
-      if (!failed && on && plan != null) {
+      // 판단을 끝냈든 오류(AI 사용량 제한 등)로 멈췄든 autoBuyRetryGap 뒤에 남은 금액만큼 다시 묻는다
+      // (2026-10-13: 오류도 하루 3번 횟수에 들어가 14:06 이후 다시 시도하지 않았다)
+      if (on && plan != null) {
         done[code] = _now().toIso8601String();
         tries.remove(code); // 오류 재시도 횟수는 판단을 끝내면 다시 센다
         await _box.write('auto_settled2:$_today', jsonEncode(done));
