@@ -243,6 +243,8 @@ class AutoTrader extends ChangeNotifier {
     await _note('장중 매수 후보를 다시 찾아요 (투자 AI → 검증 AI)');
     try {
       final briefing = await api.post('/api/briefings/refresh') as Map<String, dynamic>;
+      // 아침에 '관찰'이라 오늘 끝낸 종목도 새 판단으로 다시 시도한다 (2026-10-13: 12:01에 매수 검토가 나왔는데 09:10 기록 때문에 안 샀다)
+      await _box.write('auto_settled:$_today', '[]');
       final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>();
       await _note(picks.isEmpty ? '새로 검증을 통과한 매수 후보가 없어요' : '새 매수 후보: ${picks.map((p) => p['stock_name']).join(', ')}');
     } on ApiError catch (error) {
