@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.briefing import build_briefing
 from app.clock import KST
@@ -29,8 +30,15 @@ def latest(conn: Conn, user_id: UserId, kind: Literal["morning", "close"] = "mor
 REFRESH_GAP_MINUTES = 60  # 장중 브리핑 다시 만들기 간격 (Gemini 비용)
 
 
+class RefreshBody(BaseModel):
+    """폰이 증권사 순위(거래대금·상승률 상위)에서 받은 종목 코드. 분석 대상 종목만 후보가 된다"""
+
+    model_config = ConfigDict(extra="forbid")
+    candidates: list[str] = Field(default=[], max_length=30)
+
+
 @router.post("/refresh")
-def refresh(request: Request, conn: Conn, user_id: UserId) -> dict:
+def refresh(request: Request, conn: Conn, user_id: UserId, body: RefreshBody | None = None) -> dict:
     """장중 매수 후보 다시 찾기 (2026-10-12): 이 사용자의 오늘 아침 브리핑을 지금 자료로 다시 만든다 (덮어씀).
     자동매매가 켜진 앱이 정해진 시각에 부른다. 한 시간에 한 번까지만 (Gemini 비용)"""
     last = conn.execute(
@@ -39,5 +47,5 @@ def refresh(request: Request, conn: Conn, user_id: UserId) -> dict:
     ).fetchone()
     if last and datetime.now(KST) - last["created_at"] < timedelta(minutes=REFRESH_GAP_MINUTES):
         raise HTTPException(429, f"브리핑은 {REFRESH_GAP_MINUTES}분에 한 번만 다시 만들 수 있어요")
-    build_briefing(request.app.state.database_url, str(user_id))
+    build_briefing(request.app.state.database_url, str(user_id), movers=[c for c in (body.candidates if body else []) if c.isalnum()])
     return latest(conn, user_id)

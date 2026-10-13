@@ -42,8 +42,9 @@ def is_trading_day(day) -> bool:
     return day.weekday() < 5 and day not in KRX_HOLIDAYS
 
 
-def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = ()) -> list[dict]:
-    """아직 갖고 있지 않고 내 성향 규칙상 매수를 제안할 수 있는 분석 대상. 관심 종목을 먼저, 그다음 최근 공시가 있는 종목.
+def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (), movers: list[str] = ()) -> list[dict]:
+    """아직 갖고 있지 않고 내 성향 규칙상 매수를 제안할 수 있는 분석 대상. 장중 급등·거래대금 상위(movers, 폰이 증권사 순위에서 받음)를
+    먼저, 그다음 관심 종목, 최근 공시가 있는 종목 (2026-10-13 사용자 요청: 후보가 공시 종목 몇 개뿐이라 살 종목이 없었다).
 
     ponytail: "관심 종목 · 최근 공시가 있다"만으로 고른다. 가격 흐름·재무 점수로 순위를 매기려면 여기서 바꾼다
     """
@@ -53,10 +54,11 @@ def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (
         LEFT JOIN (SELECT stock_code, max(filed_at) AS latest FROM disclosures
                    WHERE filed_at >= current_date - %(days)s GROUP BY stock_code) d
                ON d.stock_code = s.code
-        WHERE s.is_target AND (d.latest IS NOT NULL OR s.code = ANY(%(watching)s))
-        ORDER BY s.code = ANY(%(watching)s) DESC, d.latest DESC NULLS LAST, s.code
+        WHERE s.is_target AND (d.latest IS NOT NULL OR s.code = ANY(%(watching)s) OR s.code = ANY(%(movers)s))
+        ORDER BY array_position(%(movers)s::text[], s.code) NULLS LAST, s.code = ANY(%(watching)s) DESC,
+                 d.latest DESC NULLS LAST, s.code
         """,
-        {"days": NEWS_DAYS, "watching": list(watching)},
+        {"days": NEWS_DAYS, "watching": list(watching), "movers": list(movers)},
     ).fetchall()
     picks, ranks = [], volatility_ranks(conn)
     for row in rows:
@@ -113,7 +115,7 @@ def save_briefing(database_url: str, user_id: str, day, kind: str, content: dict
             notify(conn, user_id, "close", "장 마감 요약", f"{day:%m월 %d일} 장 마감 요약이 왔어요")
 
 
-def build_briefing(database_url: str, user_id: str, now: datetime | None = None) -> dict:
+def build_briefing(database_url: str, user_id: str, now: datetime | None = None, movers: list[str] = ()) -> dict:
     now = now or datetime.now(KST)
     with connect(database_url, row_factory=dict_row) as conn:
         profile = profile_summary(conn, user_id)
@@ -131,7 +133,7 @@ def build_briefing(database_url: str, user_id: str, now: datetime | None = None)
             {"held": list(held), "codes": list(held | set(watching)), "since": now.date() - timedelta(days=NEWS_DAYS)},
         ).fetchall()
         limits = today_summary(conn, user_id)
-        candidates = pick_candidates(conn, profile, held, watching) if profile["mode"] == "custom" else []
+        candidates = pick_candidates(conn, profile, held, watching, movers) if profile["mode"] == "custom" else []
         thread_id = None
         if candidates:  # 제안서는 대화(thread)에 묶여 저장된다. 브리핑마다 대화 하나를 만든다
             thread_id = str(conn.execute("INSERT INTO threads (user_id) VALUES (%s) RETURNING id", (user_id,)).fetchone()["id"])

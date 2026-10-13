@@ -43,7 +43,7 @@ const autoRisePct = 3; // 매입가보다 이만큼(%) 넘게 오르면 바로 A
 // 코스피가 전일보다 이만큼(%) 넘게 빠지면 보유 종목 전부를 30분 기다리지 않고 AI에게 묻는다 (10/8 −2.62%, 10/12 −3.65% 날 손실)
 const autoMarketDropPct = 1.5;
 // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지). 2026-10-13: 두 번뿐이라 오후 내내 살 후보가 없었다
-const autoRescanSlots = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60];
+const autoRescanSlots = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 14 * 60 + 35];
 const autoBuyRetryGap = Duration(minutes: 30); // AI가 '관찰'이라 안 산 종목도 이만큼 지나면 새 판단으로 다시 묻는다
 const autoReviewGap = Duration(minutes: 30);
 const autoMaxReviews = 20; // 종목마다 하루에 묻는 횟수 (30분마다 + 급락 재질문, 서버 하루 분석 한도 100 안)
@@ -244,7 +244,14 @@ class AutoTrader extends ChangeNotifier {
     await _box.write('auto_rescan:$_today', jsonEncode([...done, slot])); // 먼저 적어 둔다 (실패해도 같은 시각에 다시 부르지 않게)
     await _note('장중 매수 후보를 다시 찾아요 (투자 AI → 검증 AI)');
     try {
-      final briefing = await api.post('/api/briefings/refresh') as Map<String, dynamic>;
+      // 지금 많이 움직이는 종목(거래대금·상승률 상위)도 후보로 보낸다. 서버가 분석 대상 안에서만 고른다
+      var movers = <String>[];
+      try {
+        movers = await currentBroker.value!.movers();
+      } catch (_) {
+        movers = []; // 순위를 못 받아도 원래 후보로 다시 찾는다
+      }
+      final briefing = await api.post('/api/briefings/refresh', {'candidates': movers}) as Map<String, dynamic>;
       // 아침에 '관찰'이라 오늘 끝낸 종목도 새 판단으로 다시 시도한다 (2026-10-13: 12:01에 매수 검토가 나왔는데 09:10 기록 때문에 안 샀다)
       await _box.write('auto_settled2:$_today', '{}');
       final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>();

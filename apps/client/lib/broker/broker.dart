@@ -47,6 +47,9 @@ abstract class Broker {
   /// 자동매매가 시장 급락을 볼 때도 쓴다. 못 받으면 null
   Future<List<Map<String, dynamic>>?> market();
 
+  /// 장중 많이 움직이는 종목 코드: 거래대금 상위와 상승률 상위 (매수 후보 다시 찾기에 쓴다). 못 받으면 빈 목록
+  Future<List<String>> movers();
+
   /// 마지막 잔고 조회 때 알게 된 현재가 (홈 평가금액용, 없으면 평균 매입가로 본다)
   Map<String, int> get lastPrices;
 

@@ -142,13 +142,14 @@ def test_refresh_rebuilds_today_briefing_once_an_hour(client, user, monkeypatch,
     from app.routers import briefings as router
     made = []
 
-    def fake_build(database_url, user_id):
-        made.append(user_id)
+    def fake_build(database_url, user_id, movers=()):
+        made.append((user_id, list(movers)))
         briefing.save_briefing(database_url, user_id, datetime.now(KST).date(), "morning",
                                {"picks": [], "news": [], "checked": [], "limits": {}, "mode": "custom"})
 
     monkeypatch.setattr(router, "build_briefing", fake_build)
-    first = client.post("/api/briefings/refresh", headers=user["headers"])
-    assert first.status_code == 200 and made == [user["id"]] and first.json()["kind"] == "morning"
+    # 폰이 보낸 거래대금·상승률 상위 종목 코드가 후보로 넘어간다
+    first = client.post("/api/briefings/refresh", headers=user["headers"], json={"candidates": ["000660", "005930"]})
+    assert first.status_code == 200 and made == [(user["id"], ["000660", "005930"])] and first.json()["kind"] == "morning"
     again = client.post("/api/briefings/refresh", headers=user["headers"])
     assert again.status_code == 429 and len(made) == 1

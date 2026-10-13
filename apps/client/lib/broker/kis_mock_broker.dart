@@ -213,6 +213,24 @@ class KisMockBroker implements Broker {
     return _market;
   }
 
+  /// 거래대금 상위(FHPST01710000)와 상승률 상위(FHPST01700000). 2026-10-13 모의투자에서 받는 것을 확인
+  @override
+  Future<List<String>> movers() async {
+    final volume = await _call('GET', '/uapi/domestic-stock/v1/quotations/volume-rank', 'FHPST01710000', query: {
+      'FID_COND_MRKT_DIV_CODE': 'J', 'FID_COND_SCR_DIV_CODE': '20171', 'FID_INPUT_ISCD': '0000', 'FID_DIV_CLS_CODE': '0',
+      'FID_BLNG_CLS_CODE': '3', 'FID_TRGT_CLS_CODE': '111111111', 'FID_TRGT_EXLS_CLS_CODE': '0000000000',
+      'FID_INPUT_PRICE_1': '', 'FID_INPUT_PRICE_2': '', 'FID_VOL_CNT': '', 'FID_INPUT_DATE_1': '',
+    });
+    final rise = await _call('GET', '/uapi/domestic-stock/v1/ranking/fluctuation', 'FHPST01700000', query: {
+      'fid_cond_mrkt_div_code': 'J', 'fid_cond_scr_div_code': '20170', 'fid_input_iscd': '0000', 'fid_rank_sort_cls_code': '0',
+      'fid_input_cnt_1': '0', 'fid_prc_cls_code': '0', 'fid_input_price_1': '', 'fid_input_price_2': '', 'fid_vol_cnt': '',
+      'fid_trgt_cls_code': '0', 'fid_trgt_exls_cls_code': '0', 'fid_div_cls_code': '0', 'fid_rsfl_rate1': '', 'fid_rsfl_rate2': '',
+    });
+    List<String> codes(Map<String, dynamic> data, String key) =>
+        [for (final o in ((data['output'] as List?) ?? []).cast<Map<String, dynamic>>()) '${o[key] ?? ''}'];
+    return {...codes(volume, 'mksc_shrn_iscd'), ...codes(rise, 'stck_shrn_iscd')}.where((c) => RegExp(r'^\d{6}$').hasMatch(c)).take(30).toList();
+  }
+
   List<Map<String, dynamic>>? _market;
   DateTime? _marketAt;
   String? _dailyDate;
