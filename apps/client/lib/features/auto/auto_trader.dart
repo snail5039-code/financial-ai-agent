@@ -204,7 +204,8 @@ class AutoTrader extends ChangeNotifier {
     unawaited(tick());
   }
 
-  /// 장중(09:05~15:28, 평일)이고 오늘 계획을 승인했으면: 15:00 전에는 사고, AI 매도를 허용했으면 보유 종목을 점검한다
+  /// 장중(09:05~15:28, 평일)이고 오늘 계획을 승인했으면: 정규장 연속 매매가 끝나는 15:20 전까지 사고, AI 매도를 허용했으면 보유 종목을 점검한다
+/// (2026-10-13 사용자 결정: 15:00에 멈추지 않고 장 끝까지 사고판다. 15:20~15:30 동시호가에는 사지 않는다)
   Future<void> tick() async {
     if (!on || _busy || kIsWeb || !allowed(currentBroker.value)) return;
     final k = _kst;
@@ -213,7 +214,7 @@ class AutoTrader extends ChangeNotifier {
     if (plan == null) return; // 사용자가 오늘 계획을 승인하기 전에는 아무것도 하지 않는다
     _busy = true;
     try {
-      if (minutes < 15 * 60) {
+      if (minutes < 15 * 60 + 20) {
         await _rescan(minutes);
         await _buy(plan!['budget'] as int);
       }

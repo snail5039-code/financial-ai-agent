@@ -38,7 +38,7 @@ class _AutoTradePageState extends State<AutoTradePage> {
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: SourceText('매일 오늘 계획(살 총액, AI 매도 허용)을 승인해야 시작해요. 승인하지 않은 날은 사고팔지 않아요. '
-                    '장중(평일 09:05~15:00) 앱이 켜져 있으면 1분마다 확인해서 오늘 아침 브리핑에서 검증 AI가 승인한 종목을 사요. '
+                    '장중(평일 09:05~15:20, 매도 판단은 15:28까지) 앱이 켜져 있으면 1분마다 확인해서 오늘 아침 브리핑에서 검증 AI가 승인한 종목을 사요. '
                     'AI 매도를 허용하면 자동매매로 산 종목을 30분마다(−$autoDropPct% 급락, +$autoRisePct% 급등, 코스피 −$autoMarketDropPct% 급락이면 바로) 점검해서, '
                     '곧 떨어질 것 같다고 AI가 매도(전부 또는 절반)를 제안하고 검증 AI가 승인한 경우에만 팔아요. −$autoStopLossPct% 손절선도 AI가 판단해요. '
                     '사든 팔든 주문 때 다시 투자 AI → 검증 AI → 한도 검사를 거치고, 1회 한도를 넘으면 나눠 주문해요. '
