@@ -42,7 +42,9 @@ const autoStopLossPct = 7;
 const autoRisePct = 3; // 매입가보다 이만큼(%) 넘게 오르면 바로 AI에게 "지금 팔아 이익을 지킬지" 묻는다 (2026-10-13 사용자 요청)
 // 코스피가 전일보다 이만큼(%) 넘게 빠지면 보유 종목 전부를 30분 기다리지 않고 AI에게 묻는다 (10/8 −2.62%, 10/12 −3.65% 날 손실)
 const autoMarketDropPct = 1.5;
-const autoRescanSlots = [12 * 60, 13 * 60 + 30]; // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지)
+// 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지). 2026-10-13: 두 번뿐이라 오후 내내 살 후보가 없었다
+const autoRescanSlots = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60];
+const autoBuyRetryGap = Duration(minutes: 30); // AI가 '관찰'이라 안 산 종목도 이만큼 지나면 새 판단으로 다시 묻는다
 const autoReviewGap = Duration(minutes: 30);
 const autoMaxReviews = 20; // 종목마다 하루에 묻는 횟수 (30분마다 + 급락 재질문, 서버 하루 분석 한도 100 안)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
@@ -244,7 +246,7 @@ class AutoTrader extends ChangeNotifier {
     try {
       final briefing = await api.post('/api/briefings/refresh') as Map<String, dynamic>;
       // 아침에 '관찰'이라 오늘 끝낸 종목도 새 판단으로 다시 시도한다 (2026-10-13: 12:01에 매수 검토가 나왔는데 09:10 기록 때문에 안 샀다)
-      await _box.write('auto_settled:$_today', '[]');
+      await _box.write('auto_settled2:$_today', '{}');
       final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>();
       await _note(picks.isEmpty ? '새로 검증을 통과한 매수 후보가 없어요' : '새 매수 후보: ${picks.map((p) => p['stock_name']).join(', ')}');
     } on ApiError catch (error) {
@@ -261,14 +263,17 @@ class AutoTrader extends ChangeNotifier {
       return; // 아직 브리핑이 없다
     }
     if (briefing['brief_date'] != _today) return;
-    final done = ((jsonDecode(await _box.read('auto_settled:$_today') ?? '[]') as List)).cast<String>();
+    // 오늘 판단을 끝낸 종목과 그 시각. autoBuyRetryGap이 지나면 다시 묻는다 (사는 판단도 주기적으로)
+    final done = (jsonDecode(await _box.read('auto_settled2:$_today') ?? '{}') as Map).cast<String, dynamic>();
+    bool settled(String code) => (DateTime.tryParse(done[code] as String? ?? '') ?? DateTime(2000))
+        .isAfter(_now().subtract(autoBuyRetryGap));
     final tries = (jsonDecode(await _box.read('auto_tries:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final bought = (jsonDecode(await _box.read('auto_bought:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
         .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
     // 오늘 이미 사기 시작한 종목이 autoMaxPerDay개면 새 종목은 사지 않는다
-    bool skip(Map<String, dynamic> p) => done.contains(p['stock_code']) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries ||
+    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String) || (tries[p['stock_code']] as int? ?? 0) >= autoMaxTries ||
         (!bought.containsKey(p['stock_code']) && bought.length >= autoMaxPerDay);
     if (picks.every(skip)) return;
     // 오늘 쓴 금액 (예전 기록에 없으면 산 수량 × 브리핑 종가로 처음 한 번 계산)
@@ -302,8 +307,10 @@ class AutoTrader extends ChangeNotifier {
       }
       // 오류(null)로 멈췄으면 다음 확인 때 남은 금액만큼 다시 시도한다 (하루 autoMaxTries번까지). 그 밖에는 오늘 끝
       if (!failed && on && plan != null) {
-        done.add(code);
-        await _box.write('auto_settled:$_today', jsonEncode(done));
+        done[code] = _now().toIso8601String();
+        tries.remove(code); // 오류 재시도 횟수는 판단을 끝내면 다시 센다
+        await _box.write('auto_settled2:$_today', jsonEncode(done));
+        await _box.write('auto_tries:$_today', jsonEncode(tries));
       }
     }
   }
