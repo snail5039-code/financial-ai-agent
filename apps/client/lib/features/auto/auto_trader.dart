@@ -2,7 +2,7 @@
 //
 // 매일 사용자 승인이 먼저다: 그날 "오늘 계획"(살 총액, AI 매도 허용)을 사용자가 승인해야 사고판다. 승인이 없으면 아무것도 안 한다.
 // 사는 것: 오늘 아침 브리핑에서 투자 AI가 매수 검토로 쓰고 검증 AI가 승인·조건부 승인한 종목만, 승인한 총액 안에서.
-//   장중 autoRescanSlots에 브리핑을 다시 만들어 새 후보도 산다. 종목당 총액/autoMaxPerDay, 하루 합계는 승인한 총액을 넘지 않는다
+//   장중 autoRescanSlots에 브리핑을 다시 만들어 새 후보도 산다. 몇 종목을 살지는 AI 판단에 맡기고(개수 제한 없음), 종목당 총액의 autoMaxStockPct%까지, 하루 합계는 승인한 총액 안
 // 파는 것 (AI 매도를 허용했을 때, 2026-10-12 사용자 결정: 팔 종목·시점을 사람이 정하지 않고 AI가 앞을 보고 판단): 자동매매로 산 종목을
 //   autoReviewGap마다(장중 급락 −autoDropPct%면 바로) 투자 AI에게 "앞으로 떨어질 가능성이 크면 미리 팔지"를 분석시키고(sellQuestion),
 //   제안이 '매도 검토'이고 검증 AI가 승인·조건부 승인일 때만 판다. 매입가 대비 −autoStopLossPct% 이하면 AI에게 묻지 않고 판다(손절)
@@ -26,7 +26,9 @@ import '../../secure/key_store.dart';
 import '../chat/conversation.dart';
 import '../../common/common.dart';
 
-const autoMaxPerDay = 3; // 하루에 자동으로 사는 종목 수. 총액을 이만큼 나눠 종목당 금액으로 쓴다 (한 종목에 몰지 않게)
+// 한 종목에 쓰는 최대 몫 (살 총액의 %). 서버의 한 종목 비중 40% 규칙에 막히지 않게 그 아래로.
+// 2026-10-13 사용자 결정: 하루 3종목 제한을 없애고 몇 종목을 살지는 AI가 판단한다
+const autoMaxStockPct = 35;
 const autoMaxTries = 3; // 처리안까지 못 간 오류(서버·통신)는 종목마다 하루 이만큼 다시 시도한다
 // 0 = 오늘은 사지 않음, autoAllCash = 주문 가능 금액 전부 (판 돈도 바로 다시 산다. 모의투자, 2026-10-13 사용자 결정)
 const autoAllCash = -1;
@@ -104,9 +106,9 @@ const _why = {
   'market': '시장 전체가 급하게 빠지고 있어. ',
 };
 
-/// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액/autoMaxPerDay)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게
+/// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액의 autoMaxStockPct%)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게
 int buyRoom({required int budget, required int spentToday, required int spentOnStock}) {
-  final perStock = budget ~/ autoMaxPerDay - spentOnStock;
+  final perStock = budget * autoMaxStockPct ~/ 100 - spentOnStock;
   final left = budget - spentToday;
   final room = perStock < left ? perStock : left;
   return room > 0 ? room : 0;
@@ -279,9 +281,7 @@ class AutoTrader extends ChangeNotifier {
     final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
         .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
-    // 오늘 이미 사기 시작한 종목이 autoMaxPerDay개면 새 종목은 사지 않는다
-    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String) ||
-        (!bought.containsKey(p['stock_code']) && bought.length >= autoMaxPerDay);
+    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String);
     if (picks.every(skip)) return;
     // 오늘 쓴 금액 (예전 기록에 없으면 산 수량 × 브리핑 종가로 처음 한 번 계산)
     var spent = int.tryParse(await _box.read('auto_spent:$_today') ?? '') ??

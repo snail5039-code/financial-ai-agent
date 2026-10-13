@@ -529,9 +529,9 @@ void main() {
     expect(shortSource('2026-10-07 종가 (금융위원회_주식시세정보)'), '금융위원회_주식시세정보');
   });
 
-  test('자동 매수 금액: 종목당 총액의 1/3, 하루 합계는 총액 안', () {
-    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0), 1666666);
-    expect(buyRoom(budget: 5000000, spentToday: 1840000, spentOnStock: 1840000), 0); // 이 종목 몫을 다 씀
+  test('자동 매수 금액: 종목당 총액의 35%, 하루 합계는 총액 안 (종목 수 제한 없음)', () {
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0), 1750000);
+    expect(buyRoom(budget: 5000000, spentToday: 1840000, spentOnStock: 1840000), 0); // 이 종목 몫(175만)을 다 씀
     expect(buyRoom(budget: 5000000, spentToday: 4000000, spentOnStock: 0), 1000000); // 하루 남은 총액이 더 작다
     expect(buyRoom(budget: 5000000, spentToday: 5200000, spentOnStock: 0), 0);
     expect(buyRoom(budget: 0, spentToday: 0, spentOnStock: 0), 0);
