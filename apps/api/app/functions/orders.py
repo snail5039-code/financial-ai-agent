@@ -98,11 +98,13 @@ def rule(name: str, label: str, limit, actual, ok: bool) -> dict:
 def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_krw: int,
                  snapshot: dict | None, closes: dict[str, int], stock_code: str, now: datetime,
                  inputs: list[str], change: str | None = None, replacing_krw: int = 0,
-                 account_pct: int | None = None) -> dict:
+                 account_pct: int | None = None, mock: bool = False) -> dict:
     """PolicyResult (05-schemas.md 6장): 규칙마다 통과 여부. 하나라도 걸리면 처리안 전에 막는다.
 
     change: None 새 주문 / "cancel" 미체결 주문 취소 / "modify" 가격 정정. 정정은 원래 주문 금액(replacing_krw)을 바꾸는 것이라
     1일 한도·현금은 그 차이로 본다. 취소는 위험을 늘리지 않아 장 운영 시간만 본다 (3-1)
+    mock: 모의투자면 금액 한도(1회·1일·계좌 비율)를 보지 않는다. 가상 돈이라 사고팔며 검증하는 게 목적이고,
+    살 총액은 사용자가 자동매매 계획에서 정한다 (2026-10-13 사용자 결정). 현금·보유 수량·비중·장 시간은 그대로 본다
     """
     amount = order_amount(qty, price)
     hours = rule("market_hours", "장 운영 시간 (휴장일 제외 평일 09:00~15:30)", "09:00~15:30", f"{now:%a %H:%M}",
@@ -110,11 +112,10 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
     if change == "cancel":
         return {"ok": hours["ok"], "rules": [hours], "weight_after": None}
     today_ordered_krw -= replacing_krw
-    rules = [
-        hours,
-        rule("max_order", "1회 주문 한도", policy["max_order_krw"], amount, amount <= policy["max_order_krw"]),
-    ]
-    if side == "buy":  # 1일 한도는 매수만 (위 TODAY_ORDERED_SQL 설명)
+    rules = [hours]
+    if not mock:
+        rules.append(rule("max_order", "1회 주문 한도", policy["max_order_krw"], amount, amount <= policy["max_order_krw"]))
+    if side == "buy" and not mock:  # 1일 한도는 매수만 (위 TODAY_ORDERED_SQL 설명)
         rules.append(rule("max_daily", "1일 주문 한도", policy["max_daily_krw"], today_ordered_krw + amount,
                           today_ordered_krw + amount <= policy["max_daily_krw"]))
     if snapshot is None:
@@ -122,7 +123,7 @@ def policy_check(side: str, qty: int, price: int, policy: dict, today_ordered_kr
         return {"ok": False, "rules": rules, "weight_after": None}
 
     held_qty, position_value, total_value = account_values(snapshot, stock_code, price, closes)
-    if side == "buy" and account_pct:
+    if side == "buy" and account_pct and not mock:
         limit = total_value * account_pct // 100
         rules.append(rule("account_share", f"1회 매수 한도 (계좌 평가액의 {account_pct}%)", limit, amount - replacing_krw,
                           amount - replacing_krw <= limit))

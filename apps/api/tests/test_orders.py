@@ -164,3 +164,12 @@ def test_sell_is_not_limited_by_daily_total() -> None:
     result = check(side="sell", qty=1, today=1_900_000)  # 오늘 190만 매수했어도 매도는 1일 한도와 상관없다
     assert "max_daily" not in [r["rule"] for r in result["rules"]]
     assert result["ok"], result
+
+
+def test_mock_has_no_amount_limits() -> None:
+    """모의투자는 금액 한도(1회·1일·계좌 비율) 없이 현금·비중·장 시간만 본다 (2026-10-13 사용자 결정)"""
+    result = orders.policy_check("buy", 10, 200_000, POLICY, 9_000_000, SNAPSHOT, {"005930": 80_000}, "000660", OPEN,
+                                 ["snapshot"], account_pct=10, mock=True)
+    names = {r["rule"] for r in result["rules"]}
+    assert not names & {"max_order", "max_daily", "account_share"}
+    assert {"market_hours", "cash"} <= names

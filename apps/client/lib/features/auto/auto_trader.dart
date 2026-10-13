@@ -28,7 +28,11 @@ import '../../common/common.dart';
 
 const autoMaxPerDay = 3; // 하루에 자동으로 사는 종목 수. 총액을 이만큼 나눠 종목당 금액으로 쓴다 (한 종목에 몰지 않게)
 const autoMaxTries = 3; // 처리안까지 못 간 오류(서버·통신)는 종목마다 하루 이만큼 다시 시도한다
-const autoBudgets = [0, 1000000, 3000000, 5000000]; // 0 = 오늘은 사지 않음
+// 0 = 오늘은 사지 않음, autoAllCash = 주문 가능 금액 전부 (판 돈도 바로 다시 산다. 모의투자, 2026-10-13 사용자 결정)
+const autoAllCash = -1;
+const autoBudgets = [0, 1000000, 3000000, 5000000, autoAllCash];
+
+String budgetLabel(int v) => v == 0 ? '사지 않음' : v == autoAllCash ? '주문 가능 금액 전부 (판 돈 포함)' : won(v);
 // 4-3 실전 자동매매 (사용자 결정: 앱이 켜져 있을 때만 소액). 하루 총액과 1건 금액을 모의보다 작게 (서버 REAL_AUTO_MAX와 같은 30만 원)
 const autoRealBudgets = [0, 100000, 300000, 500000];
 const autoRealMaxOrder = 300000;
@@ -175,7 +179,7 @@ class AutoTrader extends ChangeNotifier {
   /// 사용자가 오늘 계획을 승인했다: 살 총액(0이면 안 삼), AI 판단 매도·손절 허용
   Future<void> approvePlan(int budget, {bool aiSell = true}) async {
     plan = {'budget': budget, 'ai_sell': aiSell};
-    if (budget > 0) budgetKrw = budget;
+    if (budget != 0) budgetKrw = budget;
     await _box.write('auto_plan:$_today', jsonEncode(plan));
     await _box.write('auto_budget_krw', '$budgetKrw');
     await _note('오늘 계획 승인: ${budget > 0 ? '${won(budget)}까지 매수' : '매수 안 함'}'
@@ -231,7 +235,7 @@ class AutoTrader extends ChangeNotifier {
 
   /// 장중 매수 후보 다시 찾기: 정해진 시각이 지나면 한 번씩 서버에 브리핑을 다시 만들게 한다 (실패해도 아침 후보로 계속)
   Future<void> _rescan(int minutes) async {
-    if ((plan!['budget'] as int) <= 0) return;
+    if ((plan!['budget'] as int) == 0) return;
     final done = ((jsonDecode(await _box.read('auto_rescan:$_today') ?? '[]') as List)).cast<int>();
     final slot = autoRescanSlots.lastWhere((s) => minutes >= s, orElse: () => -1);
     if (slot < 0 || done.contains(slot)) return;
@@ -247,7 +251,7 @@ class AutoTrader extends ChangeNotifier {
   }
 
   Future<void> _buy(int budget) async {
-    if (budget <= 0) return;
+    if (budget == 0) return;
     final Map<String, dynamic> briefing;
     try {
       briefing = await api.get('/api/briefings/latest') as Map<String, dynamic>;
@@ -269,6 +273,8 @@ class AutoTrader extends ChangeNotifier {
     var spent = int.tryParse(await _box.read('auto_spent:$_today') ?? '') ??
         bought.entries.fold<int>(0, (sum, e) => sum + ((e.value as Map)['qty'] as int) *
             (picks.where((p) => p['stock_code'] == e.key).firstOrNull?['last_close'] as int? ?? 0));
+    // 주문 가능 금액 전부: 오늘 쓴 돈 + 지금 쓸 수 있는 현금 (AI가 판 돈도 들어온다)
+    if (budget == autoAllCash) budget = spent + await currentBroker.value!.buyingPower();
     final maxOrder = await _maxOrder();
     for (final pick in picks.where((p) => !skip(p))) {
       if (!on || plan == null) break;

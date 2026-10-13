@@ -26,7 +26,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from psycopg.rows import dict_row
 
-from app import clock, signals
+from app import clock, config, signals
 from app.agents import llm
 from app.agents.analysis import (
     VERDICT_LABELS, check_target_node, gather_node, get_account_node, invest_agent_node, save_proposal,
@@ -221,7 +221,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     result = orders.policy_check(side, qty, price, policy, today_ordered, snapshot, closes, code, clock.market_now(),
                                  ["snapshot"] if snapshot else [], change=change,
                                  replacing_krw=target["qty"] * target["price"] if change == "modify" else 0,
-                                 account_pct=orders.ACCOUNT_ORDER_PCT[state.get("risk_level") or 1])
+                                 account_pct=orders.ACCOUNT_ORDER_PCT[state.get("risk_level") or 1], mock=mode_of(state) == "mock" and not config.MOCK_ORDER_LIMITS)
     amount = orders.order_amount(qty, price)
     fee = orders.fee_estimate(amount, policy["fee_rate_pct"])
     tax = orders.sell_tax(amount, market) if side == "sell" else 0

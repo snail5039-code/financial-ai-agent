@@ -47,3 +47,6 @@ CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",")
 
 # 대화 속 성향 신호 감지 모델 (5-4, apps/finetune/serve.py 주소, 예: http://127.0.0.1:8100/classify). 비우면 쓰지 않는다
 SIGNAL_MODEL_URL = os.environ.get("SIGNAL_MODEL_URL", "").strip() or None
+# 모의투자에도 금액 한도(1회·1일·계좌 비율)를 적용할지. 기본 끔: 모의는 가상 돈으로 사고팔며 검증하고,
+# 살 총액은 사용자가 자동매매 계획에서 정한다 (2026-10-13 사용자 결정). 실전은 항상 적용한다
+MOCK_ORDER_LIMITS = os.environ.get("MOCK_ORDER_LIMITS", "").strip().lower() in ("1", "on", "true")

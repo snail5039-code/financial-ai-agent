@@ -62,7 +62,7 @@ class _AutoTradePageState extends State<AutoTradePage> {
         color: Colors.white,
         child: ListTile(
           title: const Text('오늘 계획 (승인함)', style: TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: Text('매수: ${plan['budget'] == 0 ? '안 함' : '${won(plan['budget'] as int)}까지'}\n'
+          subtitle: Text('매수: ${plan['budget'] == 0 ? '안 함' : '${budgetLabel(plan['budget'] as int)}까지'}\n'
               '매도: ${plan['ai_sell'] == true ? 'AI가 앞을 보고 판단 (30분마다·급락·급등·시장 급락 시, −$autoStopLossPct% 손절선)' : '안 함'}'),
           isThreeLine: true,
           trailing: TextButton(onPressed: autoTrader.cancelPlan, child: const Text('계획 취소')),
@@ -82,7 +82,7 @@ class _AutoTradePageState extends State<AutoTradePage> {
             const Expanded(child: Text('오늘 살 총액')),
             DropdownButton<int>(
               value: AutoTrader.budgets.contains(budget) ? budget : AutoTrader.budgets[1],
-              items: [for (final v in AutoTrader.budgets) DropdownMenuItem(value: v, child: Text(v == 0 ? '사지 않음' : won(v)))],
+              items: [for (final v in AutoTrader.budgets) DropdownMenuItem(value: v, child: Text(budgetLabel(v)))],
               onChanged: (v) => setState(() => _budget = v),
             ),
           ]),
