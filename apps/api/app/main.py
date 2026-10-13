@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
         if config.MARKET_CLOCK:
             logging.getLogger(__name__).warning("개발용 MARKET_CLOCK=%s: 장 운영 시간을 실제 시계로 검사하지 않아요", config.MARKET_CLOCK)
         stop = threading.Event()
-        if app.state.auto_collect_hour is not None:
-            threading.Thread(target=collect.run_daily, args=(stop, app.state.auto_collect_hour), daemon=True).start()
+        for hour in app.state.auto_collect_hours:
+            threading.Thread(target=collect.run_daily, args=(stop, hour), daemon=True).start()
         if app.state.morning_brief_time is not None:  # 사용자마다 Gemini 호출이 생기므로 .env에서 켤 때만
             threading.Thread(target=briefing.run_daily, args=(stop, app.state.morning_brief_time), daemon=True).start()
         if app.state.close_summary_time is not None:
@@ -45,14 +45,14 @@ async def lifespan(app: FastAPI):
         stop.set()
 
 
-def create_app(database_url: str | None = None, auto_collect_hour: int | None = None,
+def create_app(database_url: str | None = None, auto_collect_hours: tuple[int, ...] = (),
                morning_brief_time: time | None = None, close_summary_time: time | None = None,
                close_review_time: time | None = None) -> FastAPI:
-    """auto_collect_hour: 매일 이 시각에 분석용 데이터 수집. morning_brief_time: 거래일 이 시각에 아침 브리핑.
+    """auto_collect_hours: 매일 이 시각들에 분석용 데이터 수집. morning_brief_time: 거래일 이 시각에 아침 브리핑.
     None이면 안 함 (테스트는 둘 다 안 함)."""
     app = FastAPI(title="invest-agent-api", lifespan=lifespan)
     app.state.database_url = database_url or config.DATABASE_URL
-    app.state.auto_collect_hour = auto_collect_hour
+    app.state.auto_collect_hours = auto_collect_hours
     app.state.morning_brief_time = morning_brief_time
     app.state.close_summary_time = close_summary_time  # 거래일 이 시각에 장 마감 요약 (LLM 없음)
     app.state.close_review_time = close_review_time    # 거래일 이 시각에 AI 회고·내일 계획 (Gemini 비용)
@@ -83,7 +83,7 @@ def create_app(database_url: str | None = None, auto_collect_hour: int | None = 
 
 
 app = create_app(
-    auto_collect_hour=None if config.AUTO_COLLECT_HOUR == "off" else int(config.AUTO_COLLECT_HOUR),
+    auto_collect_hours=() if config.AUTO_COLLECT_HOUR == "off" else tuple(int(h) for h in config.AUTO_COLLECT_HOUR.split(",")),
     morning_brief_time=time.fromisoformat(config.MORNING_BRIEF_TIME) if config.MORNING_BRIEF_TIME else None,
     close_summary_time=None if config.CLOSE_SUMMARY_TIME == "off" else time.fromisoformat(config.CLOSE_SUMMARY_TIME),
     close_review_time=time.fromisoformat(config.CLOSE_REVIEW_TIME) if config.CLOSE_REVIEW_TIME else None,

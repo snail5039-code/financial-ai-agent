@@ -827,6 +827,18 @@ def test_auto_order_lets_ai_decline_buy_and_needs_confirm(client, custom_user, a
     assert "[사용자 지시 주문]" in ai["invest"][-1] and card["confirm_required"] == []
 
 
+def test_auto_buy_is_blocked_while_falling_intraday(client, custom_user, ai) -> None:
+    # 2026-10-14: 5분 저가가 연속 낮아지고 VWAP 아래면 자동매매 매수는 코드가 막는다 (관찰만 허용)
+    ai["action"] = "watch"
+    bars = [["091000", 101000], ["091200", 100500], ["091500", 100200], ["091700", 99800], ["092000", 99500], ["092200", 99100]]
+    reply = balance()
+    reply["prices"][0]["intraday"] = {"change_pct": -2.0, "vwap": PRICE + 5000, "bars": bars}
+    body = {"text": "주문전자 4주 사줘", "client": "app", "origin": "auto"}
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
+    answer(client, custom_user, events, reply)
+    assert "[허용 행동] watch (매수 제외: 장중 하락 중" in ai["invest"][-1] and "5분 저가가 3번 연속 낮아짐" in ai["invest"][-1]
+
+
 def test_partial_cancel_and_choosing_among_open_orders(client, custom_user, ai, migrated, monkeypatch) -> None:
     def partial(query, history):
         if "취소" in query:

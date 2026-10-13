@@ -28,6 +28,6 @@ KIS 모의투자 계좌(10/8 시작 1,000만 원)로 앱이 사람 손 없이 �
 - `proposals`: 시각, 종목, 투자 AI 행동, 자동매매 주문 여부, 마지막 검증 판정·요약·조건
 - `verification_rejects`: 검증 AI가 반려한 시각·종목·이유
 
-AI 판단·검증을 어떻게 고쳤는지는 [../AI_CHANGELOG.md](../AI_CHANGELOG.md).
+AI 판단·검증을 어떻게 고쳤는지는 [../AI_CHANGELOG.md](../AI_CHANGELOG.md). 공개 매매 기준과 비교한 점검은 [ai-audit-20261014.md](ai-audit-20261014.md).
 
 모의투자 결과이며 투자 권유가 아니다.

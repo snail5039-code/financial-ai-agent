@@ -173,7 +173,13 @@ class KisMockBroker implements Broker {
         if (_int(b['stck_prpr']) > 0) ['${b['stck_cntg_hour']}', _int(b['stck_prpr'])],
     ].reversed.toList(); // KIS는 최신부터 준다
     if (bars.isEmpty) return null; // 장 시작 전
-    return {'change_pct': double.tryParse('${(data['output1'] as Map?)?['prdy_ctrt']}'), 'bars': bars};
+    final o = (data['output1'] as Map?) ?? {};
+    final volume = _int(o['acml_vol']);
+    return {
+      'change_pct': double.tryParse('${o['prdy_ctrt']}'), 'bars': bars,
+      // 오늘 거래량 가중 평균가 = 누적 거래대금 ÷ 누적 거래량 (2026-10-14 모의 응답에서 두 값 확인)
+      if (volume > 0 && _int(o['acml_tr_pbmn']) > 0) 'vwap': _int(o['acml_tr_pbmn']) ~/ volume,
+    };
   }
 
   /// 시장 지수: 국내업종 현재지수(FHPUP02100000)와 일자별지수(FHPUP02120000). 코스피 0001, 코스닥 1001.
@@ -213,7 +219,8 @@ class KisMockBroker implements Broker {
     return _market;
   }
 
-  /// 거래대금 상위(FHPST01710000)와 상승률 상위(FHPST01700000). 2026-10-13 모의투자에서 받는 것을 확인
+  /// 거래대금 상위(FHPST01710000)와 상승률 상위(FHPST01700000). 2026-10-13 모의투자에서 받는 것을 확인.
+  /// 이미 크게 오른 종목(chasing)은 뺀다
   @override
   Future<List<String>> movers() async {
     final volume = await _call('GET', '/uapi/domestic-stock/v1/quotations/volume-rank', 'FHPST01710000', query: {
@@ -226,8 +233,10 @@ class KisMockBroker implements Broker {
       'fid_input_cnt_1': '0', 'fid_prc_cls_code': '0', 'fid_input_price_1': '', 'fid_input_price_2': '', 'fid_vol_cnt': '',
       'fid_trgt_cls_code': '0', 'fid_trgt_exls_cls_code': '0', 'fid_div_cls_code': '0', 'fid_rsfl_rate1': '', 'fid_rsfl_rate2': '',
     });
-    List<String> codes(Map<String, dynamic> data, String key) =>
-        [for (final o in ((data['output'] as List?) ?? []).cast<Map<String, dynamic>>()) '${o[key] ?? ''}'];
+    List<String> codes(Map<String, dynamic> data, String key) => [
+          for (final o in ((data['output'] as List?) ?? []).cast<Map<String, dynamic>>())
+            if (!chasing(o['prdy_ctrt'])) '${o[key] ?? ''}',
+        ];
     return {...codes(volume, 'mksc_shrn_iscd'), ...codes(rise, 'stck_shrn_iscd')}.where((c) => RegExp(r'^\d{6}$').hasMatch(c)).take(30).toList();
   }
 

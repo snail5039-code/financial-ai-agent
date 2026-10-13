@@ -156,6 +156,19 @@ void main() {
       expect(await empty.intraday('000270'), isNull); // 장 시작 전
     });
 
+    test('장중 흐름에 VWAP(누적 거래대금 ÷ 누적 거래량), 급등 후보는 +10% 넘게 오른 종목을 뺀다', () async {
+      final b = kis((_) async => jsonResponse({'rt_cd': '0', 'output1': {'prdy_ctrt': '1.00', 'acml_vol': '1000', 'acml_tr_pbmn': '111250000'},
+        'output2': [{'stck_cntg_hour': '094000', 'stck_prpr': '111000'}]}));
+      expect((await b.intraday('000270'))!['vwap'], 111250);
+      final ranks = kis((request) async => jsonResponse({'rt_cd': '0', 'output': [
+        {'mksc_shrn_iscd': '000270', 'stck_shrn_iscd': '000270', 'prdy_ctrt': '3.20'},
+        {'mksc_shrn_iscd': '111111', 'stck_shrn_iscd': '111111', 'prdy_ctrt': '10.00'},
+        {'mksc_shrn_iscd': '222222', 'stck_shrn_iscd': '222222', 'prdy_ctrt': '29.90'},
+      ]}));
+      expect(await ranks.movers(), ['000270']);
+      expect((chasing('9.99'), chasing(null)), (false, false));
+    });
+
     test('모의투자 서버와 모의 거래 코드만 쓰고, 주문 형식이 맞다', () async {
       final b = kis((_) async => jsonResponse({'rt_cd': '0', 'msg1': '주문 전송 완료', 'output': {'ODNO': '0000117057'}}));
       final ack = await b.order('buy', '000270', 2, 113300);

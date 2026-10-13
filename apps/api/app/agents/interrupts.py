@@ -47,9 +47,10 @@ class Balance(Strict):
 
 
 class Intraday(Strict):
-    """폰이 받은 오늘 장중 흐름: 전일 대비 %와 1분봉 [체결시각 "HHmmss", 가격] (오래된 것부터)."""
+    """폰이 받은 오늘 장중 흐름: 전일 대비 %, VWAP, 1분봉 [체결시각 "HHmmss", 가격] (오래된 것부터)."""
 
     change_pct: float | None = Field(default=None, ge=-100, le=1000)
+    vwap: int | None = Field(default=None, gt=0, le=MAX_KRW)  # 오늘 누적 거래대금 ÷ 누적 거래량
     bars: list[tuple[Annotated[str, Field(pattern=r"^\d{6}$")], Annotated[int, Field(gt=0, le=MAX_KRW)]]] = Field(max_length=120)
 
 

@@ -86,6 +86,11 @@ Future<bool> phoneUnlock() async {
 
 String nowIso() => DateTime.now().toUtc().toIso8601String();
 
+/// 급등 후보에서 뺄 전일 대비 상승률 (%). 한국 개별 종목은 급등 뒤 되돌림이 우세하다는 연구가 많아
+/// 이미 이만큼 오른 종목은 따라 사지 않는다 (2026-10-14 점검)
+const moverMaxRisePct = 10.0;
+bool chasing(Object? changePct) => (double.tryParse('$changePct') ?? 0) >= moverMaxRisePct;
+
 /// 한국 시각 (기기 시간대와 상관없이 장 시간·날짜를 KST로 본다)
 DateTime toKst(DateTime t) => t.toUtc().add(const Duration(hours: 9));
 

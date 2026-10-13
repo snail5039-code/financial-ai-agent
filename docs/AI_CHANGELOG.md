@@ -21,7 +21,23 @@
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
 | `MAX_ANALYSES_PER_DAY` | 100 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용) |
 | `MOCK_ORDER_LIMITS` | 끔 | `apps/api/app/config.py` (.env) | 모의에도 금액 한도 적용할지 |
-| `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집, 아침 브리핑 자동 시각 |
+| `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7,14 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집(14시는 전 거래일 종가), 아침 브리핑 자동 시각 |
+| `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
+| 하락 중 매수 차단 | 5분 저가 3번 연속 하락 + VWAP 아래 | `apps/api/app/agents/analysis.py` `falling_now` | 자동매매 매수를 '관찰'만 허용 |
+
+## 10/14 장중 점검 (웹 조사 기준과 비교, [점검 보고서](reports/ai-audit-20261014.md))
+
+장 마감 뒤 서버·앱을 다시 켜서 10/15부터 적용.
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| AI가 이동평균·추세·시장 대비 없이 사고팖 (지표는 PER·PBR·부채·실적·변동성뿐) | 코드가 20·60일 평균 대비, 20일 평균 방향, 20일 등락률(시장 대비), 20일 고점 대비를 계산해 출처 `trend:`로 | `analysis.py` `trend_text`·`trend_source` | `test_trend_text_moving_averages_and_relative_strength` |
+| 시장 국면(지수가 평균 위·아래)을 모름 | 지수 20거래일 평균 대비 | `market_source` | `test_market_source_twenty_day_average` |
+| 10/8 하락 중 매수. "떨어지는 중"을 AI가 짐작 | VWAP와 5분 저가 연속 하락을 코드가 계산. 둘 다면 자동매매 매수는 '관찰'만 허용 | `lows_falling`·`falling_now`·`gather_node`, `kis_mock_broker.dart` `intraday` | `test_intraday_vwap_and_falling_knife`, `test_auto_buy_is_blocked_while_falling_intraday`, `client_test` VWAP |
+| 급등 순위를 그대로 후보로 (한국은 급등 뒤 되돌림 우세) | 전일 대비 +10% 이상은 후보에서 뺌 | `broker.dart` `chasing` | `client_test` 급등 후보 |
+| 세금·수수료 없이 손익 판단 | 보유 종목에 "지금 다 팔면 손익 (세금·수수료 뺀 추정)" | `net_sell_text` | `test_net_sell_text_subtracts_tax_and_fees` |
+| DB 종가가 이틀 묵음 (공공데이터는 다음 영업일 오후 갱신, 수집은 07시뿐) | 07시·14시 두 번 수집 | `config.py` `AUTO_COLLECT_HOUR` | (14시 수집 로그로 확인 예정) |
+| **보류**: ATR 손절, +1R 절반 이익 실현, 위험 기준 수량 | 고가·저가 일봉이 없고, 손익을 크게 바꾸는 규칙이라 며칠 더 본 뒤 | — | — |
 
 ## 10/14 (4일차 장 전, 3일차 기록으로)
 
@@ -48,8 +64,8 @@
 | Gemini 429 오류가 재시도 횟수를 다 씀 | 오류도 30분 뒤 다시 | `_buy` | 14:28 재시도 확인 |
 | 후보가 공시 종목 몇 개뿐 | 폰이 KIS 거래대금·상승률 상위를 받아 후보로 | `kis_mock_broker.dart` `movers`, `briefing.py` `pick_candidates(movers)` | `test_refresh_rebuilds...` |
 | 하루 새 종목 3개 제한, 매수 15:00 정지 | 개수 제한 없음(종목당 35%), 매수 15:20까지 | `buyRoom`, `tick()` | `client_test` 매수 금액 |
-| **남은 과제**: 시초가 급락 때 판 3종목 모두 종가가 더 높았다 (약 7.9만 원) | 장 초반 급락 직후 매도 판단에 반등 근거를 함께 보게 | 미정 | — |
-| **남은 과제**: 검증 반려 48건 중 35건이 "뉴스를 사실로". 투자 AI가 지적을 받고도 반복해 최종 55건 중 33건이 반려로 끝남 (사는·파는 판단이 결론 없이 끝남) | 뉴스는 사실 근거로 못 쓰게 투자 AI 입력에서 분리하거나, 뉴스만 출처인 사실 근거를 코드가 '추론'으로 낮추는 방안 | `analysis.py` `invest_context`·`invest_agent_node` | — |
+| ~~남은 과제~~ 시초가 급락 때 판 3종목 모두 종가가 더 높았다 (약 7.9만 원) | → 10/14 장 시작 30분 규칙, VWAP·추세로 해결 | — | — |
+| ~~남은 과제~~ 검증 반려 48건 중 35건이 "뉴스를 사실로" | → 10/14 `news_as_inference`로 해결 | — | — |
 
 ## 10/12 (2일차)
 

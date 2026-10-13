@@ -23,8 +23,9 @@ GEMINI_EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "").strip() or
 DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY", "").strip() or None
 
 # 서버가 매일 이 시각(KST)에 분석용 데이터(공시·재무·시세)를 자동 수집한다. 시세는 영업일 다음 날 오후에 갱신된다.
-# 비우면 7시 (아침 브리핑 전에 밤사이 공시를 받는다, 2026-10-13 사용자 요청), "off"면 끈다
-AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "7"
+# 쉼표로 여러 번. 비우면 7시·14시: 7시는 아침 브리핑 전에 밤사이 공시를 (2026-10-13 사용자 요청),
+# 14시는 전 거래일 종가를 받는다 (공공데이터 시세가 다음 영업일 오후에 올라와 7시엔 이틀 전 종가뿐, 2026-10-14 점검). "off"면 끈다
+AUTO_COLLECT_HOUR = os.environ.get("AUTO_COLLECT_HOUR", "").strip() or "7,14"
 # 아침 브리핑 자동 실행 시각. 비우면 08:20, "off"면 안 함 (사용자마다 Gemini 호출이 생긴다).
 # 2026-10-13 사용자 요청: 사람이 손으로 돌리지 않고 서버가 매일 만든다
 MORNING_BRIEF_TIME = None if (_brief := os.environ.get("MORNING_BRIEF_TIME", "").strip() or "08:20") == "off" else _brief

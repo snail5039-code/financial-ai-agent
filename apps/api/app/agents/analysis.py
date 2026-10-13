@@ -27,7 +27,7 @@ from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_n
 from app.agents.state import Context, InvestState
 from app.clock import KST
 from app.db import connect
-from app.functions import metrics
+from app.functions import metrics, orders
 from app.functions.profile import LABELS
 from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk
 from app import config, signals
@@ -51,6 +51,7 @@ NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에�
                       "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
+FALLING_REASON = "장중 하락 중 (최근 5분 저가가 3번 연속 낮아지고 현재가가 VWAP 아래). 반등을 확인한 뒤 다시 판단"
 SELL_PORTIONS = {"all": "전부", "half": "절반"}  # 앱 자동매매가 이 말을 보고 판다 (auto_trader.dart sellPortion)
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
 CLAIM_LABELS = {"fact": "사실", "calc": "계산", "inference": "추론", "opinion": "의견"}
@@ -76,6 +77,7 @@ GENERAL_MODE_GUIDE = "일반 모드다 (성향 퀴즈 안 함). 판단하지 말
 #   intraday:{종목}         폰이 받은 오늘 1분봉 최근 30분과 전일 대비 등락률 (장중 흐름)
 #   news:{번호}             뉴스 제목·언론사·발행 시각·링크 (Google 뉴스 RSS, 본문 없음, 미확인 보도)
 #   market:{KOSPI|KOSDAQ}   폰이 받은 시장 지수: 지금 지수·등락률·오른/내린 종목 수, 최근 거래일 종가 (시장 전체 흐름)
+#   trend:{종목}            코드가 계산한 추세: 20·60일 평균 대비, 20일 평균 방향, 20일 등락률·고점 대비, 시장 대비
 
 def load_sources(conn, ids: list[str], state: InvestState) -> dict[str, dict]:
     """출처 ID → {kind, title, url, as_of, content}. 없는 ID는 결과에서 빠진다 (검증에서 '없는 출처'로 잡힘)."""
@@ -142,10 +144,18 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
     if kind == "market":
         found = next((m for m in state.get("market") or [] if m.get("index") == rest), None)
         return found and market_source(found)
+    if kind == "trend":
+        return trend_source(conn, rest, state)
     if source_id == "snapshot" and state.get("snapshot"):
         snapshot = state["snapshot"]
         held = [h for h in snapshot["holdings"] if h["stock_code"] == state["stock_code"]]
         holding = (f"이 종목 {held[0]['qty']:,}주, 평균 매입가 {won(held[0]['avg_price'])}" if held else "이 종목 없음")
+        if held and state.get("prices"):
+            market = conn.execute("SELECT market FROM stocks WHERE code = %s", (state["stock_code"],)).fetchone()
+            policy = conn.execute("SELECT fee_rate_pct FROM policies WHERE user_id = %s", (state["user_id"],)).fetchone()
+            if market:
+                holding += ", " + net_sell_text(held[0]["qty"], held[0]["avg_price"], state["prices"][0]["price"],
+                                                market["market"], policy and policy["fee_rate_pct"])
         return {"kind": "snapshot", "title": f"내 계좌 ({SOURCE_LABELS[snapshot['source']]})", "url": None,
                 "as_of": snapshot["fetched_at"], "content": f"현금 {won(snapshot['cash_krw'])}, {holding}"}
     return None
@@ -160,10 +170,33 @@ def intraday_source(price: dict) -> dict | None:
     values = [p for _, p in bars]
     (start_time, start), (end_time, end) = bars[0], bars[-1]
     day = f"전일 대비 {flow['change_pct']:+.2f}%. " if flow.get("change_pct") is not None else ""
+    vwap = flow.get("vwap")
+    vwap_text = (f". 오늘 거래량 가중 평균가(VWAP) {won(vwap)}, 현재가는 그보다 {(price['price'] - vwap) * 100 / vwap:+.2f}% "
+                 f"({'위' if price['price'] >= vwap else '아래'})" if vwap else "")
     return {"kind": "price", "title": "오늘 장중 흐름 (앱 실시간 조회, 1분봉)", "url": None, "as_of": price["as_of"],
             "content": f"{day}{start_time[:2]}:{start_time[2:4]}~{end_time[:2]}:{end_time[2:4]} 1분봉 {len(bars)}개: "
                        f"{won(start)} → {won(end)} ({(end - start) * 100 / start:+.2f}%), "
-                       f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}"}
+                       f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}{vwap_text}"
+                       + (". 최근 5분 저가가 3번 연속 낮아짐 (하락 중)" if lows_falling(bars) else "")}
+
+
+def lows_falling(bars: list[tuple[str, int]]) -> bool:
+    """1분봉을 5분씩 묶은 저가가 마지막 3묶음 연속 낮아지면 True (떨어지는 칼날, 2026-10-14 점검)"""
+    lows: dict[int, int] = {}
+    for t, p in bars:
+        key = (int(t[:2]) * 60 + int(t[2:4])) // 5
+        lows[key] = min(lows.get(key, p), p)
+    last = [lows[k] for k in sorted(lows)][-3:]
+    return len(last) == 3 and last[0] > last[1] > last[2]
+
+
+def falling_now(price: dict) -> bool:
+    """장중 하락 중: 5분 저가가 연속 낮아지고, VWAP를 받았으면 현재가가 그 아래. 자동매매 매수는 이때 막는다
+    (10/8 하락 중 매수 손실. 실무 공통 규칙 '떨어지는 칼날을 잡지 않는다')"""
+    flow = price.get("intraday") or {}
+    bars = [(str(t), int(p)) for t, p in flow.get("bars") or [] if int(p) > 0]
+    vwap = flow.get("vwap")
+    return lows_falling(bars) and (not vwap or price["price"] < vwap)
 
 
 MARKET_NAMES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
@@ -185,11 +218,66 @@ def market_source(m: dict) -> dict | None:
                if m.get("up") is not None and m.get("down") is not None else "")
     day_range = (f", 오늘 시가 {float(m['open']):,.2f} 고가 {float(m['high']):,.2f} 저가 {float(m['low']):,.2f}"
                  if m.get("open") and m.get("high") and m.get("low") else "")
+    average = (f", 20거래일 평균 {sum(daily[1:21]) / 20:,.2f}보다 {(value * 20 / sum(daily[1:21]) - 1) * 100:+.2f}% "
+               f"({'위' if value * 20 >= sum(daily[1:21]) else '아래'})" if len(daily) > 20 else "")
     name = MARKET_NAMES[m["index"]]
     return {"kind": "price", "title": f"{name} 지수 (앱 실시간 조회)", "url": None, "stock_code": None, "as_of": m.get("as_of"),
             "content": f"{name} {value:,.2f} (전일 대비 {float(m.get('change_pct') or 0):+.2f}%){day_range}{breadth}. "
                        f"최근 흐름: {since(1)}, {since(5)}, {since(20)}"
-                       + (f", {streak}거래일 연속 하락" if streak >= 2 else "")}
+                       + (f", {streak}거래일 연속 하락" if streak >= 2 else "") + average}
+
+
+def trend_text(closes: list[int], price: int, index_return: float | None) -> str:
+    """최근 종가(오래된 것부터)와 지금 가격으로 추세를 코드가 계산한다. LLM은 이 값만 쓴다 (2026-10-14 점검:
+    AI가 이동평균·시장 대비 흐름 없이 사고팔았다. 실무 공통 규칙: 20·60일 평균 위·오르는 중이면 상승 추세)"""
+    def average(n: int) -> float:
+        return sum(closes[-n:]) / n
+
+    def gap(n: int) -> str:
+        if len(closes) < n:
+            return f"{n}일 평균 미확인"
+        ma = average(n)
+        return f"{n}일 평균 {won(round(ma))}보다 {(price - ma) * 100 / ma:+.2f}% ({'위' if price >= ma else '아래'})"
+    parts = [gap(20), gap(60)]
+    if len(closes) >= 25:
+        before = sum(closes[-25:-5]) / 20
+        parts.append(f"20일 평균은 5거래일 전보다 {'오르는' if average(20) >= before else '내리는'} 중 "
+                     f"({(average(20) - before) * 100 / before:+.2f}%)")
+    if len(closes) >= 21:
+        change = (price - closes[-21]) * 100 / closes[-21]
+        parts.append(f"약 20거래일 등락률 {change:+.2f}%"
+                     + (f" (같은 기간 시장 {index_return:+.2f}%, 시장보다 {change - index_return:+.2f}%p)"
+                        if index_return is not None else ""))
+        high = max(closes[-20:] + [price])
+        parts.append(f"20일 최고가 {won(high)}보다 {(price - high) * 100 / high:+.2f}%")
+    return ", ".join(parts)
+
+
+def trend_source(conn, code: str, state: InvestState) -> dict | None:
+    rows = recent_closes(conn, code)
+    if len(rows) < 20:
+        return None
+    price = next((p["price"] for p in state.get("prices") or [] if p["stock_code"] == code), None)
+    basis = "현재가" if price else f"{rows[-1]['trade_date']} 종가"
+    market = conn.execute("SELECT market FROM stocks WHERE code = %s", (code,)).fetchone()
+    index = next((m for m in state.get("market") or [] if market and m.get("index") == market["market"]), None)
+    daily = [float(c) for _, c in (index or {}).get("daily") or []]
+    index_return = (float(index["value"]) - daily[20]) * 100 / daily[20] if index and len(daily) > 20 else None
+    return {"kind": "price", "title": "추세 (코드 계산: 최근 종가·지금 가격·시장 지수)", "url": None, "stock_code": code,
+            "as_of": str(rows[-1]["trade_date"]),
+            "content": f"{basis} 기준 (평균은 {rows[-1]['trade_date']}까지 종가로 계산): "
+                       + trend_text([r["close"] for r in rows], price or rows[-1]["close"], index_return)}
+
+
+def net_sell_text(qty: int, avg_price: int, price: int, market: str, fee_rate_pct) -> str:
+    """지금 다 팔면 손익 (매도 세금, 사고팔 때 수수료를 뺀 추정). 작은 이익을 비용으로 다 내주는 잦은 매매를 막는다"""
+    bought, sold = qty * avg_price, qty * price
+    cost = orders.sell_tax(sold, market)
+    if fee_rate_pct is not None:
+        cost += orders.fee_estimate(bought, fee_rate_pct) + orders.fee_estimate(sold, fee_rate_pct)
+    net = sold - bought - cost
+    return (f"지금 다 팔면 손익 {won(net)} ({net * 100 / bought:+.2f}%, 매도 세금"
+            + ("·수수료 뺀 추정)" if fee_rate_pct is not None else "만 뺀 추정, 수수료 미확인)"))
 
 
 def fmt_amount(value: int | None) -> str:
@@ -683,6 +771,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             if state["prices"][0].get("intraday"):
                 ids.append(f"intraday:{code}")
         ids += [f"market:{m['index']}" for m in state.get("market") or [] if m.get("index")]
+        ids.append(f"trend:{code}")
         if state.get("snapshot"):
             ids.append("snapshot")
         sources = load_sources(conn, ids, state)
@@ -692,15 +781,18 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rank = volatility_rank(conn, code)
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
+    auto_buy = bool(state.get("user_directed") and state.get("auto_origin") and state["side"] == "buy")
+    falling = bool(state.get("prices")) and falling_now(state["prices"][0])
     return {
         "sources": sources, "metrics": json.loads(json.dumps(found_metrics, default=str)), "risk_grade": grade,
         "risk_reason": risk and (f"{risk['title']} ({risk['filed_at']} 거래소 공시, 출처 dart:{risk['rcept_no']})"
                                  + (f". 이후 관련 공시: {risk['later']}" if risk["later"] else "")),
         # 사용자가 직접 지시한 주문은 행동을 바꾸지 않는다. 성향에 안 맞으면 처리안에서 확인을 받는다 (주문 그래프)
         # 자동매매의 매수는 투자 AI가 진입 시점을 보고 '관찰'로 거절할 수 있다 (3-4, 2026-10-08 손실 원인)
-        "allowed_actions": ([state["side"], "watch"] if state.get("auto_origin") and state["side"] == "buy" else [state["side"]])
-        if state.get("user_directed") else allowed_actions(*profile, holds, rank),
-        "buy_block_reason": buy_block_reason(*profile, rank),
+        # 2026-10-14: 장중 하락 중(5분 저가 연속 하락, VWAP 아래)이면 자동매매 매수는 코드가 막는다 (관찰만)
+        "allowed_actions": (["watch"] if falling else [state["side"], "watch"]) if auto_buy
+        else [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank),
+        "buy_block_reason": FALLING_REASON if auto_buy and falling else buy_block_reason(*profile, rank),
         "verifications": [], "revision_round": 0,
         # 5-4 대화 속 성향 신호 (모델이 꺼져 있으면 None). 사람이 쓴 말만 본다
         "conversation_signal": None if state.get("auto_origin") else signals.model_signal(state["query"]),

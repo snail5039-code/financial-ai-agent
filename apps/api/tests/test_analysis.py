@@ -1,6 +1,7 @@
 """분석 그래프(투자 AI ↔ 검증 AI) 테스트. Gemini는 가짜로 바꿔 끼운다 (비용 0)."""
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 import psycopg
 import pytest
@@ -460,3 +461,42 @@ def test_news_only_fact_becomes_reported_inference() -> None:
     assert out[0] == {"type": "inference", "text": "보도에 따르면 3분기 영업이익 5,100억 원", "source_ids": ["news:1"], "metric_ids": []}
     assert out[1] == claims[1]
     assert analysis.claim_check("claim:0", out[0], {"news:1": {}}, set())["result"] == "pass"  # 이제 반려되지 않는다
+
+
+# 2026-10-14 점검 (웹 조사 기준): 추세·VWAP·떨어지는 칼날·세후 손익을 코드가 계산해 AI에게 준다
+FALLING_BARS = [["091000", 101000], ["091200", 100500], ["091500", 100200], ["091700", 99800], ["092000", 99500], ["092200", 99100]]
+
+
+def test_intraday_vwap_and_falling_knife() -> None:
+    price = {"stock_code": "000270", "price": 99100, "as_of": "2026-10-14T09:23:00+09:00",
+             "intraday": {"change_pct": -2.0, "vwap": 100000, "bars": FALLING_BARS}}
+    content = analysis.load_source(None, "intraday:000270", {"prices": [price]})["content"]
+    assert "VWAP) 100,000원, 현재가는 그보다 -0.90% (아래)" in content and "5분 저가가 3번 연속 낮아짐" in content
+    assert analysis.falling_now(price)
+    assert not analysis.falling_now({**price, "price": 100500})  # VWAP 위면 하락 중으로 막지 않는다
+    rebound = {**price, "intraday": {**price["intraday"], "bars": FALLING_BARS[:4] + [["092000", 99900], ["092200", 100100]]}}
+    assert not analysis.falling_now(rebound)  # 마지막 5분 저가가 더 낮지 않으면 반등
+    assert not analysis.lows_falling([("091000", 100), ("091500", 99)])  # 5분 묶음이 3개 안 되면 판단 안 함
+
+
+def test_trend_text_moving_averages_and_relative_strength() -> None:
+    closes = [100] * 40 + list(range(101, 122))  # 61일: 마지막 21일 동안 오름
+    text = analysis.trend_text(closes, 120, index_return=5.0)
+    assert "20일 평균 112원보다 +7.62% (위)" in text and "60일 평균 104원보다 +15.55% (위)" in text
+    assert "20일 평균은 5거래일 전보다 오르는 중" in text
+    assert "약 20거래일 등락률 +18.81% (같은 기간 시장 +5.00%, 시장보다 +13.81%p)" in text
+    assert "20일 최고가 121원보다 -0.83%" in text
+    short = analysis.trend_text([100] * 20, 90, None)
+    assert "20일 평균 100원보다 -10.00% (아래)" in short and "60일 평균 미확인" in short and "등락률" not in short
+
+
+def test_market_source_twenty_day_average() -> None:
+    daily = [["20261014", 6000.0]] + [[f"2026090{i % 10}", 6500.0] for i in range(24)]
+    content = analysis.market_source({**KOSPI_1012, "value": 6000.0, "daily": daily})["content"]
+    assert content.endswith("20거래일 평균 6,500.00보다 -7.69% (아래)")
+
+
+def test_net_sell_text_subtracts_tax_and_fees() -> None:
+    # 100주, 매입 10,000 → 10,300: 차익 30,000 - 세금 2,060 - 수수료 150·154
+    assert analysis.net_sell_text(100, 10_000, 10_300, "KOSPI", Decimal("0.015")) == "지금 다 팔면 손익 27,636원 (+2.76%, 매도 세금·수수료 뺀 추정)"
+    assert analysis.net_sell_text(100, 10_000, 10_000, "KOSDAQ", None) == "지금 다 팔면 손익 -2,000원 (-0.20%, 매도 세금만 뺀 추정, 수수료 미확인)"
