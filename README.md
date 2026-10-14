@@ -20,7 +20,7 @@ LLM이 돈을 다룰 때 생기는 문제(지어낸 숫자, 근거 없는 확신
 
 **날짜별 성과 모음 (1~4일차 요약·리포트·원자료)**: [docs/reports/README.md](docs/reports/README.md) · AI 수정 기록: [docs/AI_CHANGELOG.md](docs/AI_CHANGELOG.md) · 매매 기준 점검: [docs/reports/ai-audit-20261014.md](docs/reports/ai-audit-20261014.md)
 
-`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API` · 테스트 서버 304 / 앱 39
+`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API` · 테스트 서버 306 / 앱 39
 
 ---
 
@@ -182,7 +182,8 @@ KIS 모의계좌(1,000만 원)로 장 시작부터 마감까지 앱이 **사람 
 
 웹에서 찾은 매매 기준(이동평균 추세, 시장 국면, VWAP, 떨어지는 칼날, 급등 뒤 되돌림, 세후 손익)과 비교해 AI 입력을 보완했다 ([점검 보고서](docs/reports/ai-audit-20261014.md)).
 체결 0건, 하루 −0.03% (코스피 −0.44%). 시초가 매도는 없어졌지만 상승 추세 후보(삼성SDI +5.00%)를 위험을 이유로 사지 않았다.
-검사 코드 버그 2개(추세 자료 근거 반려는 장중에 고침, 공시 표 금액 오판독)와 후보 다시 찾기 거절이 드러났다. 4일차 리포트: [docs/reports/live-20261014.md](docs/reports/live-20261014.md)
+검사 코드 버그 2개(추세 자료 근거 반려는 장중에 고침, 공시 표 금액 오판독)와 후보 다시 찾기 거절이 드러났다.
+마감 뒤 고친 것: 버그 수정, **절반 매수**(추세는 좋은데 위험도 크면 관찰 대신 절반만 먼저 사기), 위험 쪽으로 치우친 AI 지시 균형, **관찰 판단 점수**(관찰한 종목이 그날 얼마나 움직였나: 10/13 평균 −2.91%로 손실 회피, 10/14 +1.83%로 기회 놓침). 4일차 리포트: [docs/reports/live-20261014.md](docs/reports/live-20261014.md)
 
 AI 판단·검증을 고친 내역 전체 (문제 → 고친 것 → 파일·함수 → 조절 값 → 테스트): [docs/AI_CHANGELOG.md](docs/AI_CHANGELOG.md)
 

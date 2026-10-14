@@ -556,6 +556,8 @@ void main() {
     expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0), 1750000);
     expect(buyRoom(budget: 5000000, spentToday: 1840000, spentOnStock: 1840000), 0); // 이 종목 몫(175만)을 다 씀
     expect(buyRoom(budget: 5000000, spentToday: 4000000, spentOnStock: 0), 1000000); // 하루 남은 총액이 더 작다
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, half: true), 875000); // 절반 매수: 종목 몫의 절반만 먼저
+    expect(buyRoom(budget: 5000000, spentToday: 875000, spentOnStock: 875000), 875000); // 다음에 '전부'가 나오면 나머지
     expect(buyRoom(budget: 5000000, spentToday: 5200000, spentOnStock: 0), 0);
     expect(buyRoom(budget: 0, spentToday: 0, spentOnStock: 0), 0);
   });

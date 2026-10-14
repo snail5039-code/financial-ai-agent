@@ -16,6 +16,8 @@
 | `autoStopLossPct` | −7% | 같은 파일 | 손절선. 바로 AI에게 묻는다 (AI 없이 팔지 않음) |
 | `autoMaxStockPct` | 35% | 같은 파일 | 한 종목에 쓰는 살 총액 최대 몫 (서버 비중 40% 아래) |
 | `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 손절선만 묻는다 |
+| `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
+| `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
@@ -34,6 +36,9 @@
 | 후보 다시 찾기 11·13·14:35시 거절 (429). 서버 60분 간격 vs 앱 매시 → 59분 차이 | 서버 간격 30분 | `routers/briefings.py` `REFRESH_GAP_MINUTES` | `test_refresh_rebuilds_today_briefing_once_per_gap` |
 | KIS 모의 일별 지수가 며칠 늦게 와서(10/14에 10/12까지) "1거래일 등락"이 틀림 | 날짜로 오늘 것을 빼고 지난 종가로 계산, 기준일 표시 | `past_closes`, `market_source`, `trend_source` | `test_market_source_uses_dates_when_daily_index_lags` |
 | "보도에 따르면 보도에 따르면" 중복 | 문장에 "보도"가 있으면 붙이지 않음 | `news_as_inference` | `test_news_inference_prefix_not_doubled` |
+| 상승 추세 삼성SDI(+5.00%)를 변동성·PER·미확인 보도로 통째로 관찰. 선택지가 전부 사기/안 사기뿐 | 절반 매수 `buy_portion`: 앱은 종목 몫의 절반만 먼저, 다음 판단이 '전부'면 나머지 | `schemas.py`, `briefing.py` `pick_entry`, `auto_trader.dart` `buyRoom(half:)` | `test_half_buy_pick_tells_app_to_buy_half`, `client_test` 매수 금액 |
+| 투자 AI 지시가 위험 쪽으로만 치우침 (LG에너지솔루션은 미확인 배임 보도가 크게 작용) | 관찰도 비용이 있다, 추세·실적이 좋으면 위험은 수량으로. 미확인 보도는 호재·악재 모두 가볍게, 공식 확인된 악재는 무겁게 | `llm.py` `INVEST_PROMPT` | (프롬프트, 10/15 장에서 확인) |
+| AI가 너무 조심스러운지 볼 숫자가 없음 | 관찰 판단 점수: 관찰한 후보의 그날 등락, 놓친 기회·피한 손실 | `app/scorecard.py` | `test_score_counts_missed_and_avoided` |
 
 ## 10/14 장중 점검 (웹 조사 기준과 비교, [점검 보고서](reports/ai-audit-20261014.md))
 

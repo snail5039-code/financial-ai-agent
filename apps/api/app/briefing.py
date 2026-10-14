@@ -91,6 +91,8 @@ def pick_entry(conn, state: dict, proposal_id: str) -> dict:
                     "sources": list(dict.fromkeys(sources[s]["title"] for s in c["source_ids"] if s in sources))} for c in proposal["claims"][:3]],
         "risks": [with_titles(r, sources) for r in proposal["risks"][:3]],
         "last_close": close and close["close"], "close_date": close and str(close["trade_date"]),
+        # 절반 매수: 앱이 종목당 몫의 절반만 먼저 산다. 다음 판단에서 '전부'가 나오면 나머지를 산다 (2026-10-14)
+        "portion": proposal.get("buy_portion") or "all",
         # 1주 기준 최악의 경우 (처리안과 같은 기준)
         "worst_case_loss": close and close["close"] * WORST_CASE_DROP_PCT // 100,
     }

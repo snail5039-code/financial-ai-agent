@@ -30,6 +30,8 @@ class ProposalDraft(BaseModel):
     invalid_if: list[str] = Field(description="이 판단이 틀린 것이 되는 조건")
     sell_portion: Literal["all", "half"] | None = Field(
         default=None, description="매도 검토일 때만: all 전부 / half 절반 (일부만 덜어 위험을 줄일 때). 다른 행동이면 null")
+    buy_portion: Literal["all", "half"] | None = Field(
+        default=None, description="매수 검토일 때만: all 정한 몫 전부 / half 절반만 먼저 (추세는 좋지만 변동성·실적 위험도 클 때 나눠 사기). 다른 행동이면 null")
 
 
 class Check(BaseModel):

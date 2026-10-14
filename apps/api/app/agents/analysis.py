@@ -52,7 +52,7 @@ NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에�
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
 FALLING_REASON = "장중 하락 중 (최근 5분 저가가 3번 연속 낮아지고 현재가가 VWAP 아래). 반등을 확인한 뒤 다시 판단"
-SELL_PORTIONS = {"all": "전부", "half": "절반"}  # 앱 자동매매가 이 말을 보고 판다 (auto_trader.dart sellPortion)
+SELL_PORTIONS = {"all": "전부", "half": "절반"}  # 매도·매수 몫. 앱 자동매매가 이 말을 보고 판다 (auto_trader.dart sellPortion)
 VERDICT_LABELS = {"approve": "승인", "conditional": "조건부 승인", "reject": "반려", "user_judgement": "사용자 판단 필요"}
 CLAIM_LABELS = {"fact": "사실", "calc": "계산", "inference": "추론", "opinion": "의견"}
 FLAG_GUIDES = {
@@ -909,7 +909,7 @@ def format_analysis(state: InvestState) -> str:
     if state["mode"] != "custom":
         lines.append("일반 모드라 사라·말라 판단은 하지 않고 정보만 정리했어요. 성향 퀴즈를 하면 맞춤 제안을 받을 수 있어요.")
     else:
-        portion = SELL_PORTIONS.get(proposal.get("sell_portion")) if proposal["action"] == "sell" else None
+        portion = SELL_PORTIONS.get(proposal.get({"sell": "sell_portion", "buy": "buy_portion"}.get(proposal["action"], "")))
         lines.append(f"제안: {ACTION_LABELS[proposal['action']]}" + (f" ({portion})" if portion else ""))
     if state.get("risk_reason"):
         lines.append(f"위험등급 1등급(매우 높음): {state['risk_reason'].split(', 출처')[0]})")

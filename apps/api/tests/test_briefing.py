@@ -33,13 +33,14 @@ def market_data(migrated):
 
 @pytest.fixture
 def ai(monkeypatch):
-    record = {"action": "buy", "verdicts": ["approve"], "invest": 0}
+    record = {"action": "buy", "verdicts": ["approve"], "invest": 0, "portion": None}
 
     def write(context):
         record["invest"] += 1
         return ProposalDraft(action=record["action"],
                              claims=[{"text": "공급계약을 맺었다", "type": "fact", "source_ids": ["dart:B1"]}],
-                             counter_arguments=["계약 규모가 작다"], risks=["손실 가능"], invalid_if=["계약 해지"])
+                             counter_arguments=["계약 규모가 작다"], risks=["손실 가능"], invalid_if=["계약 해지"],
+                             buy_portion=record["portion"])
 
     def verify(context):
         verdicts = record["verdicts"]
@@ -70,6 +71,7 @@ def test_briefing_with_pick(client, user, ai, migrated) -> None:
     assert content["limits"]["clean_days"] == 0
     [pick] = content["picks"]  # 보유 종목은 후보에서 빠진다
     assert (pick["stock_name"], pick["verdict"], pick["last_close"], pick["worst_case_loss"]) == (NAME, "approve", 50000, 5000)
+    assert pick["portion"] == "all"
     assert pick["claims"][0] == {"type": "사실", "text": "공급계약을 맺었다", "sources": ["단일판매·공급계약체결"]}
     saved = client.get("/api/briefings/latest", headers=user["headers"]).json()
     assert saved["content"]["picks"][0]["proposal_id"] == pick["proposal_id"]
@@ -153,3 +155,11 @@ def test_refresh_rebuilds_today_briefing_once_per_gap(client, user, monkeypatch,
     assert first.status_code == 200 and made == [(user["id"], ["000660", "005930"])] and first.json()["kind"] == "morning"
     again = client.post("/api/briefings/refresh", headers=user["headers"])
     assert again.status_code == 429 and len(made) == 1
+
+
+def test_half_buy_pick_tells_app_to_buy_half(client, user, ai, migrated) -> None:
+    # 2026-10-14: 추세는 좋지만 위험도 큰 종목은 관찰 대신 절반 매수를 고를 수 있다 (앱은 종목 몫의 절반만 먼저 산다)
+    setup_user(client, user)
+    ai["portion"] = "half"
+    [pick] = briefing.build_briefing(migrated, user["id"])["picks"]
+    assert pick["portion"] == "half"

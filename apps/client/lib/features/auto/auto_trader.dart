@@ -110,9 +110,10 @@ const _why = {
   'market': '시장 전체가 급하게 빠지고 있어. ',
 };
 
-/// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액의 autoMaxStockPct%)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게
-int buyRoom({required int budget, required int spentToday, required int spentOnStock}) {
-  final perStock = budget * autoMaxStockPct ~/ 100 - spentOnStock;
+/// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫(총액의 autoMaxStockPct%)에서 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게.
+/// half: 투자 AI가 절반 매수를 골랐다 (추세는 좋지만 위험도 클 때 나눠 사기, 2026-10-14). 다음 판단이 '전부'면 나머지를 산다
+int buyRoom({required int budget, required int spentToday, required int spentOnStock, bool half = false}) {
+  final perStock = budget * autoMaxStockPct ~/ (half ? 200 : 100) - spentOnStock;
   final left = budget - spentToday;
   final room = perStock < left ? perStock : left;
   return room > 0 ? room : 0;
@@ -299,7 +300,8 @@ class AutoTrader extends ChangeNotifier {
       final code = pick['stock_code'] as String, name = pick['stock_name'] as String;
       final close = pick['last_close'] as int? ?? 0;
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
-      var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close);
+      var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close,
+          half: pick['portion'] == 'half');
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
