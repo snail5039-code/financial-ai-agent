@@ -539,7 +539,8 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
         checks.append({"target": "denies_risk", "result": "fail",
                        "detail": f"위험·반대 근거·비용이 없다고 씀: {denied[0]}", "source_ids": []})
     tags = tagged_ids(proposal["counter_arguments"] + proposal["risks"])
-    if missing := [sid for sid in tags if sid not in known_sources]:
+    # 반대 근거·위험에 지표 ID(per, volatility_60d 등)를 출처처럼 단 것은 있는 값이라 통과 (2026-10-14 반려 4건)
+    if missing := [sid for sid in tags if sid not in known_sources and sid not in metric_ids]:
         checks.append({"target": "risk_sources", "result": "fail",
                        "detail": f"반대 근거·위험의 없는 출처 ID: {', '.join(missing)}", "source_ids": missing})
     if offered_chunks and not any("#" in sid for sid in cited_ids(proposal)):
@@ -561,6 +562,7 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
 
 
 TODAY_SOURCES = ("quote:", "intraday:", "market:")
+CODE_COMPUTED = ("trend:", "intraday:", "market:", "snapshot")  # 코드가 계산한 값이 담긴 출처
 
 
 def weekdays_between(start, end) -> int:
@@ -598,7 +600,9 @@ def claim_check(target: str, claim: dict, known_sources: dict, metric_ids: set[s
         # 2026-10-12 제안 36건 중 21건이 제목뿐인 보도를 사실로 써서 조건부 승인이 반복됐다. 보도는 추론·위험으로 쓴다
         problems.append("뉴스(제목뿐인 미확인 보도)만 출처인 사실 근거")
     if metric_ids is not None:
-        if claim["type"] == "calc" and not claim["metric_ids"]:
+        # 코드가 이미 계산해 준 자료(추세·장중 흐름·지수·내 계좌)를 출처로 단 계산 근거는 지표 ID가 없어도 된다
+        # (2026-10-14: 추세 자료를 넣자 '지표 ID 없음' 반려가 나와 보유 판단이 결론 없이 끝났다)
+        if claim["type"] == "calc" and not claim["metric_ids"] and not any(s.startswith(CODE_COMPUTED) for s in claim["source_ids"]):
             problems.append("계산 근거인데 지표 ID가 없음")
         if unknown := [m for m in claim["metric_ids"] if m not in metric_ids]:
             problems.append(f"없거나 계산할 수 없는 지표 ID: {', '.join(unknown)}")

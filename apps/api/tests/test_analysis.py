@@ -500,3 +500,17 @@ def test_net_sell_text_subtracts_tax_and_fees() -> None:
     # 100주, 매입 10,000 → 10,300: 차익 30,000 - 세금 2,060 - 수수료 150·154
     assert analysis.net_sell_text(100, 10_000, 10_300, "KOSPI", Decimal("0.015")) == "지금 다 팔면 손익 27,636원 (+2.76%, 매도 세금·수수료 뺀 추정)"
     assert analysis.net_sell_text(100, 10_000, 10_000, "KOSDAQ", None) == "지금 다 팔면 손익 -2,000원 (-0.20%, 매도 세금만 뺀 추정, 수수료 미확인)"
+
+
+def test_calc_from_code_computed_sources_needs_no_metric_id() -> None:
+    # 2026-10-14: 추세 자료로 쓴 계산 근거, 반대 근거에 단 지표 ID가 반려되어 판단이 결론 없이 끝났다
+    sources = {"trend:000270": {"stock_code": "000270"}, "news:1": {"stock_code": "000270"}}
+    trend = {"text": "20일 평균보다 3% 위", "type": "calc", "source_ids": ["trend:000270"], "metric_ids": []}
+    assert analysis.claim_check("claim:0", trend, sources, set())["result"] == "pass"
+    news = {**trend, "source_ids": ["news:1"]}
+    assert analysis.claim_check("claim:0", news, sources, set())["result"] == "fail"
+    proposal = {"action": "watch", "claims": [trend], "counter_arguments": ["변동성이 크다 (출처: volatility_60d)"],
+                "risks": ["모르는 값 (출처: nope)"]}
+    metric = [{"metric_id": "volatility_60d", "value": 30}]
+    checks = analysis.code_checks(proposal, sources, metric, metric)
+    assert [c["detail"] for c in checks if c["target"] == "risk_sources"] == ["반대 근거·위험의 없는 출처 ID: nope"]
