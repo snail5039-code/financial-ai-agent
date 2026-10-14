@@ -25,6 +25,16 @@
 | `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
 | 하락 중 매수 차단 | 5분 저가 3번 연속 하락 + VWAP 아래 | `apps/api/app/agents/analysis.py` `falling_now` | 자동매매 매수를 '관찰'만 허용 |
 
+## 10/14 장 마감 뒤 (4일차 기록으로, [리포트](reports/live-20261014.md))
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 장중: 추세 자료로 쓴 계산 근거가 "지표 ID 없음", 반대 근거의 지표 ID가 "없는 출처"로 반려 (9건) | 코드가 계산한 자료(추세·장중·지수·계좌)를 출처로 단 계산 근거는 지표 ID 없이 통과, 지표 ID 출처 표시도 인정 (10:08 반영) | `claim_check`, `code_checks`, `CODE_COMPUTED` | `test_calc_from_code_computed_sources_needs_no_metric_id` |
+| 셀트리온 보유 판단 9번 반려 "금액 560,853배 다름". AI는 맞게 썼고 공시 표 숫자에 "원"이 없어 검사가 못 읽음 | 원문의 쉼표 숫자도 원문 값으로 본다 (단위 오류는 계속 잡음) | `amount_check`, `COMMA_NUMBER` | `test_amount_check_reads_table_numbers_without_won` |
+| 후보 다시 찾기 11·13·14:35시 거절 (429). 서버 60분 간격 vs 앱 매시 → 59분 차이 | 서버 간격 30분 | `routers/briefings.py` `REFRESH_GAP_MINUTES` | `test_refresh_rebuilds_today_briefing_once_per_gap` |
+| KIS 모의 일별 지수가 며칠 늦게 와서(10/14에 10/12까지) "1거래일 등락"이 틀림 | 날짜로 오늘 것을 빼고 지난 종가로 계산, 기준일 표시 | `past_closes`, `market_source`, `trend_source` | `test_market_source_uses_dates_when_daily_index_lags` |
+| "보도에 따르면 보도에 따르면" 중복 | 문장에 "보도"가 있으면 붙이지 않음 | `news_as_inference` | `test_news_inference_prefix_not_doubled` |
+
 ## 10/14 장중 점검 (웹 조사 기준과 비교, [점검 보고서](reports/ai-audit-20261014.md))
 
 장 마감 뒤 서버·앱을 다시 켜서 10/15부터 적용.

@@ -137,8 +137,8 @@ def test_watchlist_api_and_briefing(client, user, ai, migrated) -> None:
     assert client.get("/api/watchlist", headers=headers).json() == []
 
 
-def test_refresh_rebuilds_today_briefing_once_an_hour(client, user, monkeypatch, migrated) -> None:
-    """장중 매수 후보 다시 찾기: 이 사용자 것만 다시 만들고, 한 시간 안에 또 부르면 막는다 (Gemini 비용)"""
+def test_refresh_rebuilds_today_briefing_once_per_gap(client, user, monkeypatch, migrated) -> None:
+    """장중 매수 후보 다시 찾기: 이 사용자 것만 다시 만들고, REFRESH_GAP_MINUTES(30분) 안에 또 부르면 막는다 (Gemini 비용)"""
     from app.routers import briefings as router
     made = []
 

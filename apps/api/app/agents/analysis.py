@@ -202,28 +202,39 @@ def falling_now(price: dict) -> bool:
 MARKET_NAMES = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
 
 
+def past_closes(m: dict) -> list[tuple[str, float]]:
+    """지수의 지난 거래일 종가 [(YYYYMMDD, 종가)] (최신부터, 오늘 것은 뺀다). 날짜로 거른다:
+    KIS 모의는 일별 지수가 며칠 늦게 와서(10/14에 10/12까지) 첫 값을 어제 종가로 보면 틀린다 (2026-10-14)"""
+    today = (datetime.fromisoformat(m["as_of"]).astimezone(KST) if m.get("as_of") else datetime.now(KST)).strftime("%Y%m%d")
+    return [(d, float(c)) for d, c in m.get("daily") or [] if float(c) > 0 and d < today]
+
+
 def market_source(m: dict) -> dict | None:
     """폰이 보낸 지수 → 시장 전체 흐름 요약. 며칠 흐름(최근 종가 대비 등락률)은 코드가 계산한다 (2026-10-12: 10/8·10/12 손실 원인이 시장 급락)."""
     value = float(m.get("value") or 0)
     if value <= 0 or m.get("index") not in MARKET_NAMES:
         return None
-    daily = [float(c) for _, c in (m.get("daily") or []) if float(c) > 0]  # 최신부터. 오늘 장중이면 첫 값이 지금 값과 같다
+    closes = past_closes(m)
 
     def since(days: int) -> str:
-        return f"{days}거래일 {(value - daily[days]) * 100 / daily[days]:+.2f}%" if len(daily) > days else f"{days}거래일 미확인"
+        return (f"{days}거래일 {(value - closes[days - 1][1]) * 100 / closes[days - 1][1]:+.2f}%"
+                if len(closes) >= days else f"{days}거래일 미확인")
+    series = [value] + [c for _, c in closes]
     streak = 0
-    while streak + 1 < len(daily) and daily[streak] < daily[streak + 1]:
+    while streak + 1 < len(series) and series[streak] < series[streak + 1]:
         streak += 1
     breadth = (f", 오른 종목 {int(m['up']):,} · 내린 종목 {int(m['down']):,} · 보합 {int(m.get('flat') or 0):,}"
                if m.get("up") is not None and m.get("down") is not None else "")
     day_range = (f", 오늘 시가 {float(m['open']):,.2f} 고가 {float(m['high']):,.2f} 저가 {float(m['low']):,.2f}"
                  if m.get("open") and m.get("high") and m.get("low") else "")
-    average = (f", 20거래일 평균 {sum(daily[1:21]) / 20:,.2f}보다 {(value * 20 / sum(daily[1:21]) - 1) * 100:+.2f}% "
-               f"({'위' if value * 20 >= sum(daily[1:21]) else '아래'})" if len(daily) > 20 else "")
+    total = sum(c for _, c in closes[:20])
+    average = (f", 20거래일 평균 {total / 20:,.2f}보다 {(value * 20 / total - 1) * 100:+.2f}% "
+               f"({'위' if value * 20 >= total else '아래'})" if len(closes) >= 20 else "")
+    last = f"(지난 종가 {closes[0][0][4:6]}/{closes[0][0][6:]}까지)" if closes else ""
     name = MARKET_NAMES[m["index"]]
     return {"kind": "price", "title": f"{name} 지수 (앱 실시간 조회)", "url": None, "stock_code": None, "as_of": m.get("as_of"),
             "content": f"{name} {value:,.2f} (전일 대비 {float(m.get('change_pct') or 0):+.2f}%){day_range}{breadth}. "
-                       f"최근 흐름: {since(1)}, {since(5)}, {since(20)}"
+                       f"최근 흐름{last}: {since(1)}, {since(5)}, {since(20)}"
                        + (f", {streak}거래일 연속 하락" if streak >= 2 else "") + average}
 
 
@@ -261,8 +272,8 @@ def trend_source(conn, code: str, state: InvestState) -> dict | None:
     basis = "현재가" if price else f"{rows[-1]['trade_date']} 종가"
     market = conn.execute("SELECT market FROM stocks WHERE code = %s", (code,)).fetchone()
     index = next((m for m in state.get("market") or [] if market and m.get("index") == market["market"]), None)
-    daily = [float(c) for _, c in (index or {}).get("daily") or []]
-    index_return = (float(index["value"]) - daily[20]) * 100 / daily[20] if index and len(daily) > 20 else None
+    closes = past_closes(index) if index else []
+    index_return = (float(index["value"]) - closes[19][1]) * 100 / closes[19][1] if len(closes) >= 20 else None
     return {"kind": "price", "title": "추세 (코드 계산: 최근 종가·지금 가격·시장 지수)", "url": None, "stock_code": code,
             "as_of": str(rows[-1]["trade_date"]),
             "content": f"{basis} 기준 (평균은 {rows[-1]['trade_date']}까지 종가로 계산): "
@@ -482,6 +493,7 @@ def with_titles(text: str, sources: dict) -> str:
 # 금액 표기: "305조 3,729억원", "10조 2,092억 1,490만 500원", "1,500억 원", "48,494,209,688,700원"
 AMOUNT = re.compile(r"(?:(\d[\d,]*(?:\.\d+)?)\s*조\s*)?(?:(\d[\d,]*(?:\.\d+)?)\s*억\s*)?(?:(\d[\d,]*)\s*만\s*)?(?:(\d[\d,]*)\s*)?(원)?")
 AMOUNT_UNITS = (1e12, 1e8, 1e4, 1)
+COMMA_NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+")
 # "78조 9,548조"처럼 같은 단위가 두 번 나오면 표기 오류다 (평가 때 투자 AI가 실제로 쓴 실수)
 REPEATED_UNIT = re.compile(r"(조|억)\s*\d[\d,]*\s*\1")
 AMOUNT_WARN_RATIO = 2      # 원문 금액과 2배 넘게 다르면 주의 (반올림·"약"은 통과)
@@ -507,8 +519,11 @@ def amount_check(target: str, claim: dict, known_sources: dict) -> dict | None:
     if repeated := REPEATED_UNIT.search(claim["text"]):
         return {"target": f"{target}:amount", "result": "fail", "source_ids": claim["source_ids"],
                 "detail": f"금액 단위 표기 오류: '{repeated.group()}'"}
+    # 원문 표의 금액은 "원"이 칸 제목에만 있어 숫자만 쓰여 있다. 쉼표 숫자도 원문 값으로 본다
+    # (2026-10-14: AI가 공시대로 쓴 "100,000,089,900원"을 560,853배 다르다고 반려, 셀트리온 판단 9번이 결론 없이 끝남)
     source_values = [v for sid in claim["source_ids"] if sid in known_sources
-                     for v in amounts(known_sources[sid].get("content") or "")]
+                     for content in [known_sources[sid].get("content") or ""]
+                     for v in amounts(content) + [float(n.replace(",", "")) for n in COMMA_NUMBER.findall(content)]]
     if not source_values:
         return None
     worst = max((min(max(v / s, s / v) for s in source_values) for v in amounts(claim["text"])), default=1)
@@ -809,7 +824,7 @@ def news_as_inference(claims: list[dict]) -> list[dict]:
     out = []
     for c in claims:
         if c["type"] == "fact" and c["source_ids"] and all(s.startswith("news:") for s in c["source_ids"]):
-            c = {**c, "type": "inference", "text": c["text"] if c["text"].startswith("보도에 따르면") else f"보도에 따르면 {c['text']}"}
+            c = {**c, "type": "inference", "text": c["text"] if "보도" in c["text"] else f"보도에 따르면 {c['text']}"}
         out.append(c)
     return out
 

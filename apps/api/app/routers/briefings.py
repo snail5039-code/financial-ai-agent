@@ -27,7 +27,8 @@ def latest(conn: Conn, user_id: UserId, kind: Literal["morning", "close"] = "mor
     return row
 
 
-REFRESH_GAP_MINUTES = 60  # 장중 브리핑 다시 만들기 간격 (Gemini 비용)
+# 장중 브리핑 다시 만들기 간격 (Gemini 비용). 앱이 매시·14:35에 다시 찾는데 60분이면 59분 차이로 거절됐다 (2026-10-14)
+REFRESH_GAP_MINUTES = 30
 
 
 class RefreshBody(BaseModel):

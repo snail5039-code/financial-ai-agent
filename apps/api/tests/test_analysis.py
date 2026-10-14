@@ -403,7 +403,7 @@ def test_market_source_summarizes_index_and_trend() -> None:
     source = analysis.load_source(None, "market:KOSPI", {"market": [KOSPI_1012]})
     assert source["title"] == "코스피 지수 (앱 실시간 조회)" and source["stock_code"] is None
     assert source["content"] == ("코스피 6,384.24 (전일 대비 -3.65%), 오늘 시가 6,578.17 고가 6,589.69 저가 6,368.49, "
-                                 "오른 종목 166 · 내린 종목 720 · 보합 32. 최근 흐름: 1거래일 -3.65%, 5거래일 -8.42%, "
+                                 "오른 종목 166 · 내린 종목 720 · 보합 32. 최근 흐름(지난 종가 10/08까지): 1거래일 -3.65%, 5거래일 -8.42%, "
                                  "20거래일 미확인, 4거래일 연속 하락")
     assert analysis.load_source(None, "market:KOSDAQ", {"market": [KOSPI_1012]}) is None
     assert analysis.load_source(None, "market:KOSPI", {"market": None}) is None
@@ -514,3 +514,26 @@ def test_calc_from_code_computed_sources_needs_no_metric_id() -> None:
     metric = [{"metric_id": "volatility_60d", "value": 30}]
     checks = analysis.code_checks(proposal, sources, metric, metric)
     assert [c["detail"] for c in checks if c["target"] == "risk_sources"] == ["반대 근거·위험의 없는 출처 ID: nope"]
+
+
+# 2026-10-14 장 마감 뒤: 검사 코드 버그와 모의 지수 날짜
+def test_amount_check_reads_table_numbers_without_won() -> None:
+    known = {"dart:1#1": {"content": "취득예정주식 560,853 | 취득예정금액 100,000,089,900 | 주가 178,300원)"}}
+    claim = {"text": "약 1,000억원(100,000,089,900원) 규모의 자기주식 취득", "type": "fact", "source_ids": ["dart:1#1"]}
+    assert analysis.amount_check("claim:0", claim, known) is None
+    wrong = {**claim, "text": "약 1,000조원 규모의 자기주식 취득"}
+    assert analysis.amount_check("claim:0", wrong, known)["result"] == "fail"  # 단위 오류는 계속 잡는다
+
+
+def test_market_source_uses_dates_when_daily_index_lags() -> None:
+    # KIS 모의는 10/14에 일별 지수를 10/12까지만 준다. 첫 값을 어제 종가로 보면 안 된다
+    lagging = {**KOSPI_1012, "value": 6008.81, "change_pct": -0.44, "as_of": "2026-10-14T15:40:00+09:00"}
+    content = analysis.market_source(lagging)["content"]
+    assert "최근 흐름(지난 종가 10/12까지): 1거래일 -5.88%" in content
+    same_day = analysis.market_source(KOSPI_1012)["content"]  # 오늘 값이 일별 첫 줄에 있으면 뺀다
+    assert "최근 흐름(지난 종가 10/08까지): 1거래일 -3.65%, 5거래일 -8.42%" in same_day
+
+
+def test_news_inference_prefix_not_doubled() -> None:
+    claim = {"type": "fact", "text": "전자신문 보도에 따르면 실적 개선", "source_ids": ["news:1"], "metric_ids": []}
+    assert analysis.news_as_inference([claim])[0]["text"] == "전자신문 보도에 따르면 실적 개선"

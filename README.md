@@ -20,7 +20,7 @@ LLM이 돈을 다룰 때 생기는 문제(지어낸 숫자, 근거 없는 확신
 
 **날짜별 성과 모음 (1~4일차 요약·리포트·원자료)**: [docs/reports/README.md](docs/reports/README.md) · AI 수정 기록: [docs/AI_CHANGELOG.md](docs/AI_CHANGELOG.md) · 매매 기준 점검: [docs/reports/ai-audit-20261014.md](docs/reports/ai-audit-20261014.md)
 
-`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API` · 테스트 서버 300 / 앱 39
+`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API` · 테스트 서버 304 / 앱 39
 
 ---
 
