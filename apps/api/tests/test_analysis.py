@@ -537,3 +537,32 @@ def test_market_source_uses_dates_when_daily_index_lags() -> None:
 def test_news_inference_prefix_not_doubled() -> None:
     claim = {"type": "fact", "text": "전자신문 보도에 따르면 실적 개선", "source_ids": ["news:1"], "metric_ids": []}
     assert analysis.news_as_inference([claim])[0]["text"] == "전자신문 보도에 따르면 실적 개선"
+
+
+def test_rebounding_needs_higher_recent_low_and_vwap() -> None:
+    """2026-10-15: 급락일에 저점을 더 낮추지 않고 VWAP 위로 올라오면 '반등 중'"""
+    bars = [("100000", 100), ("100500", 90), ("101000", 95), ("101500", 97)]
+    assert analysis.rebounding(bars, 97, 95)
+    assert not analysis.rebounding(bars, 97, 99)  # VWAP 아래
+    assert not analysis.rebounding(bars[:3] + [("101500", 89)], 89, 80)  # 저점을 더 낮춤
+
+
+def test_fix_source_ids_corrects_common_typos() -> None:
+    """2026-10-15 반려 3번: snapshot:, market:KDAQ, market:KOSDAQD"""
+    draft = {"claims": [{"text": "a", "type": "fact", "source_ids": ["snapshot:holdings", "market:KDAQ", "dart:1"]}],
+             "counter_arguments": ["지수 급락 (출처: market:KOSDAQD, trend:005930)"], "risks": ["코스피 (출처: market:KOSPI)"]}
+    fixed = analysis.fix_source_ids(draft)
+    assert fixed["claims"][0]["source_ids"] == ["snapshot", "market:KOSDAQ", "dart:1"]
+    assert fixed["counter_arguments"] == ["지수 급락 (출처: market:KOSDAQ, trend:005930)"]
+    assert fixed["risks"] == ["코스피 (출처: market:KOSPI)"]
+
+
+def test_held_stock_watch_becomes_hold(monkeypatch) -> None:
+    """2026-10-15: 보유 종목 판단이 '관찰'로 나오면 "'관찰' 대신 '관찰'로" 문장이 남았다. 보유 종목은 '보유'로"""
+    draft = ProposalDraft(action="watch", claims=[{"text": "a", "type": "opinion", "source_ids": []}],
+                          counter_arguments=["b"], risks=["c"], invalid_if=["d"])
+    monkeypatch.setattr(llm, "write_proposal", lambda context: draft)
+    monkeypatch.setattr(analysis, "invest_context", lambda state: "")
+    result = analysis.invest_agent_node({"allowed_actions": ["hold", "sell"], "stock_code": "005930", "stock_name": "삼성전자"})
+    assert result["proposal"]["action"] == "hold"
+    assert "'관찰' 대신 '보유'로" in result["proposal"]["risks"][-1]

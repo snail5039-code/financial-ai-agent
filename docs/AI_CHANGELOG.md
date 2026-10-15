@@ -10,10 +10,12 @@
 |---|---|---|---|
 | `autoReviewGap` | 30분 | `apps/client/lib/features/auto/auto_trader.dart` | 보유 종목 매도 판단 주기 |
 | `autoBuyRetryGap` | 30분 | 같은 파일 | "관찰"·오류로 안 산 종목을 다시 묻는 주기 |
-| `autoRescanSlots` | 10·11·12·13·14시, 14:35 | 같은 파일 | 매수 후보 다시 찾기 (서버 `REFRESH_GAP_MINUTES` 60분) |
+| `autoRescanSlots` | 10·11·12·13·14시, 14:35 | 같은 파일 | 매수 후보 다시 찾기 (서버 `REFRESH_GAP_MINUTES` 30분) |
 | `autoDropPct` / `autoRisePct` | −3% / +3% | 같은 파일 | 매입가 대비 이만큼 움직이면 30분 안 기다리고 바로 AI에게 |
 | `autoMarketDropPct` | −1.5% | 같은 파일 | 코스피가 이만큼 빠지면 보유 종목 전부 바로 AI에게 |
-| `autoStopLossPct` | −7% | 같은 파일 | 손절선. 바로 AI에게 묻는다 (AI 없이 팔지 않음) |
+| `autoStopLossPct` | −7% | 같은 파일 | 손절선. 바로 AI에게 묻는다 |
+| `autoHardStopPct` / `autoHardStopAllPct` | −10% / −15% | 같은 파일 `hardStop` | 강제 손절: AI에게 묻지 않고 절반 / 남은 것 전부 (주문은 검증 AI를 거침) |
+| 하락장 절반 매수 | 코스피 < 지난 20거래일 평균 | 같은 파일 `bearMarket` | 종목당 몫(35%)의 절반만 |
 | `autoMaxStockPct` | 35% | 같은 파일 | 한 종목에 쓰는 살 총액 최대 몫 (서버 비중 40% 아래) |
 | `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 손절선만 묻는다 |
 | `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
@@ -26,6 +28,30 @@
 | `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7,14 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집(14시는 전 거래일 종가), 아침 브리핑 자동 시각 |
 | `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
 | 하락 중 매수 차단 | 5분 저가 3번 연속 하락 + VWAP 아래 | `apps/api/app/agents/analysis.py` `falling_now` | 자동매매 매수를 '관찰'만 허용 |
+| 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
+| `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
+| `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/15 장중 (5일차, 코스피 −7.57%, [리포트](reports/live-20261015.md))
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 후보를 "최근 3일 공시 종목"으로 골라, 다시 찾을 때마다 하락 추세 종목(현대건설·포스코퓨처엠)을 또 보고 또 관찰 (5번) | 상승 추세 종목을 20거래일 등락률이 강한 순으로, 2시간 안에 관찰한 종목은 빼고 (13:28 반영) | `briefing.py` `trend_ranks`, `pick_candidates` | `test_candidates_prefer_uptrend_and_skip_recent_watch` |
+| 13:01 삼성SDI 매수 검토를 뉴스 인용으로 3번 반려 → 결론 없음 | 검증 AI: "보도에 따르면"으로 밝힌 뉴스, 다른 근거와 함께 쓴 뉴스는 문제 삼지 않음 | `llm.py` `VERIFY_PROMPT` 7번 | (프롬프트, 14:00 이후 뉴스 반려 0) |
+| 11:13 AI가 출처를 `snapshot:`으로 써서 "없는 출처" 반려 | `snapshot…`은 `snapshot`으로 고쳐 받음 | `analysis.py` `news_as_inference` | 기존 테스트 |
+| 급락일에 상승 추세 종목도 "시장 급락"만으로 관찰, 반등해도 살 길이 없음 (사용자 요청) | 반등 확인 절반 매수: 코드가 "반등 중" 표시, 투자 AI 지시 추가, 검증 AI 일관성 규칙 예외, 앱은 −3% 넘게 빠진 종목을 절반만 (14:20 반영) | `analysis.py` `rebounding`, `llm.py`, `auto_trader.dart` `dipBuy` | `test_rebounding_needs_higher_recent_low_and_vwap`, `client_test` 매수 금액 |
+
+### 10/15 장 마감 뒤
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 반등 신호(1분봉·VWAP)는 앱의 실시간 재확인에만 있는데, 14:35 후보 셋을 서버 브리핑(실시간 시세 없음)이 뉴스 제목만 보고 관찰로 끝냄 | 상승 추세인데 관찰한 후보는 `rechecks`로 앱에 넘겨 실시간으로 다시 판단, 사면 절반 | `briefing.py` `build_briefing`, `auto_trader.dart` `_buy` | `test_uptrend_watch_goes_to_rechecks_for_live_check` |
+| 삼성SDI 영업이익 적자 −8,319억 → 흑자 +482억을 `op_income_yoy` +105.79%로 계산 → "왜곡"으로 4번 반려 | 전년이 적자면 증가율 없이 "흑자 전환"·"적자 지속" | `functions/metrics.py` `yoy_growth` | `test_yoy_from_loss_says_turnaround` |
+| 출처 ID 오타로 반려 3번 (`snapshot:`, `market:KDAQ`, `market:KOSDAQD`) | 코드가 바로잡음 (근거·반대 근거·위험) | `analysis.py` `fix_source_ids` | `test_fix_source_ids_corrects_common_typos` |
+| 보유 종목 판단이 '관찰'로 나오면 "'관찰' 대신 '관찰'로" | 보유 종목은 '보유'로 | `analysis.py` `invest_agent_node` | `test_held_stock_watch_becomes_hold` |
+
+| 손절선이 AI 판단에 막힘: NH투자증권 −9.16%에서 AI가 매번 "공포 매도 피하기"로 보유 (사용자 결정) | 강제 손절: −10%면 AI에게 묻지 않고 절반, −15%면 남은 것 전부. 주문은 검증 AI를 거치고 반려면 사람에게 | `auto_trader.dart` `hardStop`, `_review` | `client_test` 매도 판단 |
+| 하락장에서도 상승장과 같은 수량으로 삼 (사용자 결정, Faber 추세 필터) | 코스피가 지난 20거래일 평균 아래면 종목당 몫 절반 | `auto_trader.dart` `bearMarket`, `_buy` | `client_test` 매도 판단 |
 
 ## 10/14 장 마감 뒤 (4일차 기록으로, [리포트](reports/live-20261014.md))
 

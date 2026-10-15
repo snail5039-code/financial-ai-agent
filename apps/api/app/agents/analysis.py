@@ -177,7 +177,9 @@ def intraday_source(price: dict) -> dict | None:
             "content": f"{day}{start_time[:2]}:{start_time[2:4]}~{end_time[:2]}:{end_time[2:4]} 1분봉 {len(bars)}개: "
                        f"{won(start)} → {won(end)} ({(end - start) * 100 / start:+.2f}%), "
                        f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}{vwap_text}"
-                       + (". 최근 5분 저가가 3번 연속 낮아짐 (하락 중)" if lows_falling(bars) else "")}
+                       + (". 최근 5분 저가가 3번 연속 낮아짐 (하락 중)" if lows_falling(bars) else "")
+                       + (f". 오늘 저가 {won(min(values))}에서 반등 중 (최근 5분 저가가 더 낮아지지 않고 현재가가 VWAP 위)"
+                          if rebounding(bars, price["price"], vwap) else "")}
 
 
 def lows_falling(bars: list[tuple[str, int]]) -> bool:
@@ -188,6 +190,17 @@ def lows_falling(bars: list[tuple[str, int]]) -> bool:
         lows[key] = min(lows.get(key, p), p)
     last = [lows[k] for k in sorted(lows)][-3:]
     return len(last) == 3 and last[0] > last[1] > last[2]
+
+
+def rebounding(bars: list[tuple[str, int]], price: int, vwap: int | None) -> bool:
+    """저점에서 반등 중: 최근 5분 저가가 이 사이 저가보다 높고(저점을 더 낮추지 않음), 현재가가 VWAP 이상.
+    급락일에 상승 추세 종목을 반등 확인 뒤 사려고 (2026-10-15 사용자 요청: 많이 빠지면 낮을 때 사야 하지 않나)"""
+    lows: dict[int, int] = {}
+    for t, p in bars:
+        key = (int(t[:2]) * 60 + int(t[2:4])) // 5
+        lows[key] = min(lows.get(key, p), p)
+    ordered = [lows[k] for k in sorted(lows)]
+    return len(ordered) >= 3 and ordered[-1] > min(ordered) and bool(vwap) and price >= vwap
 
 
 def falling_now(price: dict) -> bool:
@@ -818,6 +831,26 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     }
 
 
+MARKET_ID = re.compile(r"market:([A-Za-z]+)")
+
+
+def fix_source_id(sid: str) -> str:
+    """AI가 자주 틀리는 출처 ID를 바로잡는다 (2026-10-15 반려 3번: snapshot:, market:KDAQ, market:KOSDAQD).
+    내 계좌는 "snapshot" 하나, 시장 지수는 market:KOSPI·market:KOSDAQ 두 개뿐이다"""
+    if sid.startswith("snapshot"):
+        return "snapshot"
+    return MARKET_ID.sub(lambda m: "market:KOSDAQ" if "DAQ" in m[1].upper()
+                         else "market:KOSPI" if "SPI" in m[1].upper() else m[0], sid)
+
+
+def fix_source_ids(draft: dict) -> dict:
+    """근거의 출처 ID와 반대 근거·위험의 (출처: …) 표시를 함께 바로잡는다"""
+    def fix_text(text: str) -> str:
+        return SOURCE_TAG.sub(lambda m: f"(출처: {', '.join(fix_source_id(s.strip()) for s in m[1].split(','))})", text)
+    return {**draft, "claims": [{**c, "source_ids": [fix_source_id(s) for s in c["source_ids"]]} for c in draft["claims"]],
+            "counter_arguments": [fix_text(t) for t in draft["counter_arguments"]], "risks": [fix_text(t) for t in draft["risks"]]}
+
+
 def news_as_inference(claims: list[dict]) -> list[dict]:
     """뉴스(제목뿐인 미확인 보도)만 출처인 '사실' 근거를 '추론'으로 낮추고 보도라고 밝힌다. 뉴스는 근거로 계속 쓴다.
     2026-10-13: 이 근거를 반려하자 투자 AI가 같은 실수를 반복해 반려 48건 중 35건, 최종 55건 중 33건이 결론 없이 끝났다"""
@@ -830,13 +863,15 @@ def news_as_inference(claims: list[dict]) -> list[dict]:
 
 
 def invest_agent_node(state: InvestState) -> dict:
-    draft = llm.write_proposal(invest_context(state)).model_dump()
+    draft = fix_source_ids(llm.write_proposal(invest_context(state)).model_dump())
     draft["claims"] = news_as_inference(draft["claims"])
     if draft["action"] not in state["allowed_actions"]:
         # 성향 규칙은 AI가 아니라 코드가 지킨다
         reason = f" ({state['buy_block_reason']})" if draft["action"] == "buy" and state.get("buy_block_reason") else ""
-        draft["risks"].append(f"성향 규칙에 따라 '{ACTION_LABELS[draft['action']]}' 대신 '관찰'로 바꿨어요{reason}.")
-        draft["action"] = "watch"
+        # 보유 종목은 보유·매도만 고를 수 있다. '관찰'을 고르면 '보유'로 (2026-10-15 "'관찰' 대신 '관찰'로" 문장이 남았다)
+        fallback = "hold" if "hold" in state["allowed_actions"] else "watch"
+        draft["risks"].append(f"성향 규칙에 따라 '{ACTION_LABELS[draft['action']]}' 대신 '{ACTION_LABELS[fallback]}'로 바꿨어요{reason}.")
+        draft["action"] = fallback
     return {"proposal": {**draft, "stock_code": state["stock_code"], "stock_name": state["stock_name"],
                          "qty": state.get("qty"), "limit_price": state.get("limit_price"),
                          "user_directed": bool(state.get("user_directed"))}}

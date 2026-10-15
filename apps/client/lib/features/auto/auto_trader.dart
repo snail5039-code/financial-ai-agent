@@ -119,6 +119,29 @@ int buyRoom({required int budget, required int spentToday, required int spentOnS
   return room > 0 ? room : 0;
 }
 
+/// 오늘 이만큼(%) 넘게 빠진 종목을 사면 절반만 (급락일 반등 매수, 2026-10-15 사용자 요청). 다시 빠질 수 있어서 수량을 줄인다
+const autoDipPct = 3;
+bool dipBuy(double? todayPct) => todayPct != null && todayPct <= -autoDipPct;
+
+/// 하락장: 코스피가 지난 20거래일 종가 평균 아래면 종목당 사는 몫을 절반으로 (2026-10-15 사용자 결정, Faber 추세 필터).
+/// daily는 [YYYYMMDD, 종가] 최신부터. 오늘 것은 빼고 본다 (KIS 모의 일별 지수가 늦게 와도 지난 값만 쓴다)
+bool bearMarket(Map<String, dynamic>? kospi, String todayYmd) {
+  final value = (kospi?['value'] as num?)?.toDouble();
+  final past = [for (final d in (kospi?['daily'] as List? ?? [])) if ('${d[0]}'.compareTo(todayYmd) < 0) (d[1] as num).toDouble()];
+  if (value == null || past.length < 20) return false;
+  return value < past.take(20).reduce((a, b) => a + b) / 20;
+}
+
+/// 강제 손절 (2026-10-15 사용자 결정): 매입가 대비 −autoHardStopPct%면 AI에게 팔지 묻지 않고 절반, −autoHardStopAllPct%면 남은 것 전부.
+/// 10/15 NH투자증권 −9.16%에서 AI가 매번 "공포 매도 피하기"로 보유해 −7% 손절선이 걸리지 않았다. 주문은 그래도 검증 AI를 거친다
+const autoHardStopPct = 10;
+const autoHardStopAllPct = 15;
+String? hardStop(double dropPct, Map<String, dynamic> seen) {
+  if (dropPct <= -autoHardStopAllPct && seen['hard_all'] != true) return 'hard_all';
+  if (dropPct <= -autoHardStopPct && seen['hard_half'] != true) return 'hard_half';
+  return null;
+}
+
 /// qty주를 1회 한도(maxOrder원) 안으로 나눈 주문 수량들. 1주 값이 한도보다 비싸면 빈 목록
 List<int> splitQty(int qty, int price, int maxOrder) {
   final chunk = price > 0 ? maxOrder ~/ price : 0;
@@ -262,8 +285,11 @@ class AutoTrader extends ChangeNotifier {
       final briefing = await api.post('/api/briefings/refresh', {'candidates': movers}) as Map<String, dynamic>;
       // 아침에 '관찰'이라 오늘 끝낸 종목도 새 판단으로 다시 시도한다 (2026-10-13: 12:01에 매수 검토가 나왔는데 09:10 기록 때문에 안 샀다)
       await _box.write('auto_settled2:$_today', '{}');
-      final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>();
+      final content = briefing['content'] as Map;
+      final picks = (content['picks'] as List).cast<Map<String, dynamic>>();
+      final rechecks = (content['rechecks'] as List? ?? []).cast<Map<String, dynamic>>();
       await _note(picks.isEmpty ? '새로 검증을 통과한 매수 후보가 없어요' : '새 매수 후보: ${picks.map((p) => p['stock_name']).join(', ')}');
+      if (rechecks.isNotEmpty) await _note('상승 추세라 실시간으로 다시 볼 종목: ${rechecks.map((p) => p['stock_name']).join(', ')}');
     } on ApiError catch (error) {
       await _note('매수 후보 다시 찾기 실패: $error');
     }
@@ -283,7 +309,9 @@ class AutoTrader extends ChangeNotifier {
     bool settled(String code) => (DateTime.tryParse(done[code] as String? ?? '') ?? DateTime(2000))
         .isAfter(_now().subtract(autoBuyRetryGap));
     final bought = (jsonDecode(await _box.read('auto_bought:$_today') ?? '{}') as Map).cast<String, dynamic>();
-    final picks = ((briefing['content'] as Map)['picks'] as List).cast<Map<String, dynamic>>()
+    // rechecks: 서버가 상승 추세인데 관찰로 본 종목. 실시간 시세로 다시 판단하면 반등을 볼 수 있다 (2026-10-15, 사면 절반)
+    final content = briefing['content'] as Map;
+    final picks = [...(content['picks'] as List), ...(content['rechecks'] as List? ?? [])].cast<Map<String, dynamic>>()
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
         .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
     bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String);
@@ -295,13 +323,27 @@ class AutoTrader extends ChangeNotifier {
     // 주문 가능 금액 전부: 오늘 쓴 돈 + 지금 쓸 수 있는 현금 (AI가 판 돈도 들어온다)
     if (budget == autoAllCash) budget = spent + await currentBroker.value!.buyingPower();
     final maxOrder = await _maxOrder();
+    var bear = false;
+    try {
+      bear = bearMarket((await currentBroker.value!.market())?.where((m) => m['index'] == 'KOSPI').firstOrNull, kstYmd(_now()));
+    } catch (_) {
+      bear = false; // 지수를 못 받으면 평소대로
+    }
     for (final pick in picks.where((p) => !skip(p))) {
       if (!on || plan == null) break;
       final code = pick['stock_code'] as String, name = pick['stock_name'] as String;
       final close = pick['last_close'] as int? ?? 0;
+      // 오늘 크게 빠진 종목(반등 매수)은 절반만 산다. 시세를 못 받으면 브리핑 판단대로
+      double? todayPct;
+      try {
+        todayPct = ((await currentBroker.value!.intraday(code))?['change_pct'] as num?)?.toDouble();
+      } catch (_) {
+        todayPct = null;
+      }
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
       var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close,
-          half: pick['portion'] == 'half');
+          half: pick['portion'] == 'half' || dipBuy(todayPct) || bear);
+      if (bear && pick == picks.firstWhere((p) => !skip(p))) await _note('코스피가 20일 평균 아래(하락장)라 종목당 몫의 절반만 사요');
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
@@ -362,6 +404,22 @@ class AutoTrader extends ChangeNotifier {
       if (held == null || avg <= 0 || price <= 0) continue;
       final drop = (price - avg) * 100 / avg;
       final seen = (reviews[code] as Map?)?.cast<String, dynamic>() ?? {};
+      final hard = hardStop(drop, seen);
+      if (hard != null) {
+        final name = (positions[code] as Map)['name'] as String;
+        reviews[code] = {...seen, hard: true, 'at': _now().toIso8601String(), 'pct': drop};
+        await _box.write('auto_reviews:$_today', jsonEncode(reviews));
+        final mine = (positions[code] as Map)['qty'] as int;
+        final owned = (held['qty'] as int) < mine ? held['qty'] as int : mine;
+        final qty = hard == 'hard_all' || owned < 2 ? owned : owned ~/ 2;
+        await _note('$name 매입가 대비 ${drop.toStringAsFixed(1)}%: 강제 손절선(−${hard == 'hard_all' ? autoHardStopAllPct : autoHardStopPct}%)이라 '
+            'AI에게 묻지 않고 ${hard == 'hard_all' ? '전부' : '절반'}($qty주) 팔아요 (주문은 검증 AI를 거쳐요)');
+        for (final part in splitQty(qty, price, await _maxOrder())) {
+          if (!on || plan == null || await _order(name, part, 'sell', why: '강제 손절') != true) break;
+          await _addPosition(code, name, -part);
+        }
+        continue;
+      }
       final reason = sellReason(drop, seen, _now(), marketDrop: marketDrop);
       if (reason == null) continue;
       final name = (positions[code] as Map)['name'] as String;
