@@ -32,6 +32,17 @@
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
 
+## 10/16 장중 (6일차, 코스피 +2.05%, [리포트](reports/live-20261016.md))
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 09:05 피에스케이홀딩스: 실행 직전 가격 1% 넘게 변동 → 서버가 고친 처리안으로 다시 승인 요청 → 앱이 체결로 보고 "7주 매수" 기록 (주문 없음) | 다시 온 처리안도 같은 기준(검증 승인·확인 항목 없음)으로 최대 2번 더 승인, 계속 바뀌면 주문 안 함 | `auto_trader.dart` `_order` | (앱 테스트 추가 예정) |
+| 서버가 08:20에 꺼져 아침 브리핑을 놓침 | 거래일 08:20~15:20에 서버가 켜졌는데 오늘 브리핑이 없으면 바로 만듦. 로그인 시 Docker·DB·서버 자동 시작 | `briefing.py` `missed_morning`, `apps/api/scripts/autostart.ps1` | `test_missed_morning_only_on_trading_day_after_time_without_briefing` |
+| 삼성SDI 보유 판단 6번 반려: 흑자 전환이라 값이 없는 `op_income_yoy`를 AI가 계속 붙임 (어제 고친 지표의 부작용) | 값이 없는 지표 ID는 코드가 떼고, 지표가 안 남은 계산 근거는 출처 원문 사실 근거로 | `analysis.py` `drop_uncomputable_metrics` | `test_uncomputable_metric_ids_dropped_and_prefix_fixed` |
+| "(출처: 지표: volatility_60d)"로 반려 2번 | "지표:" 앞말을 뗌 | `analysis.py` `fix_source_id` | 같은 테스트 |
+
+**정할 것** (리포트 5·6장): 이익 실현 선, 하루 매수 한도(오늘 현금 92%를 하루에 씀), 늦은 시각·이미 많이 오른 종목 매수 제한, 잘못 남은 매수 기록을 실제 잔고에 맞추기
+
 ## 10/15 장중 (5일차, 코스피 −7.57%, [리포트](reports/live-20261015.md))
 
 | 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |

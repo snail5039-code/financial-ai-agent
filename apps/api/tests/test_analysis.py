@@ -566,3 +566,14 @@ def test_held_stock_watch_becomes_hold(monkeypatch) -> None:
     result = analysis.invest_agent_node({"allowed_actions": ["hold", "sell"], "stock_code": "005930", "stock_name": "삼성전자"})
     assert result["proposal"]["action"] == "hold"
     assert "'관찰' 대신 '보유'로" in result["proposal"]["risks"][-1]
+
+
+def test_uncomputable_metric_ids_dropped_and_prefix_fixed() -> None:
+    """2026-10-16: 계산 안 하는 op_income_yoy를 달아 6번 반려, "(출처: 지표: volatility_60d)"로 2번 반려"""
+    claims = [{"text": "흑자 전환", "type": "calc", "source_ids": ["fin:1"], "metric_ids": ["op_income_yoy"]},
+              {"text": "PER", "type": "calc", "source_ids": [], "metric_ids": ["per", "op_income_yoy"]}]
+    metrics = [{"metric_id": "op_income_yoy", "value": None}, {"metric_id": "per", "value": 10}]
+    fixed = analysis.drop_uncomputable_metrics(claims, metrics)
+    assert (fixed[0]["type"], fixed[0]["metric_ids"]) == ("fact", [])
+    assert (fixed[1]["type"], fixed[1]["metric_ids"]) == ("calc", ["per"])
+    assert analysis.fix_source_id("지표: volatility_60d") == "volatility_60d"

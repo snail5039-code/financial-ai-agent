@@ -837,6 +837,7 @@ MARKET_ID = re.compile(r"market:([A-Za-z]+)")
 def fix_source_id(sid: str) -> str:
     """AI가 자주 틀리는 출처 ID를 바로잡는다 (2026-10-15 반려 3번: snapshot:, market:KDAQ, market:KOSDAQD).
     내 계좌는 "snapshot" 하나, 시장 지수는 market:KOSPI·market:KOSDAQ 두 개뿐이다"""
+    sid = sid.removeprefix("지표:").strip()  # 2026-10-16 "(출처: 지표: volatility_60d)" 반려 2번
     if sid.startswith("snapshot"):
         return "snapshot"
     return MARKET_ID.sub(lambda m: "market:KOSDAQ" if "DAQ" in m[1].upper()
@@ -849,6 +850,19 @@ def fix_source_ids(draft: dict) -> dict:
         return SOURCE_TAG.sub(lambda m: f"(출처: {', '.join(fix_source_id(s.strip()) for s in m[1].split(','))})", text)
     return {**draft, "claims": [{**c, "source_ids": [fix_source_id(s) for s in c["source_ids"]]} for c in draft["claims"]],
             "counter_arguments": [fix_text(t) for t in draft["counter_arguments"]], "risks": [fix_text(t) for t in draft["risks"]]}
+
+
+def drop_uncomputable_metrics(claims: list[dict], metrics: list[dict]) -> list[dict]:
+    """계산할 수 없는 지표 ID(값이 없는 것)는 근거에서 뗀다. 지표가 하나도 안 남은 계산 근거는 출처 원문을 쓴 사실 근거로.
+    2026-10-16 삼성SDI: 흑자 전환이라 계산 안 하는 op_income_yoy를 AI가 계속 달아 보유 판단이 6번 반려됐다"""
+    usable = {m["metric_id"] for m in metrics if m.get("value") is not None}
+    out = []
+    for c in claims:
+        ids = [m for m in c["metric_ids"] if m in usable]
+        if ids != c["metric_ids"]:
+            c = {**c, "metric_ids": ids, "type": "fact" if c["type"] == "calc" and not ids and c["source_ids"] else c["type"]}
+        out.append(c)
+    return out
 
 
 def news_as_inference(claims: list[dict]) -> list[dict]:
@@ -864,7 +878,7 @@ def news_as_inference(claims: list[dict]) -> list[dict]:
 
 def invest_agent_node(state: InvestState) -> dict:
     draft = fix_source_ids(llm.write_proposal(invest_context(state)).model_dump())
-    draft["claims"] = news_as_inference(draft["claims"])
+    draft["claims"] = news_as_inference(drop_uncomputable_metrics(draft["claims"], state.get("metrics") or []))
     if draft["action"] not in state["allowed_actions"]:
         # 성향 규칙은 AI가 아니라 코드가 지킨다
         reason = f" ({state['buy_block_reason']})" if draft["action"] == "buy" and state.get("buy_block_reason") else ""
