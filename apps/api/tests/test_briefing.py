@@ -195,3 +195,13 @@ def test_uptrend_watch_goes_to_rechecks_for_live_check(client, user, ai, migrate
     assert content["picks"] == []
     [recheck] = content["rechecks"]
     assert (recheck["stock_code"], recheck["portion"]) == (CODE, "half")
+
+
+def test_missed_morning_only_on_trading_day_after_time_without_briefing(migrated) -> None:
+    """2026-10-16: 서버가 08:20에 꺼져 있어 브리핑을 놓쳤다. 장중에 켜지면 바로 만든다"""
+    at = briefing.time(8, 20)
+    thursday = datetime(2026, 10, 15, 9, 5, tzinfo=KST)  # 거래일, 이 날짜 브리핑은 테스트 DB에 없다
+    assert briefing.missed_morning(migrated, at, thursday)
+    assert not briefing.missed_morning(migrated, at, thursday.replace(hour=8, minute=0))  # 아직 시각 전
+    assert not briefing.missed_morning(migrated, at, thursday.replace(hour=15, minute=30))  # 장 끝
+    assert not briefing.missed_morning(migrated, at, datetime(2026, 10, 17, 9, 5, tzinfo=KST))  # 토요일

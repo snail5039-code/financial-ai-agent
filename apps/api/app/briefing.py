@@ -265,8 +265,22 @@ def seconds_until(at: time, now: datetime) -> float:
     return (target - now).total_seconds()
 
 
+CATCH_UP_UNTIL = time(15, 20)  # 아침 브리핑을 놓쳤을 때 이 시각 전에 서버가 켜지면 바로 만든다 (자동매매가 사는 시간)
+
+
+def missed_morning(database_url: str | None, at: time, now: datetime) -> bool:
+    """오늘 거래일이고 at 시각이 지났는데(장중) 아침 브리핑이 아직 없다.
+    2026-10-16: 서버가 08:20에 꺼져 있어 브리핑을 놓쳤고, 9시 넘어 켜도 만들지 않았다"""
+    if not (is_trading_day(now.date()) and at <= now.time() < CATCH_UP_UNTIL):
+        return False
+    with connect(database_url) as conn:
+        return conn.execute("SELECT 1 FROM briefings WHERE brief_date = %s AND kind = 'morning'", (now.date(),)).fetchone() is None
+
+
 def run_daily(stop: threading.Event, at: time, build=build_briefing) -> None:
-    """서버가 켜져 있는 동안 거래일마다 at 시각에 만든다."""
+    """서버가 켜져 있는 동안 거래일마다 at 시각에 만든다. 아침 브리핑은 놓쳤으면 켜지자마자 만든다."""
+    if build is build_briefing and missed_morning(None, at, datetime.now(KST)):
+        run_all(build=build)
     while not stop.wait(seconds_until(at, datetime.now(KST))):
         run_all(build=build)
 

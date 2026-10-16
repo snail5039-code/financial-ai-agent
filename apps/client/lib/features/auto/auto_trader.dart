@@ -469,15 +469,25 @@ class AutoTrader extends ChangeNotifier {
       await _note('$tag$name $qty주: ${_last(conversation)}');
       return null;
     }
-    final card = waiting!['card'] as Map<String, dynamic>;
-    final confirm = (card['confirm_required'] as List).cast<String>();
-    if (!on || plan == null || confirm.isNotEmpty || !autoApproves(side, card['verdict'])) {
-      final reason = !on || plan == null ? '자동매매가 꺼져 있거나 오늘 계획을 승인하지 않았어요'
-          : confirm.isNotEmpty ? confirm.join(' ') : '검증 ${card['verdict']}';
-      await _note('$tag$name $qty주: 자동으로 승인하지 않았어요 ($reason). 처리안 모아보기에서 직접 판단해 주세요');
+    // 승인 뒤 실행 직전 가격이 1% 넘게 바뀌면 서버가 고친 처리안으로 다시 승인을 묻는다 (최대 2번 더 본다).
+    // 2026-10-16 피에스케이홀딩스: 다시 온 처리안을 체결로 보고 "7주 매수"로 기록했는데 주문은 나가지 않았다
+    for (var round = 0; round < 3; round++) {
+      final card = conversation.waiting!['card'] as Map<String, dynamic>;
+      final confirm = (card['confirm_required'] as List).cast<String>();
+      if (!on || plan == null || confirm.isNotEmpty || !autoApproves(side, card['verdict'])) {
+        final reason = !on || plan == null ? '자동매매가 꺼져 있거나 오늘 계획을 승인하지 않았어요'
+            : confirm.isNotEmpty ? confirm.join(' ') : '검증 ${card['verdict']}';
+        await _note('$tag$name $qty주: 자동으로 승인하지 않았어요 ($reason). 처리안 모아보기에서 직접 판단해 주세요');
+        return false;
+      }
+      await conversation.answer({'decision': 'approve'});
+      if (conversation.waiting?['kind'] != 'approval') break;
+      await _note('$tag$name $qty주: 가격이 바뀌어 처리안을 다시 확인해요');
+    }
+    if (conversation.waiting?['kind'] == 'approval') {
+      await _note('$tag$name $qty주: 가격이 계속 바뀌어 주문하지 않았어요. 다음 판단 때 다시 해요');
       return false;
     }
-    await conversation.answer({'decision': 'approve'});
     final result = _last(conversation);
     await _note('$tag$name $qty주 자동 ${side == 'buy' ? '매수' : '매도'}: $result');
     // 실행 실패는 처리안을 다 쓴 것이라 다시 시도해도 중복 주문이 남지 않는다
