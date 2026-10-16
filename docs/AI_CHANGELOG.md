@@ -23,7 +23,10 @@
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
-| `MAX_ANALYSES_PER_DAY` | 100 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용) |
+| `MAX_ANALYSES_PER_DAY` / `HOLDING_RESERVE` | 150 / 30 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용). 안 가진 종목은 120번까지, 남은 30번은 보유 종목 매도 점검용 |
+| `autoGivebackFromPct` / `autoGivebackPct` | +2% / 1.5%p | `auto_trader.dart` `sellReason` | 오늘 매입가 대비 최고가 +2%를 넘은 뒤 거기서 1.5%p 넘게 내려오면 바로 AI에게 (새 최고 전엔 한 번만) |
+| `autoCloseCheckMin` | 14:30 | 같은 파일 | 보유 종목마다 하루 한 번 마감 전 점검 |
+| `GIVEBACK_PCT` | 1.5%p | `analysis.py` `giveback_text` | 장중 흐름에 오늘 고가·고가 때 수익·지금 수익을 쓰고, 이만큼 넘게 돌려줬으면 "돌려줌"을 붙인다 |
 | `MOCK_ORDER_LIMITS` | 끔 | `apps/api/app/config.py` (.env) | 모의에도 금액 한도 적용할지 |
 | `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7,14 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집(14시는 전 거래일 종가), 아침 브리핑 자동 시각 |
 | `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
@@ -31,6 +34,18 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/16 장 마감 뒤 (6일차 기록으로)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 하루 분석 한도 100을 14:32에 다 써서, 14:32~15:27 분석 26번 거절 (보유 종목 매도 판단 17번, 매수 9번, 서버 기록). 그 사이 계좌 +0.76% → −0.93% | 한도 150 (사용자 결정), 그중 30번은 보유 종목 전용. 보유 여부는 마지막 잔고 기록이나 오늘 체결된 매수로 본다 | `analysis.py` `check_target_node`, `HOLDING_RESERVE` | `test_holding_reserve_keeps_room_for_sell_checks` |
+| +2~3%까지 갔다가 내려온 4종목에 질문이 없었다 (매입가 기준 ±3%만 봄) | 오늘 최고 +2% 넘은 뒤 1.5%p 내려오면 바로 묻기, 14:30 마감 전 점검 | `auto_trader.dart` `sellReason` (`giveback`, `close`) | `client_test` 매도 판단 |
+| 오후 보유 판단 10건을 새 지시로 다시 돌려도 모두 보유 (그때는 VWAP 위·반등 중). 하락은 판단이 막힌 14:32 뒤 | 투자 AI 지시를 "판다·든다를 같은 무게로 비교, 보유는 기본값 아님, 확신 없으면 절반"으로. 작은 이익 매매 회피는 "비용보다 작은 이익"으로 좁힘. 앱 질문에도 같은 말 (사용자: 숫자 규칙보다 AI가 판단) | `llm.py` `INVEST_PROMPT`, `auto_trader.dart` `sellQuestion` | 재현 스크립트 (투자 AI만, 10회) |
+| 1분봉이 최근 30분뿐이라 "오전에 오르고 오후 내내 밀림"이 안 보임 | 폰이 잔고·현재가 조회 때 본 현재가를 하루 동안 쌓고(메모리), 시가와 함께 보냄. 서버가 시간마다 마지막 값·오늘 본 최고 대비를 장중 흐름에 씀 | `kis_mock_broker.dart` `_see`, `interrupts.py` `Intraday`, `analysis.py` `day_flow_text` | `test_day_flow_text_and_phone_fields_accepted`, `client_test` 장중 흐름 |
+| AI 자료에 30분 1분봉만 있어 오늘 고가·돌려준 이익이 안 보임 | 폰이 KIS 현재가 조회의 오늘 고가(`stck_hgpr`)를 장중 흐름에 붙이고, 서버가 고가 때·지금 매입가 대비 수익과 돌려준 폭을 계산. 투자 AI 지시에 "이익을 지킬지" 양쪽 기준 추가 | `kis_mock_broker.dart` `price`·`intraday`, `analysis.py` `giveback_text`, `llm.py` | `test_giveback_text_from_day_high`, `client_test` 장중 흐름 |
+
+`stck_hgpr`·`stck_oprc`가 KIS 모의 응답에 실제로 오는지는 다음 장중에 확인 (문서 기준, 미확인). 이익 쪽 코드 규칙(+5% 절반 등)은 사용자 결정으로 넣지 않았다.
 
 ## 10/16 장중 (6일차, 코스피 +2.05%, [리포트](reports/live-20261016.md))
 

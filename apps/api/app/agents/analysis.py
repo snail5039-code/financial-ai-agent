@@ -23,7 +23,8 @@ from psycopg.types.json import Jsonb
 
 from app.agents import llm
 from app.agents.interrupts import pause
-from app.agents.query import SOURCE_LABELS, as_of, end_if_answered, find_stock_node, fresh_snapshot, latest_close, won
+from app.agents.query import (SOURCE_LABELS, as_of, end_if_answered, find_stock_node, fresh_snapshot, latest_close,
+                              latest_snapshot, won)
 from app.agents.state import Context, InvestState
 from app.clock import KST
 from app.db import connect
@@ -35,7 +36,12 @@ from app.integrations import google_news
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
-MAX_ANALYSES_PER_DAY = 100  # Gemini 비용 관리 (NFR-14). 2026-10-12 사용자 결정: 장중 AI 매도 점검으로 20 → 100
+MAX_ANALYSES_PER_DAY = 150  # Gemini 비용 관리 (NFR-14). 2026-10-12 사용자 결정: 장중 AI 매도 점검으로 20 → 100, 2026-10-16 → 150
+# 보유 종목 매도 점검 몫. 안 가진 종목(매수 후보) 분석은 MAX - 이만큼까지만 한다
+# (2026-10-16: 100번(보유 판단 58, 매수 후보 48)이 14:32에 다 차서 14:32~15:27 분석이 26번 거절됐다 (보유 종목 매도 판단 17번, 매수 9번). 그 사이 장중 이익을 다 돌려줌)
+HOLDING_RESERVE = 30
+# 보유 종목이 오늘 고가에서 이익을 이만큼(%p) 넘게 돌려줬으면 장중 흐름에 따로 적는다 (2026-10-16 오른 만큼 돌려준 날)
+GIVEBACK_PCT = 1.5
 SEARCH_RESULTS = 6
 # 공시 본문 검색 (12-todo-by-stage.md 2-8). 요청 하나에 관점 3개를 더해 검색한다 ("사도 돼?"처럼 막연한 요청도 근거가 고르게)
 SEARCH_ASPECTS = ("실적과 수익성", "위험 요인", "사업 전망과 계획")
@@ -50,6 +56,8 @@ NEWS_DAYS, NEWS_RESULTS, NEWS_REFRESH = 3, 5, timedelta(minutes=30)
 NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 100개, "
                       "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
 LIMIT_MESSAGE = f"오늘 분석은 {MAX_ANALYSES_PER_DAY}번까지 할 수 있어요. 내일 다시 시도해 주세요."
+BUY_LIMIT_MESSAGE = (f"오늘 안 가진 종목 분석은 {MAX_ANALYSES_PER_DAY - HOLDING_RESERVE}번까지 할 수 있어요 "
+                     f"(나머지 {HOLDING_RESERVE}번은 보유 종목 점검용). 내일 다시 시도해 주세요.")
 ACTION_LABELS = {"buy": "매수 검토", "sell": "매도 검토", "hold": "보유", "watch": "관찰"}
 FALLING_REASON = "장중 하락 중 (최근 5분 저가가 3번 연속 낮아지고 현재가가 VWAP 아래). 반등을 확인한 뒤 다시 판단"
 SELL_PORTIONS = {"all": "전부", "half": "절반"}  # 매도·매수 몫. 앱 자동매매가 이 말을 보고 판다 (auto_trader.dart sellPortion)
@@ -140,7 +148,8 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
         return {"kind": "price", "title": "현재가 (앱 실시간 조회)", "url": None, "as_of": price["as_of"],
                 "content": f"현재가 {won(price['price'])}"}
     if kind == "intraday" and state.get("prices") and state["prices"][0].get("intraday"):
-        return intraday_source(state["prices"][0])
+        held = [h for h in (state.get("snapshot") or {}).get("holdings", []) if h["stock_code"] == state["stock_code"]]
+        return intraday_source(state["prices"][0], held[0]["avg_price"] if held else None)
     if kind == "market":
         found = next((m for m in state.get("market") or [] if m.get("index") == rest), None)
         return found and market_source(found)
@@ -161,8 +170,9 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
     return None
 
 
-def intraday_source(price: dict) -> dict | None:
-    """폰이 보낸 1분봉 [[HHmmss, 가격], ...] (오래된 것부터) → 장중 흐름 요약. 계산은 코드가 한다."""
+def intraday_source(price: dict, avg_price: int | None = None) -> dict | None:
+    """폰이 보낸 1분봉 [[HHmmss, 가격], ...] (오래된 것부터) → 장중 흐름 요약. 계산은 코드가 한다.
+    avg_price: 보유 종목의 매입가. 폰이 오늘 고가(high)를 보냈으면 고가 때와 지금의 매입가 대비 수익을 같이 쓴다"""
     flow = price["intraday"]
     bars = [(str(t), int(p)) for t, p in flow.get("bars") or [] if int(p) > 0]
     if not bars:
@@ -179,7 +189,40 @@ def intraday_source(price: dict) -> dict | None:
                        f"이 사이 고가 {won(max(values))}, 저가 {won(min(values))}{vwap_text}"
                        + (". 최근 5분 저가가 3번 연속 낮아짐 (하락 중)" if lows_falling(bars) else "")
                        + (f". 오늘 저가 {won(min(values))}에서 반등 중 (최근 5분 저가가 더 낮아지지 않고 현재가가 VWAP 위)"
-                          if rebounding(bars, price["price"], vwap) else "")}
+                          if rebounding(bars, price["price"], vwap) else "")
+                       + giveback_text(flow.get("high"), price["price"], avg_price)
+                       + day_flow_text(flow.get("day_flow"), flow.get("open"), price["price"])}
+
+
+def day_flow_text(day_flow: list | None, open_price: int | None, price: int) -> str:
+    """오늘 하루 모양: 시가 대비, 시간마다 마지막 값, 오늘 본 최고와 그 뒤 얼마나 내려왔는지.
+    1분봉은 최근 30분뿐이라 "오전에 오르고 오후 내내 밀림"이 안 보였다 (2026-10-16 오후 손실).
+    ponytail: 폰이 대략 5분마다 본 값이라 그 사이 고점·저점은 놓친다 (오늘 고가는 giveback_text가 따로 쓴다)"""
+    text = f". 오늘 시가 {won(open_price)}, 현재가는 시가보다 {(price - open_price) * 100 / open_price:+.2f}%" if open_price else ""
+    points = [(str(t), int(p)) for t, p in day_flow or []]
+    if len(points) < 2:
+        return text
+    hourly = {}
+    for t, p in points:
+        hourly[t[:2]] = (t, p)  # 시간마다 마지막 값
+    path = " → ".join(f"{t[:2]}:{t[2:]} {won(p)}" for t, p in hourly.values())
+    top_time, top = max(points, key=lambda tp: tp[1])
+    return (text + f". 오늘 흐름 (앱이 약 5분마다 본 현재가, 시간마다 마지막 값): {path}. "
+            f"이 중 최고 {won(top)}({top_time[:2]}:{top_time[2:]}), 현재가는 그보다 {(price - top) * 100 / top:+.2f}%")
+
+
+def giveback_text(high: int | None, price: int, avg_price: int | None) -> str:
+    """오늘 고가에서 얼마나 내려왔는지. 보유 종목이면 매입가 대비 수익을 고가 때와 지금으로 나눠 쓴다.
+    ponytail: 오늘 고가가 산 뒤에 나왔는지는 모른다 (오늘 산 종목은 산 전 고가일 수 있다). 1분봉 전체를 받으면 정확히"""
+    if not high or high <= 0:
+        return ""
+    text = f". 오늘 고가 {won(high)}, 현재가는 고가보다 {(price - high) * 100 / high:+.2f}%"
+    if avg_price:
+        peak, now = (high - avg_price) * 100 / avg_price, (price - avg_price) * 100 / avg_price
+        text += f". 매입가 대비 오늘 고가 때 {peak:+.2f}%, 지금 {now:+.2f}%"
+        if peak > 0 and peak - now >= GIVEBACK_PCT:
+            text += f" (고가 때 이익에서 {peak - now:.2f}%p 돌려줌)"
+    return text
 
 
 def lows_falling(bars: list[tuple[str, int]]) -> bool:
@@ -728,8 +771,16 @@ def check_target_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             "SELECT count(*) AS n FROM proposals WHERE user_id = %s AND created_at >= date_trunc('day', now())",
             (state["user_id"],),
         ).fetchone()["n"]
+        # 보유 종목인지: 폰이 마지막으로 올린 잔고(홈을 열 때만 올라온다)나 오늘 체결된 매수로 본다
+        snapshot = latest_snapshot(conn, state["user_id"])
+        holds = (bool(snapshot) and any(h["stock_code"] == state["stock_code"] for h in snapshot["holdings"])) or bool(conn.execute(
+            "SELECT 1 FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
+            " WHERE p.user_id = %s AND p.stock_code = %s AND p.action = 'buy' AND o.status IN ('filled', 'partially_filled')"
+            " AND o.created_at >= date_trunc('day', now()) LIMIT 1", (state["user_id"], state["stock_code"])).fetchone())
     if today_count >= MAX_ANALYSES_PER_DAY:
         return {"answer": LIMIT_MESSAGE}
+    if not holds and today_count >= MAX_ANALYSES_PER_DAY - HOLDING_RESERVE:
+        return {"answer": BUY_LIMIT_MESSAGE}
     return {}
 
 
