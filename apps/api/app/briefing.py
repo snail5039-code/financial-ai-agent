@@ -16,6 +16,7 @@
 
 import argparse
 import logging
+import statistics
 import threading
 from datetime import datetime, time, timedelta
 from types import SimpleNamespace
@@ -94,6 +95,17 @@ def analyze(database_url: str, base: dict, code: str, name: str) -> dict:
             return state
 
 
+VOL_DAYS = 20  # 앱이 변동성 기준 수량을 정할 때 쓰는 기간 (2026-10-18 백테스트와 같은 기준)
+
+
+def daily_vol_pct(closes: list[int]) -> float | None:
+    """최근 VOL_DAYS거래일 하루 등락률의 표준편차(%). closes는 오래된 것부터. 모자라면 None (앱은 종목당 몫만 쓴다)"""
+    recent = closes[-(VOL_DAYS + 1):]
+    if len(recent) < VOL_DAYS + 1:
+        return None
+    return round(statistics.pstdev(b / a - 1 for a, b in zip(recent, recent[1:])) * 100, 3)
+
+
 def pick_entry(conn, state: dict, proposal_id: str) -> dict:
     proposal, verification, sources = state["proposal"], state["verifications"][-1], state["sources"]
     close = latest_close(conn, state["stock_code"])
@@ -108,6 +120,10 @@ def pick_entry(conn, state: dict, proposal_id: str) -> dict:
         "portion": proposal.get("buy_portion") or "all",
         # 1주 기준 최악의 경우 (처리안과 같은 기준)
         "worst_case_loss": close and close["close"] * WORST_CASE_DROP_PCT // 100,
+        # 변동성 기준 수량: 앱이 "평소 변동의 2배 빠지면 계좌의 2%"만큼만 산다 (2026-10-18 사용자 결정)
+        "daily_vol_pct": daily_vol_pct([r["close"] for r in conn.execute(
+            "SELECT close FROM (SELECT close, trade_date FROM stock_prices WHERE stock_code = %s"
+            " ORDER BY trade_date DESC LIMIT %s) p ORDER BY trade_date", (state["stock_code"], VOL_DAYS + 1))]),
     }
 
 
