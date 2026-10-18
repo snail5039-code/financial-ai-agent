@@ -27,7 +27,7 @@ from app.agents.analysis import (gather_node, invest_agent_node, route_after_ver
                                  volatility_ranks, with_titles, CLAIM_LABELS)
 from app.agents.query import latest_close, latest_snapshot
 from app.agents.state import new_request
-from app.clock import KST
+from app.clock import KST, seconds_until
 from app.db import connect, jsonb
 from app.notify import notify
 from app.functions.orders import WORST_CASE_DROP_PCT, is_trading_day
@@ -269,16 +269,6 @@ def run_all(database_url: str | None = None, email: str | None = None, build=bui
         except Exception:
             logging.getLogger(__name__).exception("%s 실패: %s", build.__name__, user["id"])
     return made
-
-
-def seconds_until(at: time, now: datetime) -> float:
-    """now 다음에 오는 거래일 at 시각까지 남은 초."""
-    target = now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
-    while not is_trading_day(target.date()):
-        target += timedelta(days=1)
-    return (target - now).total_seconds()
 
 
 CATCH_UP_UNTIL = time(15, 20)  # 아침 브리핑을 놓쳤을 때 이 시각 전에 서버가 켜지면 바로 만든다 (자동매매가 사는 시간)

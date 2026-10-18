@@ -606,6 +606,8 @@ void main() {
     // 전체 주식 비중 70%: 이미 600만 들고 있으면 100만까지만, 700만이면 0
     expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 6000000), 1000000);
     expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 7000000), 0);
+    // 증권사 숫자 칸 읽기 (KIS·KB 공통): 쉼표, 소수(반올림), 빈 값
+    expect([brokerInt('1,234'), brokerInt('184100.5000'), brokerInt(' 41150 '), brokerInt(null), brokerInt('')], [1234, 184101, 41150, 0, 0]);
     // 변동폭을 모르면 종목당 몫만 (예전과 같음)
     expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000), 1750000);
   });
