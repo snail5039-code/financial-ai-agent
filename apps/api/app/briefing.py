@@ -74,8 +74,9 @@ def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (
     for row in rows:
         if row["code"] in held or row["code"] in skip:
             continue
+        # mock: 아침 브리핑 후보는 모의 자동매매가 쓴다. 실전 주문은 주문 때 분석에서 등급으로 다시 막는다
         reason = buy_block_reason(profile["mode"], profile.get("risk_level"), profile.get("flags") or [],
-                                  stock_risk_grade(conn, row["code"]), ranks.get(row["code"]))
+                                  stock_risk_grade(conn, row["code"]), ranks.get(row["code"]), mock=True)
         if reason is None:
             picks.append({"code": row["code"], "name": row["name"], "uptrend": trend.get(row["code"], (False, 0))[0]})
         if len(picks) == MAX_CANDIDATES:

@@ -51,12 +51,16 @@ def stock_risk_grade(conn, stock_code: str) -> int:
 
 
 def buy_block_reason(mode: str, risk_level: int | None, flags: list[str], grade: int,
-                     volatility_rank: float | None) -> str | None:
-    """매수를 제안하면 안 되는 이유. 괜찮으면 None."""
+                     volatility_rank: float | None, mock: bool = False) -> str | None:
+    """매수를 제안하면 안 되는 이유. 괜찮으면 None.
+    mock: 모의투자. 1등급도 2등급처럼 보고 매수 여부를 AI가 판단한다 (2026-10-19 사용자 결정: 악재 공시 종목도 AI가 스스로
+    잘 판단하는지 확인하려고). 1등급 근거 공시는 그대로 AI·검증 AI에게 간다 (analysis.grade_text). 실전은 그대로 막는다"""
     if mode != "custom":
         return "일반 모드(성향 퀴즈 안 함)라 판단하지 않음"
     if "no_buy_proposals" in flags:
         return "생활비나 빌린 돈으로 투자한다고 답함"
+    if mock:
+        grade = max(grade, DOMESTIC_STOCK_GRADE)
     if risk_level < MIN_LEVEL_FOR_GRADE.get(grade, 1):
         return f"{grade}등급 종목은 {LABELS[MIN_LEVEL_FOR_GRADE[grade]]} 이상만 매수 제안"
     limit = MAX_VOLATILITY_RANK_FOR_BUY.get(risk_level)
@@ -67,7 +71,7 @@ def buy_block_reason(mode: str, risk_level: int | None, flags: list[str], grade:
 
 
 def allowed_actions(mode: str, risk_level: int | None, flags: list[str], grade: int, holds_stock: bool,
-                    volatility_rank: float | None = None) -> list[str]:
+                    volatility_rank: float | None = None, mock: bool = False) -> list[str]:
     """투자 AI가 낼 수 있는 행동.
 
     - 일반 모드(퀴즈 안 함): 판단하지 않으므로 '관찰'만
@@ -78,6 +82,6 @@ def allowed_actions(mode: str, risk_level: int | None, flags: list[str], grade: 
     if mode != "custom":
         return ["watch"]
     actions = ["hold", "sell"] if holds_stock else ["watch"]
-    if buy_block_reason(mode, risk_level, flags, grade, volatility_rank) is None:
+    if buy_block_reason(mode, risk_level, flags, grade, volatility_rank, mock) is None:
         actions.append("buy")
     return actions

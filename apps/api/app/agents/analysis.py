@@ -709,7 +709,8 @@ def directed_order_text(state: InvestState) -> str:
 
 def grade_text(state: InvestState) -> str:
     reason = state.get("risk_reason")
-    return f"위험등급 {state['risk_grade']}등급" + (f" (1등급 근거: {reason})" if reason else "")
+    return f"위험등급 {state['risk_grade']}등급" + (
+        f" (1등급 근거: {reason}). 매수라면 이 위험을 감수할 만한 근거가 근거·반대 근거·위험에 있어야 하고, 없으면 관찰이다" if reason else "")
 
 
 def invest_context(state: InvestState) -> str:
@@ -864,6 +865,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rank = volatility_rank(conn, code)
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
+    mock = not state.get("real_mode")  # 모의투자는 1등급도 AI가 매수 여부를 판단한다 (suitability.buy_block_reason)
     auto_buy = bool(state.get("user_directed") and state.get("auto_origin") and state["side"] == "buy")
     falling = bool(state.get("prices")) and falling_now(state["prices"][0])
     return {
@@ -874,8 +876,8 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         # 자동매매의 매수는 투자 AI가 진입 시점을 보고 '관찰'로 거절할 수 있다 (3-4, 2026-10-08 손실 원인)
         # 2026-10-14: 장중 하락 중(5분 저가 연속 하락, VWAP 아래)이면 자동매매 매수는 코드가 막는다 (관찰만)
         "allowed_actions": (["watch"] if falling else [state["side"], "watch"]) if auto_buy
-        else [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank),
-        "buy_block_reason": FALLING_REASON if auto_buy and falling else buy_block_reason(*profile, rank),
+        else [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank, mock),
+        "buy_block_reason": FALLING_REASON if auto_buy and falling else buy_block_reason(*profile, rank, mock),
         "verifications": [], "revision_round": 0,
         # 5-4 대화 속 성향 신호 (모델이 꺼져 있으면 None). 사람이 쓴 말만 본다
         "conversation_signal": None if state.get("auto_origin") else signals.model_signal(state["query"]),
