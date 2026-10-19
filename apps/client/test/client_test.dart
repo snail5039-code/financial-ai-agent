@@ -15,6 +15,7 @@ import 'package:invest_client/features/auto/auto_trader.dart';
 import 'package:invest_client/features/auto/reservations.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
+import 'package:invest_client/features/home/equity_chart.dart';
 import 'package:invest_client/secure/key_store.dart';
 
 Map<String, dynamic> order(String side, int qty, int price, {String key = 'k1', int? approved}) => {
@@ -50,6 +51,23 @@ void main() {
         [true, false, true, false]);
     expect([actionColor('buy'), actionColor('sell'), actionColor('watch')], [upRed, downBlue, mutedText]);
     expect([historyQuery('매수'), historyQuery('매도'), historyQuery('체결')], ['?action=buy', '?action=sell', '']);
+  });
+
+  test('총자산: 현금 + 수량 × 현재가(모르면 매입가), 그래프 목록', () {
+    final balance = {'cash_krw': 1000, 'holdings': [
+      {'stock_code': '005930', 'qty': 2, 'avg_price': 100},
+      {'stock_code': '000660', 'qty': 1, 'avg_price': 50},
+    ]};
+    expect(equityOf(balance, {'005930': 120}), 1000 + 240 + 50);
+    // 정규장(KST 09:00~15:35, 평일)에만 기록한다
+    expect([equityTime(DateTime.utc(2026, 10, 19, 0, 0)), equityTime(DateTime.utc(2026, 10, 19, 6, 35)),
+        equityTime(DateTime.utc(2026, 10, 19, 6, 36)), equityTime(DateTime.utc(2026, 10, 18, 3))], [true, true, false, false]);
+    final data = {
+      'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
+      'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},
+    };
+    expect(equitySeries(data, daily: true), [('10/16', 9428986), ('10/19', 9416713)]);
+    expect(equitySeries(data, daily: false), [('09:54', 9322536)]);
     expect(checkTarget('claim:0'), '근거 1');
     expect(checkTarget('freshness'), '자료 시점');
   });

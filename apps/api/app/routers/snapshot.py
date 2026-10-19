@@ -18,10 +18,26 @@ router = APIRouter(prefix="/api", tags=["snapshot"])
 def post_snapshot(body: Balance, conn: Conn, user_id: UserId) -> None:
     holdings = body.model_dump(mode="json")["holdings"]
     conn.execute(
-        "INSERT INTO account_snapshots (user_id, cash_krw, holdings, fetched_at) VALUES (%s, %s, %s, %s)",
-        (user_id, body.cash_krw, Jsonb(holdings), body.fetched_at),
+        "INSERT INTO account_snapshots (user_id, cash_krw, holdings, fetched_at, total_krw) VALUES (%s, %s, %s, %s, %s)",
+        (user_id, body.cash_krw, Jsonb(holdings), body.fetched_at, body.total_krw),
     )
     conn.commit()
+
+
+@router.get("/equity")
+def get_equity(conn: Conn, user_id: UserId) -> dict:
+    """총자산 기록 (자산 탭 그래프): 날짜별은 그날 마지막 값, 장중은 기록이 있는 가장 최근 날의 값 전부. 폰이 계산해 올린 값만 쓴다."""
+    rows = conn.execute(
+        "SELECT (fetched_at AT TIME ZONE 'Asia/Seoul')::date AS day, to_char(fetched_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS time,"
+        " total_krw FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
+        " AND fetched_at >= now() - interval '120 days' ORDER BY fetched_at",
+        (user_id,),
+    ).fetchall()
+    days = {str(r["day"]): r["total_krw"] for r in rows}  # 시간순이라 마지막 값이 남는다
+    last = str(rows[-1]["day"]) if rows else None
+    return {"days": [{"date": d, "total_krw": v} for d, v in days.items()],
+            "intraday": {"date": last, "points": [{"time": r["time"], "total_krw": r["total_krw"]}
+                                                  for r in rows if str(r["day"]) == last]}}
 
 
 @router.get("/snapshot")

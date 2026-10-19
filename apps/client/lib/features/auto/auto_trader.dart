@@ -443,7 +443,12 @@ class AutoTrader extends ChangeNotifier {
     if (positions.isEmpty || (_lastWatch != null && _now().difference(_lastWatch!) < _watchGap)) return;
     _lastWatch = _now();
     final broker = currentBroker.value!;
-    final holdings = ((await broker.balance())['holdings'] as List).cast<Map<String, dynamic>>();
+    final balance = await broker.balance();
+    final holdings = (balance['holdings'] as List).cast<Map<String, dynamic>>();
+    try { // 장중 총자산 기록 (자산 탭 그래프). 실패해도 매매는 계속
+      await api.post('/api/snapshot',
+          {...balance, if (equityTime(_now())) 'total_krw': equityOf(balance, broker.lastPrices)});
+    } catch (_) {}
     final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
     // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
     double? kospi;

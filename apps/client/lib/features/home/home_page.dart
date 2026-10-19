@@ -8,6 +8,7 @@ import '../../broker/broker.dart';
 import '../../common/common.dart';
 import '../history/history_page.dart';
 import '../settings/broker_page.dart';
+import 'equity_chart.dart';
 import 'overview.dart';
 import 'portfolio_page.dart';
 
@@ -126,6 +127,8 @@ class _HomePageState extends State<HomePage> {
       if (extras?.error != null) Text(extras!.error!, style: const TextStyle(color: Colors.orange)),
       const SizedBox(height: 8),
       RingsCard(overview: o, showTotal: false), // 총자산은 위에 있다
+      const SizedBox(height: 8),
+      EquityCard(key: ObjectKey(o)), // 새로 읽을 때마다 그래프도 다시 읽는다
       const SizedBox(height: 8),
       Card(
         child: ListTile(
