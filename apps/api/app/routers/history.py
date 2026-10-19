@@ -15,8 +15,8 @@ router = APIRouter(prefix="/api", tags=["history"])
 
 
 @router.get("/history")
-def list_history(conn: Conn, user_id: UserId, action: Literal["buy", "sell", "hold", "watch"] | None = None) -> list[dict]:
-    # action: 기록 화면의 매수·매도 필터. 최근 100건만 보내서, 하루 분석이 100건을 넘으면 앱에서 거르면 앞 기록이 잘린다 (2026-10-19)
+def list_history(conn: Conn, user_id: UserId, action: Literal["buy", "sell", "hold", "watch", "trade"] | None = None) -> list[dict]:
+    # action: 기록 화면의 매수·매도 필터 (trade = 매수 또는 매도, 2026-10-20: 30분마다 쌓이는 보유 판단에 묻혀서). 최근 100건만 보내서, 하루 분석이 100건을 넘으면 앱에서 거르면 앞 기록이 잘린다 (2026-10-19)
     return conn.execute(
         """
         SELECT p.id AS proposal_id, p.created_at, p.stock_code, s.name AS stock_name, p.action, p.qty, p.limit_price,
@@ -28,10 +28,10 @@ def list_history(conn: Conn, user_id: UserId, action: Literal["buy", "sell", "ho
         FROM proposals p
         JOIN stocks s ON s.code = p.stock_code
         LEFT JOIN approvals a ON a.proposal_id = p.id
-        WHERE p.user_id = %s AND (%s::text IS NULL OR p.action = %s)
+        WHERE p.user_id = %s AND (%s::text IS NULL OR p.action = %s OR (%s = 'trade' AND p.action IN ('buy', 'sell')))
         ORDER BY p.created_at DESC LIMIT 100
         """,
-        (user_id, action, action),
+        (user_id, action, action, action),
     ).fetchall()
 
 

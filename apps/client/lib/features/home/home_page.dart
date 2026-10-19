@@ -126,8 +126,7 @@ class _HomePageState extends State<HomePage> {
       ]),
       if (extras?.error != null) Text(extras!.error!, style: const TextStyle(color: Colors.orange)),
       const SizedBox(height: 8),
-      RingsCard(overview: o, showTotal: false), // 총자산은 위에 있다
-      const SizedBox(height: 8),
+      // 링 요약은 채팅 탭에 있어서 여기선 뺐다 (2026-10-20: 같은 카드가 두 탭에 있어 길었다)
       EquityCard(key: ObjectKey(o)), // 새로 읽을 때마다 그래프도 다시 읽는다
       const SizedBox(height: 8),
       Card(
@@ -147,7 +146,16 @@ class _HomePageState extends State<HomePage> {
         Text('${holdingsOf(balance).length}종목', style: const TextStyle(color: mutedText)),
       ]),
       if (holdingsOf(balance).isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('보유 종목이 없어요')),
-      for (final h in holdingsOf(balance)) _holding(h, t.total),
+      if (holdingsOf(balance).isNotEmpty)
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: [
+            for (final (i, h) in holdingsOf(balance).indexed) ...[
+              if (i > 0) const Divider(height: 1, indent: 14, endIndent: 14),
+              _holding(h, t.total),
+            ],
+          ]),
+        ),
       if (kIsWeb) const SourceText('웹은 현재가 대신 평균 매입가로 계산해요 (실시간 시세는 폰에서)'),
       // 4. 오늘 주문
       const SizedBox(height: 16),
@@ -172,6 +180,7 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
+  /// 보유 종목 한 줄 (2026-10-20: 카드 한 장 3~4줄 → 두 줄). 누르면 "더 사도 돼?"를 묻는다
   Widget _holding(Map<String, dynamic> h, int total) {
     final avg = h['avg_price'] as int;
     final qty = h['qty'] as int;
@@ -180,41 +189,24 @@ class _HomePageState extends State<HomePage> {
     final gain = (price - avg) * qty;
     final weight = total == 0 ? 0.0 : value * 100 / total;
     final name = h['stock_name'] as String;
-    return Card(
-      child: InkWell(
-        onTap: () => widget.onAsk('$name 더 사도 돼?'),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(children: [
-            Row(children: [
-              RoomAvatar(text: name.length <= 2 ? name : name.substring(0, 2), color: Colors.white, foreground: ink, size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  Text('${comma(qty)}주 · 평균 ${won(avg)} · 현재 ${won(price)}', style: const TextStyle(fontSize: 12, color: mutedText)),
-                ]),
-              ),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(won(value), style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('${gain > 0 ? '+' : ''}${comma(gain)}원 (${rateText(gain, avg * qty)})',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: changeColor(gain))),
-              ]),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(value: weight / 100, minHeight: 6, color: brandBlue,
-                      backgroundColor: const Color(0xFFDDE3EA)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text('비중 ${weight.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: mutedText)),
-            ]),
+    const small = TextStyle(fontSize: 12, color: mutedText);
+    return InkWell(
+      onTap: () => widget.onAsk('$name 더 사도 돼?'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Column(children: [
+          Row(children: [
+            Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900))),
+            Text(won(value), style: const TextStyle(fontWeight: FontWeight.bold)),
           ]),
-        ),
+          const SizedBox(height: 2),
+          Row(children: [
+            Expanded(child: Text('${comma(qty)}주 · 평균 ${comma(avg)} → ${comma(price)} · 비중 ${weight.toStringAsFixed(1)}%',
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: small)),
+            Text('${gain > 0 ? '+' : ''}${comma(gain)} (${rateText(gain, avg * qty)})',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: changeColor(gain))),
+          ]),
+        ]),
       ),
     );
   }

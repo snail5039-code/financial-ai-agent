@@ -18,6 +18,7 @@ import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/features/home/equity_chart.dart';
 import 'package:invest_client/features/home/rooms_page.dart';
 import 'package:invest_client/features/settings/settings_page.dart';
+import 'package:invest_client/main.dart';
 import 'package:invest_client/secure/key_store.dart';
 
 Map<String, dynamic> order(String side, int qty, int price, {String key = 'k1', int? approved}) => {
@@ -52,7 +53,8 @@ void main() {
     expect([only('매수', {'action': 'buy'}), only('매수', {'action': 'sell'}), only('매도', {'action': 'sell'}), only('매도', {'action': 'hold'})],
         [true, false, true, false]);
     expect([actionColor('buy'), actionColor('sell'), actionColor('watch')], [upRed, downBlue, mutedText]);
-    expect([historyQuery('매수'), historyQuery('매도'), historyQuery('체결')], ['?action=buy', '?action=sell', '']);
+    expect([historyQuery('매수·매도'), historyQuery('매수'), historyQuery('매도'), historyQuery('체결')], ['?action=trade', '?action=buy', '?action=sell', '']);
+    expect(filters.first.$1, '매수·매도'); // 처음 보이는 필터 (보유 판단에 묻히지 않게)
   });
 
   test('총자산: 현금 + 수량 × 현재가(모르면 매입가), 그래프 목록', () {
@@ -567,12 +569,14 @@ void main() {
     expect(sellReason(-1.0, {'n': 20}, now, marketDrop: true), isNull);
   });
 
-  test('장 시작 30분은 손절선만 묻는다 (시초가 공포성 매도 방지)', () {
+  test('장 시작 30분은 −7% 손절선도 묻지 않는다 (시초가 공포성 매도 방지, 강제 손절은 따로)', () {
     final open = DateTime.utc(2026, 10, 14, 0, 10); // 09:10 KST
     expect(sellReason(-4.0, {}, open), isNull);
     expect(sellReason(5.0, {}, open), isNull);
     expect(sellReason(-1.0, {}, open, marketDrop: true), isNull);
-    expect(sellReason(-9.0, {}, open), 'stop');
+    expect(sellReason(-9.0, {}, open), isNull); // 2026-10-20: 10/19 한화시스템 09:18 −9.09% 매도 → 종가 +10.14%
+    expect(hardStop(-10.5, {}), 'hard_half'); // −10%는 장 시작 30분에도 바로 (sellReason과 따로)
+    expect(sellReason(-9.0, {}, DateTime.utc(2026, 10, 14, 0, 31)), 'stop');
     expect(sellReason(-4.0, {}, DateTime.utc(2026, 10, 14, 0, 31)), 'drop'); // 09:31부터는 평소대로
     expect(sellQuestion('셀트리온', 184000, '-4.0'), contains('저점에서 회복 중인지'));
     // 2026-10-16: +2~3%까지 갔다가 내려온 종목에 아무 질문이 없었다 (오늘 최고에서 이익 돌려줌)
@@ -679,5 +683,43 @@ void main() {
         '1회 1,234,567원 · 하루 500만원 · 한 종목 25%');
     expect(profileSummary({'mode': 'custom', 'label': '적극투자형', 'risk_level': 4}), '맞춤 · 적극투자형 4단계');
     expect(profileSummary({'mode': 'general', 'expired': false}), '일반 모드');
+  });
+
+  test('서버에 연결하지 못하면 로그인 화면이 아니라 다시 시도 화면', () {
+    expect(startStateFor(hasToken: false), StartState.login);
+    expect(startStateFor(hasToken: true), StartState.home);
+    expect(startStateFor(hasToken: true, error: ApiError(0, '연결 실패')), StartState.offline); // 2026-10-20 아침
+    expect(startStateFor(hasToken: true, error: ApiError(500, '서버 오류')), StartState.offline);
+    expect(startStateFor(hasToken: true, error: ApiError(401, '만료')), StartState.login);
+  });
+
+  test('기록: 주문 없이 끝난 보유·관찰 판단은 날짜별로 접는다', () {
+    final items = [
+      {'action': 'hold', 'created_at': '2026-10-19T06:08:00Z'}, // 10/19 15:08 KST
+      {'action': 'sell', 'order_status': 'filled', 'created_at': '2026-10-19T01:38:00Z'},
+      {'action': 'hold', 'policy_ok': false, 'created_at': '2026-10-19T01:00:00Z'}, // 규칙에 걸린 건 보인다
+      {'action': 'watch', 'created_at': '2026-10-16T05:00:00Z'},
+      {'action': 'hold', 'created_at': '2026-10-15T15:30:00Z'}, // UTC 15:30 = 10/16 00:30 KST
+    ];
+    final days = groupByDay(items);
+    expect([for (final (day, shown, quiet) in days) (day, shown.length, quiet.length)],
+        [('10/19 (월)', 2, 1), ('10/16 (금)', 0, 2)]);
+  });
+
+  test('시장 탓 하락이면 매도 판단을 30분 미룬다 (10/13·10/19 아침에 판 7종목이 모두 다시 올랐다)', () {
+    expect(marketDriven(-2.0, -2.5), isTrue); // 코스피 −2.0%, 종목 −2.5%: 시장과 같이 빠짐
+    expect(marketDriven(-2.0, -6.5), isFalse); // 시장보다 4.5%p 더 빠짐: 종목 탓
+    expect(marketDriven(-1.0, -3.0), isFalse); // 시장이 −1.5%까지 안 빠졌으면 평소대로
+    expect(marketDriven(-3.5, -3.6), isFalse); // 시장이 −3% 넘게 빠지면 미루지 않는다 (10/15 같은 날)
+    expect(marketDriven(null, -3.0), isFalse); // 지수를 못 받으면 평소대로
+    final now = DateTime.utc(2026, 10, 19, 1, 0);
+    expect(deferSell('stop', true, null, now), isTrue);
+    expect(deferSell('giveback', true, now.subtract(const Duration(minutes: 20)).toIso8601String(), now), isTrue);
+    expect(deferSell('drop', true, now.subtract(const Duration(minutes: 31)).toIso8601String(), now), isFalse); // 30분 지나면 묻는다
+    expect(deferSell('rise', true, null, now), isFalse); // 오르는 쪽은 미루지 않는다
+    expect(deferSell('check', true, null, now), isFalse);
+    expect(deferSell('stop', false, null, now), isFalse);
+    expect(sellQuestion('솔브레인', 345500, '-6.4', reason: 'drop', market: '오늘 코스닥 -2.0%, 이 종목 오늘 -6.5%야.'),
+        allOf(contains('오늘 코스닥 -2.0%'), contains('시장 전체 하락은 그것만으로 팔 이유가 아니야')));
   });
 }

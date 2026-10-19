@@ -392,6 +392,7 @@ def test_approval_lists_and_history_timeline(client, custom_user, ai) -> None:
     # 매수·매도 필터는 서버에서 거른다 (최근 100건에서 잘리지 않게)
     assert [i["proposal_id"] for i in client.get("/api/history?action=buy", headers=headers).json()] == [item["proposal_id"]]
     assert client.get("/api/history?action=sell", headers=headers).json() == []
+    assert [i["proposal_id"] for i in client.get("/api/history?action=trade", headers=headers).json()] == [item["proposal_id"]]
     assert client.get("/api/history?action=drop", headers=headers).status_code == 422
     assert item["policy_ok"] is True
     [proposal] = client.get("/api/agents/proposals", headers=headers).json()
@@ -570,6 +571,22 @@ def test_close_summary(client, custom_user, ai, migrated) -> None:
     saved = client.get("/api/briefings/latest?kind=close", headers=headers).json()
     assert saved["kind"] == "close" and saved["content"]["bought_krw"] == 400_000
     assert client.get("/api/briefings/latest", headers=headers).status_code == 404  # 아침 브리핑과 따로
+
+
+def test_close_summary_carries_latest_scorecard(client, custom_user, ai, migrated) -> None:
+    """종가가 들어온 가장 최근 거래일의 판단 점수가 장 마감 요약에 붙는다 (그날 매수 검토 종목의 등락, 판 종목 종가 비교)"""
+    from app import briefing
+
+    place_filled_order(client, custom_user)  # 오늘 매수 검토 → 체결
+    today = datetime.now(KST).date()
+    with psycopg.connect(migrated) as conn:
+        conn.execute("INSERT INTO stock_prices VALUES (%s, %s, 110000, 110000000, 1000)", (CODE, today))
+    try:
+        score = briefing.build_close(migrated, custom_user["id"])["scorecard"]
+    finally:
+        with psycopg.connect(migrated) as conn:
+            conn.execute("DELETE FROM stock_prices WHERE stock_code = %s AND trade_date = %s", (CODE, today))
+    assert score["day"] == str(today) and score["sells"] == [] and score["sell_missed_krw"] is None
 
 
 # ---------- 장 마감 AI 회고 · 내일 계획 ----------

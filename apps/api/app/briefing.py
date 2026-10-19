@@ -25,6 +25,7 @@ from psycopg.rows import dict_row
 
 from app.agents.analysis import (gather_node, invest_agent_node, route_after_verify, save_proposal, verify_agent_node,
                                  volatility_ranks, with_titles, CLAIM_LABELS)
+from app import scorecard
 from app.agents.query import latest_close, latest_snapshot
 from app.agents.state import new_request
 from app.clock import KST, seconds_until
@@ -240,6 +241,7 @@ def build_close(database_url: str, user_id: str, now: datetime | None = None) ->
             {"held": held, "codes": held + watching},
         ).fetchall()
         limits = today_summary(conn, user_id)
+        score = scorecard.latest(conn, user_id)  # 전 거래일 관찰·매도 점수 (종가가 다음 날 14시에 들어온다)
 
     filled = [o for o in orders if o["filled_qty"]]
     content = {
@@ -252,6 +254,7 @@ def build_close(database_url: str, user_id: str, now: datetime | None = None) ->
         "news": [{**n, "filed_at": str(n["filed_at"])} for n in news],
         "limits": limits,
         "snapshot_at": snapshot and snapshot["fetched_at"].isoformat(),
+        "scorecard": score,
     }
     save_briefing(database_url, user_id, now.date(), "close", content)
     return content

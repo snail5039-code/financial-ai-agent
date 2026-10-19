@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/api.dart';
+import '../../broker/broker.dart';
 import '../../common/common.dart';
 import '../approvals/approval_detail_page.dart';
 
@@ -16,7 +17,24 @@ String finalResult(Map<String, dynamic> item) {
   return '분석';
 }
 
+/// 보유·관찰 판단만 하고 끝난 건 (처리안·주문·차단 없음). 30분마다 쌓여서 기록 탭에서는 날짜별로 접는다 (2026-10-20)
+bool quietItem(Map<String, dynamic> i) =>
+    (i['action'] == 'hold' || i['action'] == 'watch') && i['approval_status'] == null && i['order_status'] == null && i['policy_ok'] != false;
+
+/// 최신순 기록 → 날짜별 ("10/19 (월)", 보일 것, 접을 것). 날짜는 한국 시각
+List<(String, List<Map<String, dynamic>>, List<Map<String, dynamic>>)> groupByDay(List<Map<String, dynamic>> items) {
+  const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+  final days = <String, (List<Map<String, dynamic>>, List<Map<String, dynamic>>)>{};
+  for (final item in items) {
+    final t = toKst(DateTime.parse(item['created_at'] as String));
+    final (shown, quiet) = days.putIfAbsent('${t.month}/${t.day} (${weekdays[t.weekday - 1]})', () => ([], []));
+    (quietItem(item) ? quiet : shown).add(item);
+  }
+  return [for (final MapEntry(:key, :value) in days.entries) (key, value.$1, value.$2)];
+}
+
 const filters = <(String, bool Function(Map<String, dynamic>))>[
+  ('매수·매도', _trade), // 처음 보이는 필터: 실제로 사고판 제안만 (보유 판단에 묻히지 않게)
   ('전체', _all),
   ('매수', _buy),
   ('매도', _sell),
@@ -26,11 +44,13 @@ const filters = <(String, bool Function(Map<String, dynamic>))>[
   ('만료', _expired),
 ];
 bool _all(Map<String, dynamic> i) => true;
+bool _trade(Map<String, dynamic> i) => i['action'] == 'buy' || i['action'] == 'sell';
 bool _buy(Map<String, dynamic> i) => i['action'] == 'buy';
 bool _sell(Map<String, dynamic> i) => i['action'] == 'sell';
 
 /// 필터 이름 → 기록 요청 조건. 매수·매도만 서버가 거른다
-String historyQuery(String filter) => switch (filter) { '매수' => '?action=buy', '매도' => '?action=sell', _ => '' };
+String historyQuery(String filter) =>
+    switch (filter) { '매수·매도' => '?action=trade', '매수' => '?action=buy', '매도' => '?action=sell', _ => '' };
 
 /// 매수는 빨강, 매도는 파랑 (국내 증권사 관례). 보유·관찰은 회색
 Color actionColor(String? action) => switch (action) { 'buy' => upRed, 'sell' => downBlue, _ => mutedText };
@@ -105,7 +125,25 @@ class _HistoryPageState extends State<HistoryPage> {
                   onRefresh: () async => setState(() { _items = _load(); }),
                   child: items.isEmpty
                       ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('기록이 없어요')))])
-                      : ListView(children: [for (final item in items) _tile(item)]),
+                      : ListView(children: [
+                          for (final (day, shown, quiet) in groupByDay(items)) ...[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                              child: Text(day, style: const TextStyle(fontWeight: FontWeight.w900, color: mutedText)),
+                            ),
+                            for (final item in shown) _tile(item),
+                            if (quiet.isNotEmpty)
+                              ExpansionTile(
+                                shape: const Border(),
+                                leading: const Icon(Icons.unfold_more, color: mutedText),
+                                title: Text('보유·관찰 판단 ${quiet.length}건',
+                                    style: const TextStyle(fontSize: 14, color: mutedText)),
+                                subtitle: Text('${{for (final q in quiet) q['stock_name']}.length}종목 · 주문 없이 끝난 점검',
+                                    style: const TextStyle(fontSize: 12)),
+                                children: [for (final item in quiet) _tile(item)],
+                              ),
+                          ],
+                        ]),
                 );
               },
             ),
@@ -117,7 +155,9 @@ class _HistoryPageState extends State<HistoryPage> {
     final qty = item['qty'] == null ? '' : ' ${comma(item['qty'] as int)}주';
     final action = item['action'] as String?;
     final color = actionColor(action);
+    final result = finalResult(item);
     return ListTile(
+      dense: true,
       leading: Container(
         width: 44,
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -125,13 +165,13 @@ class _HistoryPageState extends State<HistoryPage> {
         child: Text(actionLabels[action] ?? '$action', textAlign: TextAlign.center,
             style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
       ),
-      title: Text('${item['stock_name']}$qty'),
+      title: Text('${item['stock_name']}$qty', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
       subtitle: Row(children: [
         if (item['verdict'] != null) VerdictTag(item['verdict'] as String),
         const SizedBox(width: 8),
-        Text(ymdHm(item['created_at'] as String), style: const TextStyle(fontSize: 12)),
+        Text(hhmm(item['created_at'] as String), style: const TextStyle(fontSize: 12)),
       ]),
-      trailing: Text(finalResult(item)),
+      trailing: result == '분석' ? null : Text(result, style: const TextStyle(fontWeight: FontWeight.bold)),
       onTap: () => Navigator.of(context).push(pageRoute(HistoryDetailPage(item['proposal_id'] as String, item['stock_name'] as String))),
     );
   }

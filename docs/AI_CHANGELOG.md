@@ -13,15 +13,16 @@
 | `autoRescanSlots` | 10·11·12·13·14시, 14:35 | 같은 파일 | 매수 후보 다시 찾기 (서버 `REFRESH_GAP_MINUTES` 30분) |
 | `autoDropPct` / `autoRisePct` | −3% / +3% | 같은 파일 | 매입가 대비 이만큼 움직이면 30분 안 기다리고 바로 AI에게 |
 | `autoMarketDropPct` | −1.5% | 같은 파일 | 코스피가 이만큼 빠지면 보유 종목 전부 바로 AI에게 |
-| `autoStopLossPct` | −7% | 같은 파일 | 손절선. 바로 AI에게 묻는다 |
+| `autoStopLossPct` | −7% | 같은 파일 | 손절선. AI에게 묻는다 (장 시작 30분은 기다림, 10/20부터) |
 | `autoHardStopPct` / `autoHardStopAllPct` | −10% / −15% | 같은 파일 `hardStop` | 강제 손절: AI에게 묻지 않고 절반 / 남은 것 전부 (주문은 검증 AI를 거침) |
 | 하락장 절반 매수 | 코스피 < 지난 20거래일 평균 | 같은 파일 `bearMarket` | 종목당 몫(35%)의 절반만 |
 | `autoMaxStockPct` | 35% | 같은 파일 | 한 종목에 쓰는 살 총액 최대 몫 (서버 비중 40% 아래) |
 | `autoRiskPct` | 2% | 같은 파일 `buyRoom` | 변동성 기준 수량: 평소 하루 변동(최근 20일 표준편차, 서버 `daily_vol_pct`)의 2배 빠지면 총자산의 이만큼만 잃게 산다 |
 | `autoMaxExposurePct` | 70% | 같은 파일 `buyRoom` | 주식 평가액이 총자산의 이만큼을 넘게 사지 않는다 |
-| `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 손절선만 묻는다 |
+| `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 매도 판단을 묻지 않는다 (강제 손절 −10%·−15%만 바로) |
+| `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 3%p / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
 | `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
-| `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준 |
+| `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준. 매도 점수(판 가격 대비 종가)는 같은 파일 `sell_score`, 장 마감 요약에 전 거래일 점수가 붙는다 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
@@ -38,6 +39,17 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/20 장 전 (7일차 기록으로, 사용자 결정)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 10/13·10/19 코스피가 빠진 아침에 판 7종목이 모두 판 가격보다 높게 마감 (10/19만 +284,800원 놓침). AI는 "VWAP 아래·고가 대비 하락·시장 약세"로 시장 하락을 팔 이유로 씀 | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 내리는 쪽 매도 판단을 처음 한 번 30분 미룬다. 질문에 오늘 지수·종목 등락을 붙인다 | `auto_trader.dart` `marketDriven`·`deferSell`·`_review` | `client_test` 시장 탓 하락 |
+| 같은 문제 | 투자 AI 지시문: 시장 전체 하락은 그것만으로 매도 근거가 아니다, 종목만의 근거(시장보다 약함·추세 꺾임·공식 악재)를 써야 판다. 검증 AI: 근거가 시장 하락뿐인 매도 검토는 반려 | 서버 `agents/llm.py` `INVEST_PROMPT`·`VERIFY_PROMPT` 9번 | — (지시문) |
+| 10/19 한화시스템 09:18 −9.09% 손절선 매도 → 그날 저가 바로 위, 종가 +10.14% | −7% 손절선도 장 시작 30분은 기다린다. 강제 손절(−10% 절반, −15% 전부)은 그대로 바로 | `auto_trader.dart` `sellReason` | `client_test` 장 시작 30분 |
+| 판 종목이 판 뒤 어떻게 됐는지를 손으로 두 번 계산 | 점수표에 매도 점수(판 가격 대비 종가, 들고 있었으면 받았을 금액). 장 마감 요약에 전 거래일 관찰·매도 점수가 저절로 붙는다 | 서버 `scorecard.py` `sell_score`·`latest`, `briefing.py` `build_close` | `test_sell_score_compares_sold_price_with_close`, `test_close_summary_carries_latest_scorecard` |
+
+주의: 근거는 2일, 매도 7건뿐이다. 미룬 매도는 앱 오늘 기록에 "시장과 같이 빠진 것이라 … 미뤄요 (지금 가격)"으로 남고, 점수표로 날마다 맞았는지 본다.
 
 ## 10/19 장 마감 뒤 (7일차, [리포트](reports/live-20261019.md))
 
