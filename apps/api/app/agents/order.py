@@ -273,6 +273,7 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "risks": [with_titles(x, state["sources"]) for x in state["proposal"]["risks"]],
         "policy": result["rules"], "warnings": warnings, "confirm_required": confirm,
         "broker": BROKERS[mode_of(state)], "mode": mode_of(state), "user_directed": state["user_directed"],
+        "auto_origin": bool(state.get("auto_origin")),  # 앱 자동매매·예약 주문. 내 투자 습관에는 세지 않는다 (functions/behavior.py)
         "order_change": change, "original_order_no": target and target["broker_order_no"],
         "original_price": target and target["price"],
     }
