@@ -389,6 +389,10 @@ def test_approval_lists_and_history_timeline(client, custom_user, ai) -> None:
 
     [item] = client.get("/api/history", headers=headers).json()
     assert (item["stock_name"], item["verdict"], item["approval_status"], item["order_status"]) == (NAME, "approve", "approved", "filled")
+    # 매수·매도 필터는 서버에서 거른다 (최근 100건에서 잘리지 않게)
+    assert [i["proposal_id"] for i in client.get("/api/history?action=buy", headers=headers).json()] == [item["proposal_id"]]
+    assert client.get("/api/history?action=sell", headers=headers).json() == []
+    assert client.get("/api/history?action=drop", headers=headers).status_code == 422
     assert item["policy_ok"] is True
     [proposal] = client.get("/api/agents/proposals", headers=headers).json()
     assert (proposal["proposal_id"], proposal["action"], proposal["verdict"]) == (item["proposal_id"], "buy", "approve")
@@ -670,6 +674,12 @@ def test_behavior_habits_add_caution_only(client, custom_user, ai, migrated, mon
     card = first(to_approval(client, custom_user, "주문전자 1주 사줘"), "interrupt")["card"]
     assert any("최근 30일 동안 5건 체결" in w for w in card["warnings"])
     assert "최근 30일 동안 자주 거래했다" in ai["invest"][-1] and "급등 경고를 받고도 산 적이" in ai["invest"][-1]
+    assert card["auto_origin"] is False  # 사람이 낸 주문
+    # 자동매매가 낸 주문은 습관에 세지 않는다: 급등 경고 받은 두 건을 자동매매 주문으로 바꾸면 급등 습관이 사라진다
+    db(migrated, "UPDATE approvals SET card = card || '{\"auto_origin\": true}' WHERE card->'warnings' ? %s RETURNING id",
+       "급등 직후 매수는 고점에 살 위험이 있어요.")
+    found = client.get(url, headers=headers).json()
+    assert (found["hot_buys"], found["fills"]) == (0, 3) and "hot_buys" not in found["flags"]
 
 
 # ---------- 내 기록 질문 ----------

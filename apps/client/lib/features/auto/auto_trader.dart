@@ -76,9 +76,16 @@ int sellQty(String analysis, int qty) {
   return half && qty > 1 ? qty ~/ 2 : qty;
 }
 
-/// 시장 급락 알림: 코스피가 −autoMarketDropPct% 아래이고, 지난번 알림보다 1%p 더 빠졌을 때만 (계속 빠진 채면 다시 안 묻는다)
-bool marketDropped(double? kospiPct, double? lastAlertPct) =>
-    kospiPct != null && kospiPct <= -autoMarketDropPct && (lastAlertPct == null || kospiPct <= lastAlertPct - 1);
+/// 장 시작 뒤 autoOpeningWaitMin분(09:00~09:30)인지. 이때는 손절선 말고는 매도 판단을 묻지 않는다
+bool openingWait(DateTime now) {
+  final kst = toKst(now);
+  return kst.hour == 9 && kst.minute < autoOpeningWaitMin;
+}
+
+/// 시장 급락 알림: 코스피가 −autoMarketDropPct% 아래이고, 지난번 알림보다 1%p 더 빠졌을 때만 (계속 빠진 채면 다시 안 묻는다).
+/// 장 시작 30분에는 알리지 않는다 (2026-10-19: 09:05 알림만 남고 실제로는 안 물어서, 09:30 뒤 시장 급락 점검이 빠졌다)
+bool marketDropped(double? kospiPct, double? lastAlertPct, DateTime now) =>
+    !openingWait(now) && kospiPct != null && kospiPct <= -autoMarketDropPct && (lastAlertPct == null || kospiPct <= lastAlertPct - 1);
 
 /// 보유 종목 하나를 지금 어떻게 볼지. 모두 AI에게 묻고, AI가 팔자고 하고 검증 AI가 승인할 때만 판다.
 /// 'stop'(손절선, 한 번은 횟수 제한 없이 바로), 'drop'(급락, 바로), 'rise'(급등, 바로), 'market'(시장 급락, 바로),
@@ -91,8 +98,8 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   if (dropPct <= -autoStopLossPct && seen['stopped'] != true) return 'stop';
   if ((seen['n'] as int? ?? 0) >= autoMaxReviews) return null;
   // 장 시작 30분(09:00~09:30)은 손절선만 묻는다. 10/13 시초가 급락 때 판 종목이 모두 종가가 더 높았다 (공포성 매도)
+  if (openingWait(now)) return null;
   final kst = toKst(now);
-  if (kst.hour == 9 && kst.minute < autoOpeningWaitMin) return null;
   final last = DateTime.tryParse(seen['at'] as String? ?? '');
   final lastPct = (seen['pct'] as num?)?.toDouble();
   final waited = last == null || now.difference(last) >= const Duration(minutes: 10);
@@ -394,7 +401,10 @@ class AutoTrader extends ChangeNotifier {
         await _box.write('auto_exposure_note:$_today', '1'); // 하루 한 번만 알린다
         await _note('주식 비중이 총자산의 $autoMaxExposurePct%에 닿아 더 사지 않아요 (팔아서 비중이 내려가면 다시 삼)');
       }
-      if (bear && pick == picks.firstWhere((p) => !skip(p))) await _note('코스피가 20일 평균 아래(하락장)라 종목당 몫의 절반만 사요');
+      if (bear && await _box.read('auto_bear_note:$_today') == null) {
+        await _box.write('auto_bear_note:$_today', '1'); // 하루 한 번만 알린다 (2026-10-19: 매수 판단 때마다 3번씩 찍혔다)
+        await _note('코스피가 20일 평균 아래(하락장)라 종목당 몫의 절반만 사요');
+      }
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
@@ -442,7 +452,7 @@ class AutoTrader extends ChangeNotifier {
     } catch (_) {
       kospi = null;
     }
-    final marketDrop = marketDropped(kospi, ((reviews['_market'] as Map?)?['pct'] as num?)?.toDouble());
+    final marketDrop = marketDropped(kospi, ((reviews['_market'] as Map?)?['pct'] as num?)?.toDouble(), _now());
     if (marketDrop) {
       reviews['_market'] = {'pct': kospi, 'at': _now().toIso8601String()};
       await _box.write('auto_reviews:$_today', jsonEncode(reviews));

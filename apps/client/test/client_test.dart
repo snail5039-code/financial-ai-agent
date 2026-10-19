@@ -44,6 +44,12 @@ void main() {
     expect(finalResult({'approval_status': 'rejected'}), '거절');
     expect(finalResult({'policy_ok': false}), '정책 차단');
     expect(finalResult({'policy_ok': null}), '분석');
+    // 매수·매도 필터와 색
+    bool only(String label, Map<String, dynamic> item) => filters.firstWhere((f) => f.$1 == label).$2(item);
+    expect([only('매수', {'action': 'buy'}), only('매수', {'action': 'sell'}), only('매도', {'action': 'sell'}), only('매도', {'action': 'hold'})],
+        [true, false, true, false]);
+    expect([actionColor('buy'), actionColor('sell'), actionColor('watch')], [upRed, downBlue, mutedText]);
+    expect([historyQuery('매수'), historyQuery('매도'), historyQuery('체결')], ['?action=buy', '?action=sell', '']);
     expect(checkTarget('claim:0'), '근거 1');
     expect(checkTarget('freshness'), '자료 시점');
   });
@@ -574,12 +580,17 @@ void main() {
     expect(autoApproves('buy', 'user_judgement'), isFalse);
   });
 
-  test('시장 급락 알림: 코스피 −1.5% 아래, 지난 알림보다 1%p 더 빠질 때만', () {
-    expect(marketDropped(-3.65, null), isTrue); // 10/12 종가
-    expect(marketDropped(-1.2, null), isFalse);
-    expect(marketDropped(null, null), isFalse); // 지수를 못 받으면 종목별 판단만
-    expect(marketDropped(-2.0, -1.6), isFalse);
-    expect(marketDropped(-2.7, -1.6), isTrue);
+  test('시장 급락 알림: 코스피 −1.5% 아래, 지난 알림보다 1%p 더 빠질 때만, 장 시작 30분은 빼고', () {
+    final noon = DateTime.utc(2026, 10, 19, 3); // 월 12:00 KST
+    expect(marketDropped(-3.65, null, noon), isTrue); // 10/12 종가
+    expect(marketDropped(-1.2, null, noon), isFalse);
+    expect(marketDropped(null, null, noon), isFalse); // 지수를 못 받으면 종목별 판단만
+    expect(marketDropped(-2.0, -1.6, noon), isFalse);
+    expect(marketDropped(-2.7, -1.6, noon), isTrue);
+    // 10/19 09:05 코스피 −1.98%: 알림이 소진되지 않고 09:30 뒤에 처음 알린다
+    expect(marketDropped(-1.98, null, DateTime.utc(2026, 10, 19, 0, 5)), isFalse);
+    expect(marketDropped(-1.98, null, DateTime.utc(2026, 10, 19, 0, 30)), isTrue);
+    expect(sellReason(-2.0, {}, DateTime.utc(2026, 10, 19, 0, 30), marketDrop: true), 'market');
   });
 
   test('출처 제목 줄이기: 언론사는 괄호 속, 공시·재무는 앞부분', () {

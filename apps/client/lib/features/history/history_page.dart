@@ -18,12 +18,22 @@ String finalResult(Map<String, dynamic> item) {
 
 const filters = <(String, bool Function(Map<String, dynamic>))>[
   ('전체', _all),
+  ('매수', _buy),
+  ('매도', _sell),
   ('체결', _filled),
   ('거절', _rejected),
   ('반려', _verifierRejected),
   ('만료', _expired),
 ];
 bool _all(Map<String, dynamic> i) => true;
+bool _buy(Map<String, dynamic> i) => i['action'] == 'buy';
+bool _sell(Map<String, dynamic> i) => i['action'] == 'sell';
+
+/// 필터 이름 → 기록 요청 조건. 매수·매도만 서버가 거른다
+String historyQuery(String filter) => switch (filter) { '매수' => '?action=buy', '매도' => '?action=sell', _ => '' };
+
+/// 매수는 빨강, 매도는 파랑 (국내 증권사 관례). 보유·관찰은 회색
+Color actionColor(String? action) => switch (action) { 'buy' => upRed, 'sell' => downBlue, _ => mutedText };
 bool _filled(Map<String, dynamic> i) => i['order_status'] == 'filled' || i['order_status'] == 'partially_filled';
 bool _rejected(Map<String, dynamic> i) => i['approval_status'] == 'rejected';
 bool _verifierRejected(Map<String, dynamic> i) => i['verdict'] == 'reject';
@@ -52,7 +62,9 @@ class _HistoryPageState extends State<HistoryPage> {
   late Future<List<dynamic>> _items = _load();
   int _filter = 0;
 
-  Future<List<dynamic>> _load() async => await api.get('/api/history') as List;
+  /// 매수·매도는 서버에서 거른다 (서버는 최근 100건만 보내서, 하루 분석이 많으면 앞의 매수·매도가 잘린다)
+  Future<List<dynamic>> _load() async =>
+      await api.get('/api/history${historyQuery(filters[_filter].$1)}') as List;
 
   @override
   void didUpdateWidget(HistoryPage old) {
@@ -74,7 +86,10 @@ class _HistoryPageState extends State<HistoryPage> {
                   child: ChoiceChip(
                     label: Text(filters[i].$1),
                     selected: _filter == i,
-                    onSelected: (_) => setState(() => _filter = i),
+                    onSelected: (_) => setState(() {
+                      _filter = i;
+                      _items = _load();
+                    }),
                   ),
                 ),
             ]),
@@ -100,8 +115,17 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _tile(Map<String, dynamic> item) {
     final qty = item['qty'] == null ? '' : ' ${comma(item['qty'] as int)}주';
+    final action = item['action'] as String?;
+    final color = actionColor(action);
     return ListTile(
-      title: Text('${item['stock_name']}$qty ${actionLabels[item['action']] ?? item['action']}'),
+      leading: Container(
+        width: 44,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+        child: Text(actionLabels[action] ?? '$action', textAlign: TextAlign.center,
+            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+      ),
+      title: Text('${item['stock_name']}$qty'),
       subtitle: Row(children: [
         if (item['verdict'] != null) VerdictTag(item['verdict'] as String),
         const SizedBox(width: 8),
