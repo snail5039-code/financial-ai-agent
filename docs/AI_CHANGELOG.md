@@ -32,10 +32,26 @@
 | `MOCK_ORDER_LIMITS` | 끔 | `apps/api/app/config.py` (.env) | 모의에도 금액 한도 적용할지 |
 | `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7,14 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집(14시는 전 거래일 종가), 아침 브리핑 자동 시각 |
 | `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
+| `HOT_RANK` / `HOT_MIN_RETURN` | 상위 10% / 5일 +10% | `apps/api/app/functions/orders.py` | 둘 다 맞아야 "급등 직후 매수" 경고 (급등주를 사는 성향·습관이면 확인 필요 → 자동 승인 안 됨) |
+| `RISK_TITLE_PATTERN` | 관리종목·상장폐지·상장적격성·투자유의·투자주의환기·횡령·배임·불성실공시 | `apps/api/app/functions/suitability.py` | 1년 안에 이 공시가 있으면 위험 1등급. 모의투자는 1등급도 AI가 매수 판단, 실전은 공격투자형만 |
 | 하락 중 매수 차단 | 5분 저가 3번 연속 하락 + VWAP 아래 | `apps/api/app/agents/analysis.py` `falling_now` | 자동매매 매수를 '관찰'만 허용 |
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/19 장 마감 뒤 (7일차, [리포트](reports/live-20261019.md))
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 09:05 코스피 −1.98%에 시장 급락 알림을 남겼는데 장 시작 30분 규칙으로 실제론 안 물음. 알림이 소진돼 09:30 뒤 시장 급락 점검이 빠짐 | 장 시작 30분엔 시장 급락 알림을 쓰지 않는다 | `auto_trader.dart` `openingWait`·`marketDropped(now)` | `client_test` 시장 급락 알림 |
+| "하락장이라 절반만 사요"가 매수 판단 때마다 3번씩 기록 | 하루 한 번 (`auto_bear_note:날짜`) | `auto_trader.dart` `_buy` | — (기록 문구) |
+| AI·검증 AI가 승인한 매수 11건이 "급등 직후" 확인으로 승인 대기 만료. 코스피 5일 −12.6%라 5일 +0.2%(대주전자재료)도 상위 10% | 상위 10%이면서 5일 **+10% 이상**일 때만 급등 (사용자 결정) | 서버 `functions/orders.py` `HOT_MIN_RETURN` | `test_hot_stock_warning_and_extra_confirm` |
+| 자동매매가 산 기록이 "급등 경고를 받고도 산 습관"(`hot_buys`)으로 잡혀 자동매매 매수마다 확인 | 처리안에 `auto_origin`을 남기고 내 투자 습관 집계에서 뺀다. 표시 없는 예전 기록은 30일 지나야 빠짐 | `agents/order.py` 처리안, `functions/behavior.py` | `test_behavior_habits_add_caution_only` |
+| 횡령·배임 혐의, 불성실공시법인 지정예고 뒤 LG에너지솔루션을 자동매매가 삼 | 위험 1등급 공시에 횡령·배임·불성실공시 추가. "미지정"은 제외, 지정예고 뒤 미지정이면 풀림 (분석 대상 1등급 1 → 8) | `functions/suitability.py` `RISK_TITLE_PATTERN`·`EXCLUDE`, `collect.py` `refresh_risk_grade` | `test_embezzlement_and_unfaithful_disclosure_are_grade_1` |
+| 1등급이면 적극투자형은 매수 제안 자체가 막혀 AI가 악재를 잘 판단하는지 확인할 수 없음 | **모의투자는 1등급을 2등급처럼** 보고 AI가 판단 (사용자 결정). 1등급 근거에 "감수할 근거가 없으면 관찰"을 붙여 투자·검증 AI에게. 실전은 그대로 막음 | `suitability.py` `buy_block_reason(mock)`, `analysis.py` `grade_text`, `briefing.py` | `test_mock_treats_grade_1_like_grade_2`, `test_grade_1_stock_is_judged_by_ai_in_mock` |
+
+조절 값: `HOT_MIN_RETURN` 10% (`functions/orders.py`), 위험 1등급 공시 제목 `RISK_TITLE_PATTERN` (`functions/suitability.py`).
+같은 날 앱 화면도 바꿨다: 기록 매수·매도 필터(서버 `GET /api/history?action=`), 자산 탭 총자산 그래프(`GET /api/equity`, 폰이 정규장에만 총자산을 올림).
 
 ## 10/18 주말 (수량 규칙, 1년 백테스트로)
 
