@@ -394,6 +394,11 @@ def test_approval_lists_and_history_timeline(client, custom_user, ai) -> None:
     assert client.get("/api/history?action=sell", headers=headers).json() == []
     assert [i["proposal_id"] for i in client.get("/api/history?action=trade", headers=headers).json()] == [item["proposal_id"]]
     assert client.get("/api/history?action=drop", headers=headers).status_code == 422
+    # 달력에서 고른 날 (한국 날짜): 오늘이면 그 기록, 다른 날이면 없음
+    today = datetime.now(KST).date()
+    assert [i["proposal_id"] for i in client.get(f"/api/history?day={today}&action=trade", headers=headers).json()] == [item["proposal_id"]]
+    assert client.get(f"/api/history?day={today - timedelta(days=1)}", headers=headers).json() == []
+    assert client.get("/api/history?day=10-19", headers=headers).status_code == 422
     assert item["policy_ok"] is True
     [proposal] = client.get("/api/agents/proposals", headers=headers).json()
     assert (proposal["proposal_id"], proposal["action"], proposal["verdict"]) == (item["proposal_id"], "buy", "approve")

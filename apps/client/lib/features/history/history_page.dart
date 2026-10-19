@@ -49,8 +49,20 @@ bool _buy(Map<String, dynamic> i) => i['action'] == 'buy';
 bool _sell(Map<String, dynamic> i) => i['action'] == 'sell';
 
 /// 필터 이름 → 기록 요청 조건. 매수·매도만 서버가 거른다
-String historyQuery(String filter) =>
-    switch (filter) { '매수·매도' => '?action=trade', '매수' => '?action=buy', '매도' => '?action=sell', _ => '' };
+/// day: 달력에서 고른 날 "2026-10-19" (서버가 그날 것만 300건까지 보낸다)
+String historyQuery(String filter, {String? day}) {
+  final action = switch (filter) { '매수·매도' => 'trade', '매수' => 'buy', '매도' => 'sell', _ => null };
+  final params = [if (action != null) 'action=$action', if (day != null) 'day=$day'];
+  return params.isEmpty ? '' : '?${params.join('&')}';
+}
+
+/// 날짜 머리글 요약 "매수 2 · 매도 1 · 판단 72"
+String daySummary(List<Map<String, dynamic>> items) {
+  int count(bool Function(Map<String, dynamic>) test) => items.where(test).length;
+  final buys = count((i) => i['action'] == 'buy'), sells = count((i) => i['action'] == 'sell');
+  final checks = count((i) => i['action'] == 'hold' || i['action'] == 'watch');
+  return [if (buys > 0) '매수 $buys', if (sells > 0) '매도 $sells', if (checks > 0) '판단 $checks'].join(' · ');
+}
 
 /// 매수는 빨강, 매도는 파랑 (국내 증권사 관례). 보유·관찰은 회색
 Color actionColor(String? action) => switch (action) { 'buy' => upRed, 'sell' => downBlue, _ => mutedText };
@@ -81,10 +93,44 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   late Future<List<dynamic>> _items = _load();
   int _filter = 0;
+  DateTime? _day; // 달력에서 고른 날 (한국 날짜). null이면 최근
+  final _toggled = <String>{}; // 기본(맨 위 날짜만 펼침)과 다르게 연 날·접은 날
 
-  /// 매수·매도는 서버에서 거른다 (서버는 최근 100건만 보내서, 하루 분석이 많으면 앞의 매수·매도가 잘린다)
+  String? get _dayParam => _day?.toIso8601String().substring(0, 10);
+
+  /// 매수·매도·날짜는 서버에서 거른다 (서버는 최근 100건만 보내서, 하루 분석이 많으면 앞의 매수·매도가 잘린다)
   Future<List<dynamic>> _load() async =>
-      await api.get('/api/history${historyQuery(filters[_filter].$1)}') as List;
+      await api.get('/api/history${historyQuery(filters[_filter].$1, day: _dayParam)}') as List;
+
+  Future<void> _pickDay() async {
+    final today = toKst(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day ?? DateTime(today.year, today.month, today.day),
+      firstDate: DateTime(2026, 10, 1),
+      lastDate: DateTime(today.year, today.month, today.day),
+      helpText: '기록 볼 날짜',
+    );
+    if (picked != null) setState(() { _day = picked; _toggled.clear(); _items = _load(); });
+  }
+
+  Widget _dayChip() {
+    const icon = Icon(Icons.calendar_month, size: 18);
+    final day = _day;
+    if (day == null) return ActionChip(avatar: icon, label: const Text('날짜'), onPressed: _pickDay);
+    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    return InputChip(
+      avatar: icon,
+      selected: true,
+      label: Text('${day.month}/${day.day} (${weekdays[day.weekday - 1]})'),
+      onPressed: _pickDay,
+      onDeleted: () => setState(() { _day = null; _items = _load(); }),
+    );
+  }
+
+  bool _open(int index, String day) => (index == 0) != _toggled.contains(day);
+
+  void _toggle(String day) => setState(() { if (!_toggled.remove(day)) _toggled.add(day); });
 
   @override
   void didUpdateWidget(HistoryPage old) {
@@ -100,6 +146,7 @@ class _HistoryPageState extends State<HistoryPage> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
+              Padding(padding: const EdgeInsets.only(right: 8), child: _dayChip()),
               for (var i = 0; i < filters.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -126,13 +173,23 @@ class _HistoryPageState extends State<HistoryPage> {
                   child: items.isEmpty
                       ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('기록이 없어요')))])
                       : ListView(children: [
-                          for (final (day, shown, quiet) in groupByDay(items)) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-                              child: Text(day, style: const TextStyle(fontWeight: FontWeight.w900, color: mutedText)),
+                          for (final (i, (day, shown, quiet)) in groupByDay(items).indexed) ...[
+                            // 날짜 머리글을 누르면 그날을 접고 편다. 처음엔 맨 위 날짜만 펼친다 (2026-10-20 사용자 요청)
+                            InkWell(
+                              onTap: () => _toggle(day),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 12, 16, 8),
+                                child: Row(children: [
+                                  Icon(_open(i, day) ? Icons.expand_more : Icons.chevron_right, color: mutedText),
+                                  const SizedBox(width: 4),
+                                  Text(day, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                  const Spacer(),
+                                  Text(daySummary([...shown, ...quiet]), style: const TextStyle(fontSize: 12, color: mutedText)),
+                                ]),
+                              ),
                             ),
-                            for (final item in shown) _tile(item),
-                            if (quiet.isNotEmpty)
+                            if (_open(i, day)) for (final item in shown) _tile(item),
+                            if (_open(i, day) && quiet.isNotEmpty)
                               ExpansionTile(
                                 shape: const Border(),
                                 leading: const Icon(Icons.unfold_more, color: mutedText),
@@ -142,6 +199,7 @@ class _HistoryPageState extends State<HistoryPage> {
                                     style: const TextStyle(fontSize: 12)),
                                 children: [for (final item in quiet) _tile(item)],
                               ),
+                            const Divider(height: 1),
                           ],
                         ]),
                 );

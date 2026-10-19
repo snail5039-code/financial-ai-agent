@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api/api.dart';
 import 'common/common.dart';
@@ -35,6 +36,10 @@ class InvestApp extends StatelessWidget {
       title: '투자 에이전트',
       navigatorKey: navigatorKey,
       theme: appTheme(),
+      // 기록 탭 달력 등 기본 화면 글자를 한국어로
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: const _Start(),
     );
   }

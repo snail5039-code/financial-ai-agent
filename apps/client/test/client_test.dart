@@ -55,6 +55,10 @@ void main() {
     expect([actionColor('buy'), actionColor('sell'), actionColor('watch')], [upRed, downBlue, mutedText]);
     expect([historyQuery('매수·매도'), historyQuery('매수'), historyQuery('매도'), historyQuery('체결')], ['?action=trade', '?action=buy', '?action=sell', '']);
     expect(filters.first.$1, '매수·매도'); // 처음 보이는 필터 (보유 판단에 묻히지 않게)
+    expect(historyQuery('매수·매도', day: '2026-10-19'), '?action=trade&day=2026-10-19'); // 달력에서 고른 날
+    expect(historyQuery('전체', day: '2026-10-19'), '?day=2026-10-19');
+    expect(daySummary([{'action': 'buy'}, {'action': 'sell'}, {'action': 'buy'}, {'action': 'hold'}, {'action': 'watch'}]), '매수 2 · 매도 1 · 판단 2');
+    expect(daySummary([]), '');
   });
 
   test('총자산: 현금 + 수량 × 현재가(모르면 매입가), 그래프 목록', () {

@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations: # 달력(날짜 고르기)을 한국어로 (2026-10-20)
+    sdk: flutter
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
   local_auth: ^3.0.2
