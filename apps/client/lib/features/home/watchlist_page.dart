@@ -7,7 +7,9 @@ import '../../api/api.dart';
 import '../../common/common.dart';
 
 class WatchlistPage extends StatefulWidget {
-  const WatchlistPage({super.key});
+  const WatchlistPage({super.key, this.onOpen});
+  /// 채팅 탭 종목 검색에서 열면: 줄을 누르면 종목 대화방, 별만 관심 종목 넣고 빼기
+  final void Function(String code, String name)? onOpen;
 
   @override
   State<WatchlistPage> createState() => _WatchlistPageState();
@@ -52,7 +54,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
   Widget build(BuildContext context) {
     final stocks = _stocks;
     return Scaffold(
-      appBar: topBar('관심 종목'),
+      appBar: topBar(widget.onOpen == null ? '관심 종목' : '종목 검색'),
       body: _error != null
           ? ErrorRetry(_error!, _load)
           : stocks == null
@@ -61,8 +63,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                     child: TextField(
+                      autofocus: widget.onOpen != null,
                       decoration: InputDecoration(
-                        hintText: '종목 이름 찾기',
+                        hintText: '종목 이름 또는 코드',
                         prefixIcon: const Icon(Icons.search),
                         filled: true,
                         fillColor: softGray,
@@ -77,13 +80,19 @@ class _WatchlistPageState extends State<WatchlistPage> {
                   ),
                   Expanded(
                     child: ListView(children: [
-                      for (final stock in stocks.where((s) => _filter.isEmpty || (s['name'] as String).contains(_filter)))
+                      for (final stock in stocks.where((s) => _filter.isEmpty || (s['name'] as String).toLowerCase().contains(_filter.toLowerCase()) || (s['code'] as String).startsWith(_filter)))
                         ListTile(
                           title: Text(stock['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Text('${stock['market'] == 'KOSDAQ' ? '코스닥' : '코스피'} · ${stock['code']}'),
-                          trailing: Icon(stock['watching'] == true ? Icons.star : Icons.star_border,
-                              color: stock['watching'] == true ? const Color(0xFFFFB020) : mutedText),
-                          onTap: () => _toggle(stock),
+                          trailing: IconButton(
+                            tooltip: '관심 종목',
+                            icon: Icon(stock['watching'] == true ? Icons.star : Icons.star_border,
+                                color: stock['watching'] == true ? const Color(0xFFFFB020) : mutedText),
+                            onPressed: () => _toggle(stock),
+                          ),
+                          onTap: widget.onOpen == null
+                              ? () => _toggle(stock)
+                              : () => widget.onOpen!(stock['code'] as String, stock['name'] as String),
                         ),
                     ]),
                   ),

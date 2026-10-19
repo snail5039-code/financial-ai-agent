@@ -2,6 +2,7 @@
 // 매수 제안은 투자 AI → 검증 AI를 거친 것이다. "주문하기"는 평소 주문 흐름(처리안 → 승인 → 폰 실행)을 시작한다.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../common/common.dart';
 import '../history/history_page.dart';
@@ -191,15 +192,8 @@ class CloseSummaryPage extends StatelessWidget {
         ]),
         title('오늘 주문'),
         if (orders.isEmpty) card([const Text('오늘은 주문이 없었어요', style: TextStyle(color: mutedText))]),
-        for (final o in orders)
-          card([
-            Text('${o['stock_name']} ${comma(o['qty'] as int)}주 ${sideLabels[o['side']]} · ${won(o['price'] as int)}',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('${orderLabels[o['status']] ?? o['status']}'
-                '${(o['filled_qty'] as int? ?? 0) > 0 ? ' ${comma(o['filled_qty'] as int)}주 × ${won(o['filled_price'] as int)}' : ''}'
-                ' · ${hhmm(o['created_at'] as String)}'),
-            if (o['broker_order_no'] != null) SourceText('주문번호 ${o['broker_order_no']}'),
-          ]),
+        // 2026-10-20 사용자 요청: 주문 한 건 = 한 줄 (시각 · 종목 · 매수/매도 · 수량 × 체결가)
+        if (orders.isNotEmpty) card([for (final o in orders) _orderRow(o)]),
         if (blocked.isNotEmpty) ...[
           title('규칙에 걸린 요청'),
           for (final b in blocked)
@@ -209,18 +203,56 @@ class CloseSummaryPage extends StatelessWidget {
             ]),
         ],
         title('오늘 공시 (보유·관심)'),
+        const SourceText('DART 공시 · 누르면 원문 주소를 복사해요'),
+        const SizedBox(height: 6),
         if (news.isEmpty) card([const Text('오늘 나온 공시가 없어요', style: TextStyle(color: mutedText))]),
-        for (final n in news)
-          card([
-            Text('[${n['why']}] ${n['stock_name']} · ${n['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            SourceText('DART 공시 · ${n['filed_at']} · ${n['url']}'),
-          ]),
+        if (news.isNotEmpty) card([for (final n in news) _newsRow(context, n)]),
         const SizedBox(height: 16),
         const SourceText('서버에 남은 주문·검사 기록으로 만든 요약이에요. 평가손익은 장 마감 시세가 서버에 없어 자산 탭에서 확인해 주세요.'),
         if (review != null) ..._review(review, title, card),
       ]),
     );
   }
+
+  static Widget _orderRow(Map<String, dynamic> o) {
+    final filled = (o['filled_qty'] as int? ?? 0) > 0;
+    final qty = filled ? o['filled_qty'] as int : o['qty'] as int;
+    final price = filled ? o['filled_price'] as int : o['price'] as int;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        SizedBox(width: 48, child: Text(hhmm(o['created_at'] as String), style: const TextStyle(color: mutedText))),
+        Expanded(child: Text('${o['stock_name']}', maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold))),
+        Tag(sideLabels[o['side']] ?? '${o['side']}', o['side'] == 'buy' ? upRed : downBlue),
+        const SizedBox(width: 8),
+        Text('${comma(qty)}주 × ${comma(price)}'),
+        if (!filled) Text(' ${orderLabels[o['status']] ?? o['status']}', style: const TextStyle(color: coachOrange)),
+      ]),
+    );
+  }
+
+  /// 공시 한 줄: [보유] 종목 · 제목 (두 줄까지). 누르면 원문 주소를 복사한다
+  static Widget _newsRow(BuildContext context, Map<String, dynamic> n) => InkWell(
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: '${n['url']}'));
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('공시 원문 주소를 복사했어요')));
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Tag('${n['why']}', n['why'] == '보유' ? brandBlue : const Color(0xFFB07800)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text.rich(TextSpan(children: [
+                TextSpan(text: '${n['stock_name']} ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                TextSpan(text: '${n['title']}'),
+              ]), maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            const Icon(Icons.copy, size: 16, color: mutedText),
+          ]),
+        ),
+      );
 
   /// AI 회고 · 내일 계획 (2-4b): 투자 AI가 쓰고 검증 AI가 원문을 다시 확인한 것. 주문은 만들지 않는다
   List<Widget> _review(Map<String, dynamic> review, Widget Function(String) title, Widget Function(List<Widget>) card) {

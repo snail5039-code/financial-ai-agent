@@ -11,11 +11,18 @@ import '../approvals/approvals_page.dart';
 import '../chat/chat_page.dart';
 import '../chat/conversation.dart';
 import '../history/history_page.dart';
+import '../../secure/key_store.dart';
 import '../settings/broker_page.dart';
 import 'agents_page.dart';
 import 'briefing_page.dart';
 import 'overview.dart';
 import 'watchlist_page.dart';
+
+/// 배지는 그 방을 마지막으로 연 뒤에 온 것만 센다 (2026-10-20 사용자 요청: 들어가서 보면 숫자가 없어지게)
+int unseenCount(Iterable<String> createdAt, String? seenIso) {
+  final seen = seenIso == null ? null : DateTime.parse(seenIso);
+  return createdAt.where((t) => seen == null || DateTime.parse(t).isAfter(seen)).length;
+}
 
 class RoomsPage extends StatefulWidget {
   const RoomsPage({super.key, required this.conversation, required this.active, required this.onOpenChat,
@@ -33,6 +40,21 @@ class RoomsPage extends StatefulWidget {
 class _RoomsPageState extends State<RoomsPage> {
   late Future<Overview> _data = loadOverview();
   bool _wasBusy = false;
+  final _seen = <String, String>{}; // 방 → 마지막으로 연 시각(브리핑·처리안) 또는 본 처리안 ID(투자 비서). 폰에만 둔다
+
+  Future<void> _loadSeen() async {
+    for (final room in const ['briefing', 'approvals', 'chat']) {
+      final value = await secureBox.read('seen:$room');
+      if (value != null) _seen[room] = value;
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _markSeen(String room, [String? value]) {
+    final v = value ?? DateTime.now().toUtc().toIso8601String();
+    setState(() => _seen[room] = v);
+    secureBox.write('seen:$room', v);
+  }
 
   void _reload() => setState(() { _data = loadOverview(); });
 
@@ -47,6 +69,7 @@ class _RoomsPageState extends State<RoomsPage> {
   void initState() {
     super.initState();
     widget.conversation.addListener(_onConversation);
+    _loadSeen();
   }
 
   @override
@@ -93,6 +116,8 @@ class _RoomsPageState extends State<RoomsPage> {
     final current = widget.conversation.waiting?['approval_id'];
     final approvals = o.approvals.where((a) => a['approval_id'] != current).toList();
     final waiting = approvals.length + o.executions.length;
+    final unseenApprovals = unseenCount([for (final a in [...approvals, ...o.executions]) a['created_at'] as String], _seen['approvals']);
+    final heldCodes = {if (balance != null) for (final h in holdingsOf(balance)) h['stock_code']};
     final blocked = o.history.where((i) => i['policy_ok'] == false).firstOrNull;
     // 종목별 최근 한 건 (기록은 최신순)
     final byStock = <String, Map<String, dynamic>>{};
@@ -101,6 +126,7 @@ class _RoomsPageState extends State<RoomsPage> {
     }
 
     return ListView(padding: const EdgeInsets.symmetric(vertical: 4), children: [
+      _searchBar(),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: RingsCard(overview: o, onTap: widget.onOpenToday),
@@ -117,8 +143,11 @@ class _RoomsPageState extends State<RoomsPage> {
             title: '아침 브리핑',
             preview: briefingPreview(o.briefing!, today: today),
             time: hhmm(o.briefing!['created_at'] as String),
-            badge: today ? picks : 0,
-            onTap: () => _push(BriefingPage(o.briefing!, onAsk: widget.onAsk)),
+            badge: today && unseenCount([o.briefing!['created_at'] as String], _seen['briefing']) > 0 ? picks : 0,
+            onTap: () {
+              _markSeen('briefing');
+              _push(BriefingPage(o.briefing!, onAsk: widget.onAsk));
+            },
           );
         }(),
       if (o.close != null)
@@ -141,9 +170,12 @@ class _RoomsPageState extends State<RoomsPage> {
             preview: proposal != null
                 ? '${_proposalText(proposal)} 제안이 왔어요'
                 : last == null ? '무엇이든 물어보세요. 예: 기아 2주 사줘' : last.text.split('\n').first,
-            badge: proposal != null ? 1 : 0,
+            badge: proposal != null && '${waiting!['approval_id']}' != _seen['chat'] ? 1 : 0,
             highlight: true,
-            onTap: widget.onOpenChat,
+            onTap: () {
+              if (proposal != null) _markSeen('chat', '${waiting!['approval_id']}');
+              widget.onOpenChat();
+            },
           );
         },
       ),
@@ -154,8 +186,12 @@ class _RoomsPageState extends State<RoomsPage> {
           preview: approvals.isNotEmpty
               ? '${_cardText(approvals.first)} 제안이 왔어요 · 승인을 기다려요'
               : '${_cardText(o.executions.first)} · ${kIsWeb ? '폰 앱에서 실행해 주세요' : '실행을 기다려요'}',
-          badge: waiting,
-          onTap: () => _push(const ApprovalsPage(active: true)),
+          badge: unseenApprovals,
+          dot: unseenApprovals == 0, // 다 봤어도 승인·실행할 것이 남아 있으면 점만
+          onTap: () {
+            _markSeen('approvals');
+            _push(const ApprovalsPage(active: true));
+          },
         ),
       // 두 AI가 한 일을 따로 보는 방 (마지막 기록을 미리보기로)
       _room(
@@ -188,7 +224,8 @@ class _RoomsPageState extends State<RoomsPage> {
         time: blocked == null ? null : ymdHm(blocked['created_at'] as String),
         onTap: blocked == null ? null : () => _push(HistoryDetailPage(blocked['proposal_id'] as String, blocked['stock_name'] as String)),
       ),
-      for (final item in byStock.values.take(10))
+      // 보유 종목은 위 동그라미로 들어가므로, 보유하지 않은 종목만 최근 3개
+      for (final item in byStock.values.where((i) => !heldCodes.contains(i['stock_code'])).take(3))
         _room(
           avatar: RoomAvatar(text: shortName(item['stock_name'] as String), color: const Color(0xFFFFF5F4), foreground: const Color(0xFFA3241B)),
           title: item['stock_name'] as String,
@@ -264,6 +301,27 @@ class _RoomsPageState extends State<RoomsPage> {
     );
   }
 
+  /// 맨 위 종목 검색 (누르면 검색 화면, 종목을 고르면 그 종목 대화방)
+  Widget _searchBar() => Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+        child: Material(
+          color: softGray,
+          borderRadius: BorderRadius.circular(24),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: () => _push(WatchlistPage(onOpen: _openStockRoom)),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(children: [
+                Icon(Icons.search, color: mutedText),
+                SizedBox(width: 10),
+                Text('종목 검색', style: TextStyle(color: mutedText, fontSize: 15)),
+              ]),
+            ),
+          ),
+        ),
+      );
+
   Widget _connectHint() => ListTile(
         leading: const Icon(Icons.link),
         title: Text(kIsWeb ? '폰 앱을 열면 잔고가 여기에 보여요' : '증권사를 연결하면 잔고를 볼 수 있어요'),
@@ -277,6 +335,7 @@ class _RoomsPageState extends State<RoomsPage> {
     required String preview,
     String? time,
     int badge = 0,
+    bool dot = false,
     bool highlight = false,
     VoidCallback? onTap,
   }) =>
@@ -285,7 +344,7 @@ class _RoomsPageState extends State<RoomsPage> {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
             child: Row(children: [
               avatar,
               const SizedBox(width: 12),
@@ -301,7 +360,11 @@ class _RoomsPageState extends State<RoomsPage> {
                       child: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 14, color: Color(0xFF3A4148))),
                     ),
-                    if (badge > 0) ...[const SizedBox(width: 8), CountBadge(badge)],
+                    if (badge > 0) ...[const SizedBox(width: 8), CountBadge(badge)]
+                    else if (dot) ...[
+                      const SizedBox(width: 8),
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: upRed, shape: BoxShape.circle)),
+                    ],
                   ]),
                 ]),
               ),

@@ -16,6 +16,8 @@ import 'package:invest_client/features/auto/reservations.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/features/home/equity_chart.dart';
+import 'package:invest_client/features/home/rooms_page.dart';
+import 'package:invest_client/features/settings/settings_page.dart';
 import 'package:invest_client/secure/key_store.dart';
 
 Map<String, dynamic> order(String side, int qty, int price, {String key = 'k1', int? approved}) => {
@@ -661,5 +663,21 @@ void main() {
     expect(jsonDecode((await box.read('auto_plan:2026-10-12'))!), {'budget': 0, 'ai_sell': true});
     await trader.cancelPlan();
     expect(trader.needsPlan, isTrue);
+  });
+
+  test('배지는 방을 마지막으로 연 뒤에 온 것만 센다', () {
+    const items = ['2026-10-20T08:20:00+09:00', '2026-10-20T09:10:00+09:00'];
+    expect(unseenCount(items, null), 2); // 한 번도 안 열었으면 전부
+    expect(unseenCount(items, '2026-10-19T23:30:00Z'), 1); // 08:30 KST에 열었으면 09:10 것만
+    expect(unseenCount(items, '2026-10-20T01:00:00Z'), 0); // 10:00 KST에 열었으면 0
+  });
+
+  test('더보기 한 줄 요약', () {
+    expect(policySummary({'max_order_krw': 2000000, 'max_daily_krw': 5000000, 'max_weight_pct': 40.0}),
+        '1회 200만원 · 하루 500만원 · 한 종목 40%');
+    expect(policySummary({'max_order_krw': 1234567, 'max_daily_krw': 5000000, 'max_weight_pct': 25}),
+        '1회 1,234,567원 · 하루 500만원 · 한 종목 25%');
+    expect(profileSummary({'mode': 'custom', 'label': '적극투자형', 'risk_level': 4}), '맞춤 · 적극투자형 4단계');
+    expect(profileSummary({'mode': 'general', 'expired': false}), '일반 모드');
   });
 }
