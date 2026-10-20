@@ -1,5 +1,5 @@
 // 종목 탭: 주제별(반도체, 2차전지 …) 분석 대상 종목. 주제는 직접 나눈 것이고 가격은 전 거래일 종가 (GET /api/themes).
-// 종목을 누르면 그 종목 대화방.
+// 맨 위 검색창에 이름·코드를 넣으면 주제와 상관없이 찾는다. 종목을 누르면 그 종목 대화방.
 
 import 'package:flutter/material.dart';
 
@@ -12,6 +12,16 @@ import 'equity_chart.dart';
 /// 등락률 표시: +1.23% / -0.10% / 미확인
 String changeText(num? pct) => pct == null ? '미확인' : '${pct > 0 ? '+' : ''}${pct.toStringAsFixed(2)}%';
 
+/// 검색: 이름(대소문자 무시) 또는 코드 앞자리가 맞는 종목. 주제 이름을 같이 붙인다
+List<(String, Map<String, dynamic>)> searchThemes(List<Map<String, dynamic>> themes, String query) {
+  final q = query.trim().toLowerCase();
+  return [
+    for (final t in themes)
+      for (final s in (t['stocks'] as List).cast<Map<String, dynamic>>())
+        if ((s['name'] as String).toLowerCase().contains(q) || (s['code'] as String).startsWith(q)) (t['theme'] as String, s),
+  ];
+}
+
 class ThemesPage extends StatefulWidget {
   const ThemesPage({super.key});
 
@@ -22,6 +32,7 @@ class ThemesPage extends StatefulWidget {
 class _ThemesPageState extends State<ThemesPage> {
   late Future<List<Map<String, dynamic>>> _themes = _load();
   int _picked = 0;
+  String _query = '';
 
   Future<List<Map<String, dynamic>>> _load() async => (await api.get('/api/themes') as List).cast<Map<String, dynamic>>();
 
@@ -46,12 +57,30 @@ class _ThemesPageState extends State<ThemesPage> {
             final themes = snapshot.data;
             if (themes == null) return const Center(child: CircularProgressIndicator());
             if (themes.isEmpty) return const Center(child: Text('분석 대상 종목이 아직 없어요', style: TextStyle(color: mutedText)));
+            final searching = _query.trim().isNotEmpty;
             final picked = themes[_picked.clamp(0, themes.length - 1)];
-            final stocks = (picked['stocks'] as List).cast<Map<String, dynamic>>();
+            final rows = searching
+                ? searchThemes(themes, _query)
+                : [for (final s in (picked['stocks'] as List).cast<Map<String, dynamic>>()) (picked['theme'] as String, s)];
+            final stocks = [for (final (_, s) in rows) s];
             final day = stocks.map((s) => s['trade_date'] as String?).whereType<String>().fold<String?>(
                 null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
             return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: '종목 이름 또는 코드',
+                    prefixIcon: const Icon(Icons.search),
+                    isDense: true,
+                    filled: true,
+                    fillColor: softGray,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (text) => setState(() => _query = text),
+                ),
+              ),
+              if (!searching) SizedBox(
                 height: 48,
                 child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: [
                   for (final (i, theme) in themes.indexed)
@@ -78,10 +107,15 @@ class _ThemesPageState extends State<ThemesPage> {
                     await next;
                   },
                   child: ListView(children: [
-                    for (final s in stocks)
+                    if (searching && rows.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: Text('분석 대상 150종목 중에 없어요', style: TextStyle(color: mutedText))),
+                      ),
+                    for (final (theme, s) in rows)
                       ListTile(
                         title: Text(s['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${s['market'] == 'KOSDAQ' ? '코스닥' : '코스피'} · ${s['code']}'),
+                        subtitle: Text('${s['market'] == 'KOSDAQ' ? '코스닥' : '코스피'} · ${s['code']}${searching ? ' · $theme' : ''}'),
                         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                           Text(s['close'] == null ? '미확인' : '${comma(s['close'] as int)}원', style: const TextStyle(fontWeight: FontWeight.bold)),
                           Text(changeText(s['change_pct'] as num?),

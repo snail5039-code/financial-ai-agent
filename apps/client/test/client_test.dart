@@ -78,6 +78,13 @@ void main() {
     expect(equitySeries(data, daily: true), [('10/16', 9428986), ('10/19', 9416713)]);
     expect(equitySeries(data, daily: false), [('09:54', 9322536)]);
     expect([changeText(1.234), changeText(-0.1), changeText(0), changeText(null)], ['+1.23%', '-0.10%', '0.00%', '미확인']); // 종목 탭
+    final themes = [
+      {'theme': '반도체', 'stocks': [{'code': '005930', 'name': '삼성전자'}, {'code': '000660', 'name': 'SK하이닉스'}]},
+      {'theme': '2차전지', 'stocks': [{'code': '006400', 'name': '삼성SDI'}]},
+    ];
+    expect([for (final (t, s) in searchThemes(themes, '삼성')) '$t ${s['name']}'], ['반도체 삼성전자', '2차전지 삼성SDI']);
+    expect([for (final (_, s) in searchThemes(themes, 'sk하')) s['code']], ['000660']); // 영문 대소문자 무시
+    expect([for (final (_, s) in searchThemes(themes, '00066')) s['code']], ['000660']); // 코드 앞자리
     expect(checkTarget('claim:0'), '근거 1');
     expect(checkTarget('freshness'), '자료 시점');
   });

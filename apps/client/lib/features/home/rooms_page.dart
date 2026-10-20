@@ -126,7 +126,6 @@ class _RoomsPageState extends State<RoomsPage> {
     }
 
     return ListView(padding: const EdgeInsets.symmetric(vertical: 4), children: [
-      _searchBar(),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: RingsCard(overview: o, onTap: widget.onOpenToday),
@@ -300,27 +299,6 @@ class _RoomsPageState extends State<RoomsPage> {
       ]),
     );
   }
-
-  /// 맨 위 종목 검색 (누르면 검색 화면, 종목을 고르면 그 종목 대화방)
-  Widget _searchBar() => Padding(
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-        child: Material(
-          color: softGray,
-          borderRadius: BorderRadius.circular(24),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(24),
-            onTap: () => _push(WatchlistPage(onOpen: _openStockRoom)),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(children: [
-                Icon(Icons.search, color: mutedText),
-                SizedBox(width: 10),
-                Text('종목 검색', style: TextStyle(color: mutedText, fontSize: 15)),
-              ]),
-            ),
-          ),
-        ),
-      );
 
   Widget _connectHint() => ListTile(
         leading: const Icon(Icons.link),
