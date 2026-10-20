@@ -15,6 +15,7 @@ TEST_DB = "invest_test"
 # 개발용 .env의 장 시간 고정(MARKET_CLOCK)이 테스트에 섞이지 않게 한다. 테스트는 clock.now를 직접 바꾼다
 config.MARKET_CLOCK = None
 config.NEWS_FETCH = False  # 테스트는 인터넷에서 뉴스를 받지 않는다
+config.LIVE_DISCLOSURES = False  # 장중 공시도 DART에서 받지 않는다
 config.MOCK_ORDER_LIMITS = True  # 한도 규칙 테스트는 모의 주문으로 한다. 끈 경우는 test_mock_has_no_amount_limits
 config.SIGNAL_MODEL_URL = None  # 학습한 성향 신호 모델은 테스트에서 끈다 (켤 때는 가짜로 바꿔 끼운다)
 

@@ -13,6 +13,7 @@
 
 import json
 import logging
+from functools import lru_cache
 import re
 from datetime import datetime, timedelta
 
@@ -32,7 +33,7 @@ from app.functions import metrics, orders
 from app.functions.profile import LABELS
 from app.functions.suitability import allowed_actions, buy_block_reason, stock_risk
 from app import config, signals
-from app.integrations import google_news
+from app.integrations import google_news, opendart
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
@@ -52,6 +53,10 @@ MIN_HANGUL_SHARE = 0.3      # 한글이 이보다 적은 조각은 깨진 표 �
 RECENT_DISCLOSURES = 5
 # 뉴스 (12-todo-by-stage.md 2-2): 종목마다 최근 NEWS_DAYS일 기사 NEWS_RESULTS개. 같은 종목은 NEWS_REFRESH 안에 다시 받지 않는다
 NEWS_DAYS, NEWS_RESULTS, NEWS_REFRESH = 3, 5, timedelta(minutes=30)
+# 장중 공시 (2026-10-20 사용자 요청): 공시는 07·14시에만 수집해서 10시에 나온 악재를 14시까지 몰랐다.
+# 분석할 때 그 종목의 오늘 공시를 DISCLOSURE_REFRESH마다 DART에서 다시 받는다 (제목·링크만, 본문 조각은 07·14시 수집이 만든다)
+DISCLOSURE_REFRESH = timedelta(minutes=30)
+_disclosures_checked: dict[str, datetime] = {}  # ponytail: 서버 메모리라 재시작하면 처음 분석 때 한 번 더 받는다
 
 NOT_TARGET_MESSAGE = ("{name}은(는) 아직 분석·주문 대상이 아니에요. 지금은 코스피 시가총액 상위 100개, "
                       "코스닥 상위 50개 종목(우선주 제외)만 분석·주문할 수 있어요.")
@@ -811,6 +816,39 @@ def news_disclosure(conn, code: str, published_at) -> dict | None:
         (code, published_at, published_at)).fetchone()
 
 
+@lru_cache(maxsize=1)
+def _corp_of(api_key: str) -> dict[str, str]:
+    return opendart.corp_codes(api_key)  # 목록 파일은 저장해 두지만 읽는 데 몇 초 걸려서 한 번만
+
+
+def refresh_disclosures(conn, code: str, now: datetime | None = None) -> int:
+    """오늘 공시를 DART에서 새로 받아 저장한 새 건수. 새 공시가 있으면 위험등급도 다시 정한다 (장중 횡령·배임 공시 → 1등급).
+    30분 안에 받았거나 꺼져 있으면 0. 실패해도 분석은 한다 (07·14시 수집분으로)"""
+    from app.collect import refresh_risk_grade, save_disclosure  # collect가 agents를 불러서 여기서 불러온다
+
+    now = now or datetime.now(KST)
+    last = _disclosures_checked.get(code)
+    if not config.LIVE_DISCLOSURES or not config.OPENDART_API_KEY or (last and now - last < DISCLOSURE_REFRESH):
+        return 0
+    _disclosures_checked[code] = now
+    try:
+        corp = _corp_of(config.OPENDART_API_KEY).get(code)
+        if corp is None:
+            return 0
+        known = {r["rcept_no"] for r in conn.execute("SELECT rcept_no FROM disclosures WHERE stock_code = %s AND filed_at = %s",
+                                                     (code, now.date()))}
+        new = [i for i in opendart.disclosures(corp, config.OPENDART_API_KEY, f"{now:%Y%m%d}", f"{now:%Y%m%d}")
+               if i["rcept_no"] not in known]
+        for item in new:
+            save_disclosure(conn, code, item)
+        if new:
+            refresh_risk_grade(conn, code, now.date())
+        return len(new)
+    except Exception:  # noqa: BLE001 공시를 못 받아도 분석은 한다
+        logging.getLogger(__name__).warning("장중 공시를 받지 못했어요: %s", code, exc_info=True)
+        return 0
+
+
 def recent_news(conn, code: str, name: str) -> list[str]:
     """최근 뉴스 출처 ID. 30분 안에 받은 적이 없으면 Google 뉴스 RSS에서 새로 받아 저장한다 (실패하면 저장된 것만)"""
     last = conn.execute("SELECT max(fetched_at) AS at FROM news WHERE stock_code = %s", (code,)).fetchone()["at"]
@@ -842,6 +880,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         basis = financial_basis(conn, code)
         if basis:
             ids += [i for i in (basis["latest_id"], *basis["fin_ids"]) if i]
+        refresh_disclosures(conn, code)  # 장중에 나온 오늘 공시 (30분마다)
         ids += [f"dart:{row['rcept_no']}" for row in conn.execute(
             "SELECT rcept_no FROM disclosures WHERE stock_code = %s ORDER BY filed_at DESC LIMIT %s",
             (code, RECENT_DISCLOSURES))]
