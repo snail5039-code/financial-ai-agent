@@ -40,6 +40,18 @@
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
 
+## 10/20 장중 (8일차, 코스피 −3.73%, [리포트](reports/live-20261020.md), 서버만 다시 띄움)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 공시를 07·14시에만 받아 10시에 나온 악재를 14시까지 모름 (사용자 질문) | 분석할 때 그 종목 오늘 공시를 30분마다 DART에서 받음, 새 공시면 위험등급 다시 계산 (12:18 반영) | `agents/analysis.py` `refresh_disclosures`, `LIVE_DISCLOSURES` | `test_live_disclosures_refresh_every_30_minutes` |
+| 11:48 HLB "(출처: 지표 volatility_60d)" 반려 | 콜론 없는 "지표 " 접두어도 뗌 (12:42) | `analysis.py` `fix_source_id` | `test_uncomputable_metric_ids_dropped_and_prefix_fixed` |
+| 처리안 23개 중 21개가 "투자 AI가 관찰하자고 했어요"로 자동 승인 안 되고 10분 뒤 만료 | 자동매매 주문인데 AI 행동이 주문 방향과 다르면 처리안 없이 기록만 (13:56) | `agents/order.py` `auto_declined` | `test_auto_order_lets_ai_decline_buy_without_approval` |
+| "pbr:0.77배", "volatility_60d:38.13%", "market:KOSDAI"로 반려 4건 | 지표 ID 뒤 값·단위를 떼고, KOSD·KOSP 오타 바로잡음 (14:27) | `analysis.py` `fix_source_id` | 같은 테스트 |
+| 매수 후보 분석 몫(120)에 6번 막힘 | 하루 200, 보유 몫 50 (사용자 결정, 15:28) | `analysis.py` `MAX_ANALYSES_PER_DAY`·`HOLDING_RESERVE` | `test_analysis` 한도 테스트 |
+
+결과: 시장 탓이라 미룬 매도 5종목 중 4종목이 더 내려감 (계속 빠진 날, 약 −59,500원). 판 2건은 종가보다 높게. 미루기 규칙은 반등일(10/13·10/19)과 반대 결과라 아직 그대로 둔다.
+
 ## 10/20 장 전 (7일차 기록으로, 사용자 결정)
 
 | 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
