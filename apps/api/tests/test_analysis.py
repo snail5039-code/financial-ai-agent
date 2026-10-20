@@ -633,3 +633,25 @@ def test_uncomputable_metric_ids_dropped_and_prefix_fixed() -> None:
     assert analysis.fix_source_id("market:KOSDAI") == "market:KOSDAQ"
     assert analysis.fix_source_id("quote:005930") == "quote:005930"  # 진짜 출처 ID는 그대로
     assert analysis.fix_source_id("price:005930:2026-10-16") == "price:005930:2026-10-16"
+
+
+def test_financial_amounts_carry_korean_units() -> None:
+    """2026-10-20: AI가 "399,144,000,000원"을 조·억으로 바꾸다 10배 틀려 반려 6건. 단위를 같이 준다"""
+    assert analysis.fmt_amount(399_144_000_000) == "399,144,000,000원 (3,991억 4,400만 원)"
+    assert analysis.fmt_amount(5_649_461_675_000) == "5,649,461,675,000원 (5조 6,494억 원)"
+    assert analysis.fmt_amount(-45_713_101_404) == "-45,713,101,404원 (-457억 1,310만 원)"
+    assert analysis.fmt_amount(80_000_000) == "80,000,000원" and analysis.fmt_amount(None) == "없음"
+    # 금액 검사가 단위 붙은 원문 금액도 그대로 읽는다 (AI가 "3,991억 원"이라 써도 통과)
+    known = {"fin:A": {"content": "영업이익: 이번 기간 " + analysis.fmt_amount(399_144_000_000)}}
+    claim = {"text": "영업이익은 3,991억 원이다", "type": "fact", "source_ids": ["fin:A"]}
+    assert analysis.amount_check("claim:0", claim, known) is None
+
+
+def test_invest_context_shows_todays_sell_rejects() -> None:
+    """2026-10-20 삼성SDI: 시장 하락만으로 매도를 4번 내고 4번 반려. 오늘 반려 이유를 투자 AI에게 보여 같은 근거로 다시 내지 않게"""
+    state = {"query": "삼성SDI 보유 중이야", "stock_name": "삼성SDI", "stock_code": "006400", "risk_grade": 2, "mode": "custom",
+             "risk_level": 4, "flags": [], "allowed_actions": ["hold", "sell"], "sources": {}, "metrics": [],
+             "today_rejects": ["시장 전체 급락 외에 종목 자체의 매도 근거가 부족하여 반려"]}
+    text = analysis.invest_context(state)
+    assert "[오늘 이 종목 매도 반려]" in text and "시장 전체 급락 외에" in text
+    assert "[오늘 이 종목 매도 반려]" not in analysis.invest_context({**state, "today_rejects": []})

@@ -594,6 +594,29 @@ def test_close_summary_carries_latest_scorecard(client, custom_user, ai, migrate
     assert score["day"] == str(today) and score["sells"] == [] and score["sell_missed_krw"] is None
 
 
+def test_deferred_sells_are_scored_against_close(client, custom_user, ai, migrated) -> None:
+    """폰이 "시장 탓 하락"이라 미룬 매도를 올리면, 점수표가 미룬 때 가격과 그날 종가를 비교한다 (2026-10-20)"""
+    from app import briefing
+
+    headers = custom_user["headers"]
+    body = {"stock_code": CODE, "reason": "drop", "price": 105_000, "market_pct": -2.3, "stock_pct": -2.0}
+    assert client.post("/api/auto/deferrals", headers=headers, json=body).status_code == 204
+    assert client.post("/api/auto/deferrals", headers=headers, json={**body, "reason": "rise"}).status_code == 422
+    assert client.post("/api/auto/deferrals", headers=headers, json={**body, "stock_code": "999999"}).status_code == 404
+    place_filled_order(client, custom_user)
+    today = datetime.now(KST).date()
+    with psycopg.connect(migrated) as conn:
+        conn.execute("INSERT INTO stock_prices VALUES (%s, %s, 110000, 110000000, 1000)", (CODE, today))
+    try:
+        score = briefing.build_close(migrated, custom_user["id"])["scorecard"]
+    finally:
+        with psycopg.connect(migrated) as conn:
+            conn.execute("DELETE FROM stock_prices WHERE stock_code = %s AND trade_date = %s", (CODE, today))
+    [row] = score["deferrals"]
+    assert (row["price"], row["close"], row["after_pct"]) == (105_000, 110_000, 4.76)  # 미룬 뒤 올랐다 = 미룬 게 맞음
+    assert (score["deferral_right"], score["deferral_known"]) == (1, 1)
+
+
 # ---------- 장 마감 AI 회고 · 내일 계획 ----------
 
 @pytest.fixture

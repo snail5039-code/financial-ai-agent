@@ -3,7 +3,10 @@
 계좌번호는 받지 않는다 (Balance는 정해진 칸 외에는 거부). 그 사용자에게만 보여준다 (NFR-05a).
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
 from app.agents.interrupts import Balance
@@ -21,6 +24,24 @@ def post_snapshot(body: Balance, conn: Conn, user_id: UserId) -> None:
         "INSERT INTO account_snapshots (user_id, cash_krw, holdings, fetched_at, total_krw) VALUES (%s, %s, %s, %s, %s)",
         (user_id, body.cash_krw, Jsonb(holdings), body.fetched_at, body.total_krw),
     )
+    conn.commit()
+
+
+class Deferral(BaseModel):
+    """자동매매가 매도 판단을 미룬 것 (auto_trader.dart deferSell). 점수표가 종가와 비교한다"""
+    stock_code: str = Field(pattern=r"^\d{6}$")
+    reason: Literal["stop", "drop", "giveback", "market"]
+    price: int = Field(gt=0, le=100_000_000)
+    market_pct: float | None = Field(default=None, ge=-30, le=30)
+    stock_pct: float | None = Field(default=None, ge=-30, le=30)
+
+
+@router.post("/auto/deferrals", status_code=204)
+def post_deferral(body: Deferral, conn: Conn, user_id: UserId) -> None:
+    if not conn.execute("SELECT 1 FROM stocks WHERE code = %s", (body.stock_code,)).fetchone():
+        raise HTTPException(404, "분석 대상 종목이 아니에요")
+    conn.execute("INSERT INTO sell_deferrals (user_id, stock_code, reason, price, market_pct, stock_pct) VALUES (%s, %s, %s, %s, %s, %s)",
+                 (user_id, body.stock_code, body.reason, body.price, body.market_pct, body.stock_pct))
     conn.commit()
 
 

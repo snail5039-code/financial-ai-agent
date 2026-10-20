@@ -21,6 +21,8 @@
 | `autoMaxExposurePct` | 70% | 같은 파일 `buyRoom` | 주식 평가액이 총자산의 이만큼을 넘게 사지 않는다 |
 | `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 매도 판단을 묻지 않는다 (강제 손절 −10%·−15%만 바로) |
 | `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 3%p / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
+| `autoDeferMoreDropPct` | 1%p | 같은 파일 `deferSell` | 미룬 뒤 지수가 이만큼 더 빠지면 30분을 기다리지 않고 묻는다 (10/20 뒤) |
+| `autoStopRepeatPct` | 1.5%p | 같은 파일 `sellReason` | 손절선 질문 뒤 이만큼 더 빠지면 손절선 질문을 다시 (10/20 뒤) |
 | `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
 | `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준. 매도 점수(판 가격 대비 종가)는 같은 파일 `sell_score`, 장 마감 요약에 전 거래일 점수가 붙는다 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
@@ -39,6 +41,18 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/20 장 마감 뒤 (8일차 기록으로)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 검증 반려 20건 중 6건이 재무 금액 10배 오기 (LG유플러스·KT&G·한화솔루션·LG에너지솔루션). 자료가 "399,144,000,000원"뿐이라 AI가 조·억으로 바꾸다 틀림 | 재무 금액 옆에 조·억 단위를 같이 줌: "399,144,000,000원 (3,991억 4,400만 원)" | `agents/analysis.py` `fmt_amount`·`korean_amount` | `test_financial_amounts_carry_korean_units` |
+| 고영 −7.9%에서 손절선 질문 한 번 뒤 −8.04% 마감까지 정기 점검만 | 지난 손절선 질문보다 1.5%p 더 빠지면 손절선 질문을 다시 (강제 손절 −10%는 그대로) | `auto_trader.dart` `sellReason` `stop_pct` | `client_test` 손절선 |
+| 미룬 매도 결과를 앱 기록 보고 손으로 계산 (5종목 중 4종목 하락) | 폰이 미룰 때 서버에 남기고(`POST /api/auto/deferrals`, 표 `sell_deferrals`), 점수표·장 마감 요약이 미룬 때 가격과 종가를 비교 | `auto_trader.dart`, `routers/snapshot.py`, migration 021, `scorecard.py` `day_deferrals` | `test_deferred_sells_are_scored_against_close` |
+| −2.3%에서 미룬 뒤 지수가 −3.7%까지 빠지는 동안 30분을 기다림 | 미룬 뒤 지수가 1%p 더 빠지면 바로 묻는다 | `auto_trader.dart` `deferSell` | `client_test` 시장 탓 하락 |
+| 삼성SDI 시장 하락만으로 매도 제안 4번, 4번 반려 | 보유 종목이면 오늘 그 종목 매도 반려 이유(최근 3개)를 투자 AI에게: "같은 근거로 다시 내지 말 것" | `analysis.py` `today_sell_rejects`, `invest_context` | `test_invest_context_shows_todays_sell_rejects` |
+
+매도 미루기 규칙 자체(30분·3%p·−3%)는 그대로 둔다: 반등일 2일과 계속 빠진 날 1일의 결과가 반대라, 이제 점수표로 날마다 쌓아 본다.
 
 ## 10/20 장중 (8일차, 코스피 −3.73%, [리포트](reports/live-20261020.md), 서버만 다시 띄움)
 

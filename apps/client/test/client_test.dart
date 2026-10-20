@@ -542,6 +542,9 @@ void main() {
     String ago(int minutes) => now.subtract(Duration(minutes: minutes)).toIso8601String();
     expect(sellReason(-7.5, {}, now), 'stop');
     expect(sellReason(-7.5, {'stopped': true}, now), 'drop'); // 손절은 한 번만, 그다음은 AI 판단
+    // 2026-10-20 고영: 손절선 질문 뒤 1.5%p 더 빠지면 손절선 질문을 다시 한다
+    expect(sellReason(-8.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), isNot('stop'));
+    expect(sellReason(-9.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), 'stop');
     // 강제 손절 (2026-10-15): −10%면 절반, −15%면 남은 것 전부. 한 번씩만
     expect([hardStop(-9.9, {}), hardStop(-10, {}), hardStop(-12, {'hard_half': true}), hardStop(-15.5, {'hard_half': true}),
         hardStop(-16, {'hard_half': true, 'hard_all': true})], [null, 'hard_half', null, 'hard_all', null]);
@@ -723,6 +726,11 @@ void main() {
     expect(deferSell('rise', true, null, now), isFalse); // 오르는 쪽은 미루지 않는다
     expect(deferSell('check', true, null, now), isFalse);
     expect(deferSell('stop', false, null, now), isFalse);
+    // 미룬 뒤 지수가 1%p 더 빠지면 30분을 기다리지 않는다 (10/20: −2.3%에서 미룬 뒤 −3.7%까지)
+    expect(deferSell('drop', true, now.subtract(const Duration(minutes: 10)).toIso8601String(), now,
+        marketPct: -2.4, deferredMarketPct: -1.8), isTrue);
+    expect(deferSell('drop', true, now.subtract(const Duration(minutes: 10)).toIso8601String(), now,
+        marketPct: -2.9, deferredMarketPct: -1.8), isFalse);
     expect(sellQuestion('솔브레인', 345500, '-6.4', reason: 'drop', market: '오늘 코스닥 -2.0%, 이 종목 오늘 -6.5%야.'),
         allOf(contains('오늘 코스닥 -2.0%'), contains('시장 전체 하락은 그것만으로 팔 이유가 아니야')));
   });

@@ -353,8 +353,25 @@ def net_sell_text(qty: int, avg_price: int, price: int, market: str, fee_rate_pc
             + ("·수수료 뺀 추정)" if fee_rate_pct is not None else "만 뺀 추정, 수수료 미확인)"))
 
 
+def korean_amount(value: int) -> str:
+    """원 금액을 조·억(1조 아래면 만까지) 단위로: 399,144,000,000 → "3,991억 4,400만 원", 5,649,461,675,000 → "5조 6,494억 원".
+    1억 아래는 빈 문자열"""
+    n = abs(value)
+    if n < 10**8:
+        return ""
+    jo, eok, man = n // 10**12, n % 10**12 // 10**8, n % 10**8 // 10**4
+    parts = [f"{jo:,}조"] if jo else []
+    parts += [f"{eok:,}억"] if eok else []
+    parts += [f"{man:,}만"] if man and not jo else []
+    return ("-" if value < 0 else "") + " ".join(parts) + " 원"
+
+
 def fmt_amount(value: int | None) -> str:
-    return "없음" if value is None else won(value)
+    """재무 금액. 숫자 옆에 조·억 단위를 같이 준다 (2026-10-20: AI가 12자리 숫자를 조·억으로 바꾸다 10배 틀려 반려 6건)"""
+    if value is None:
+        return "없음"
+    unit = korean_amount(value)
+    return f"{won(value)} ({unit})" if unit else won(value)
 
 
 # ---------- 지표 (코드 계산) ----------
@@ -719,6 +736,19 @@ def grade_text(state: InvestState) -> str:
         f" (1등급 근거: {reason}). 매수라면 이 위험을 감수할 만한 근거가 근거·반대 근거·위험에 있어야 하고, 없으면 관찰이다" if reason else "")
 
 
+REJECTS_SHOWN = 3
+
+
+def today_sell_rejects(conn, user_id: str, code: str) -> list[str]:
+    """오늘 이 종목 매도 제안을 검증 AI가 반려한 이유 (최근 것부터 REJECTS_SHOWN개).
+    2026-10-20 삼성SDI: "시장 하락만으로 매도"를 4번 내고 4번 반려됐다. 투자 AI에게 보여 같은 근거로 다시 내지 않게 한다"""
+    return [r["summary"] for r in conn.execute(
+        "SELECT v.summary FROM verifications v JOIN proposals p ON p.id = v.proposal_id"
+        " WHERE p.user_id = %s AND p.stock_code = %s AND v.verdict = 'reject' AND p.action = 'sell'"
+        " AND (v.created_at AT TIME ZONE 'Asia/Seoul')::date = (now() AT TIME ZONE 'Asia/Seoul')::date"
+        " ORDER BY v.created_at DESC LIMIT %s", (user_id, code, REJECTS_SHOWN))]
+
+
 def invest_context(state: InvestState) -> str:
     parts = [
         f"[요청] {state['query']}",
@@ -740,6 +770,10 @@ def invest_context(state: InvestState) -> str:
         if signal in signals.WARNINGS:  # 투자 AI에게만 준다. 검증 AI는 원문으로 따로 본다
             parts.append(f"[대화 신호] {signals.WARNINGS[signal]} 이 위험을 위험(risks)에 쓰고, "
                          "매수를 고르려 했다면 관찰(watch)이 더 맞는지 따져 근거에 쓴다.")
+    if rejects := state.get("today_rejects"):
+        parts.append("[오늘 이 종목 매도 반려] 오늘 이 종목 매도 제안이 검증에서 아래 이유로 반려됐다. 같은 근거로 매도를 다시 내지 말고, "
+                     "그 뒤 새로 생긴 종목만의 근거(추세 꺾임, 시장보다 뚜렷한 약세, 공식 악재)가 있을 때만 매도를 고른다\n"
+                     + "\n".join(f"- {r}" for r in rejects))
     if state.get("verifications"):
         last = state["verifications"][-1]
         parts.append("[검증 AI 반박] 아래를 고쳐 다시 써라\n" + "\n".join(f"- {c}" for c in last["challenges"]))
@@ -904,6 +938,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     holds = bool(state.get("snapshot")) and any(h["stock_code"] == code for h in state["snapshot"]["holdings"])
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rank = volatility_rank(conn, code)
+        rejects = today_sell_rejects(conn, state["user_id"], code) if holds else []
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     mock = not state.get("real_mode")  # 모의투자는 1등급도 AI가 매수 여부를 판단한다 (suitability.buy_block_reason)
     auto_buy = bool(state.get("user_directed") and state.get("auto_origin") and state["side"] == "buy")
@@ -918,7 +953,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "allowed_actions": (["watch"] if falling else [state["side"], "watch"]) if auto_buy
         else [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank, mock),
         "buy_block_reason": FALLING_REASON if auto_buy and falling else buy_block_reason(*profile, rank, mock),
-        "verifications": [], "revision_round": 0,
+        "verifications": [], "revision_round": 0, "today_rejects": rejects,
         # 5-4 대화 속 성향 신호 (모델이 꺼져 있으면 None). 사람이 쓴 말만 본다
         "conversation_signal": None if state.get("auto_origin") else signals.model_signal(state["query"]),
     }

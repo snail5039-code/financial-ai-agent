@@ -261,6 +261,7 @@ class CloseSummaryPage extends StatelessWidget {
   /// 전 거래일 판단 점수 (서버 scorecard.latest): 관찰한 종목의 그날 등락, 판 종목의 판 가격 대비 종가. 2026-10-20
   static List<Widget> _scorecard(Map<String, dynamic> s, Widget Function(String) title, Widget Function(List<Widget>) card) {
     final sells = (s['sells'] as List).cast<Map<String, dynamic>>();
+    final deferrals = ((s['deferrals'] as List?) ?? []).cast<Map<String, dynamic>>(); // 시장 탓이라 미룬 매도 (10/20부터)
     final day = '${s['day']}'.substring(5).replaceAll('-', '/');
     String pct(num? v) => v == null ? '미확인' : '${v > 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
     return [
@@ -276,6 +277,22 @@ class CloseSummaryPage extends StatelessWidget {
               '${s['sell_missed_krw'] == null ? '' : ' (들고 있었으면 ${(s['sell_missed_krw'] as int) > 0 ? '+' : ''}${won(s['sell_missed_krw'] as int)})'}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           for (final r in sells)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                SizedBox(width: 48, child: Text('${r['at']}', style: const TextStyle(color: mutedText))),
+                Expanded(child: Text('${r['stock_name']}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Text('${comma(r['price'] as int)} → ${r['close'] == null ? '미확인' : comma(r['close'] as int)}  '),
+                Text(pct(r['after_pct'] as num?), style: TextStyle(fontWeight: FontWeight.bold,
+                    color: r['after_pct'] == null ? mutedText : changeColor(r['after_pct'] as num))),
+              ]),
+            ),
+        ],
+        if (deferrals.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text('미룬 매도 ${s['deferral_known']}건 중 ${s['deferral_right']}건은 미룬 게 맞았어요 (종가가 더 높음)',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          for (final r in deferrals)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(children: [

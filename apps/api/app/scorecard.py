@@ -69,6 +69,16 @@ def day_sells(conn, day: date, user_id: str | None = None) -> list[dict]:
         " AND (%s::uuid IS NULL OR p.user_id = %s) ORDER BY o.created_at", (day, user_id, user_id)).fetchall()
 
 
+def day_deferrals(conn, day: date, user_id: str | None = None) -> list[dict]:
+    """그날 "시장 탓 하락"이라 매도 판단을 미룬 것 (폰 기록, 2026-10-20). price는 미룬 때 가격. 매도 점수와 같은 식으로
+    종가와 비교한다: after_pct가 +면 미룬 게 맞았다 (미룬 때 팔았으면 손해)"""
+    return conn.execute(
+        "SELECT d.stock_code, s.name AS stock_name, 1 AS qty, d.price, to_char(d.created_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS at"
+        " FROM sell_deferrals d JOIN stocks s ON s.code = d.stock_code"
+        " WHERE (d.created_at AT TIME ZONE 'Asia/Seoul')::date = %s AND (%s::uuid IS NULL OR d.user_id = %s) ORDER BY d.created_at",
+        (day, user_id, user_id)).fetchall()
+
+
 def day_closes(conn, day: date, codes: list[str]) -> dict[str, int]:
     return {r["stock_code"]: r["close"] for r in conn.execute(
         "SELECT stock_code, close FROM stock_prices WHERE trade_date = %s AND stock_code = ANY(%s)", (day, codes))}
@@ -79,14 +89,17 @@ def latest(conn, user_id: str | None = None) -> dict | None:
     day = conn.execute("SELECT max(trade_date) AS d FROM stock_prices").fetchone()["d"]
     if day is None:
         return None
-    decisions, sells = day_decisions(conn, day, user_id), day_sells(conn, day, user_id)
-    if not decisions and not sells:
+    decisions, sells, deferred = day_decisions(conn, day, user_id), day_sells(conn, day, user_id), day_deferrals(conn, day, user_id)
+    if not decisions and not sells and not deferred:
         return None
     watch = score(decisions, day_changes(conn, day, [d["stock_code"] for d in decisions]))
-    sold = sell_score(sells, day_closes(conn, day, [s["stock_code"] for s in sells]))
+    closes = day_closes(conn, day, [s["stock_code"] for s in sells + deferred])
+    sold, later = sell_score(sells, closes), sell_score(deferred, closes)
     return {"day": str(day), "watch_avg": watch["watch_avg"], "watched": sum(1 for r in watch["rows"] if r["action"] == "watch"),
             "missed": watch["missed"], "avoided": watch["avoided"], "sells": sold["rows"],
-            "sell_missed_krw": sold["missed_krw"], "sell_higher": sold["higher"], "sell_known": sold["known"]}
+            "sell_missed_krw": sold["missed_krw"], "sell_higher": sold["higher"], "sell_known": sold["known"],
+            # 미룬 매도: 미룬 때 가격 대비 종가. deferral_right = 미룬 게 맞은 수 (종가가 더 높음)
+            "deferrals": later["rows"], "deferral_right": later["higher"], "deferral_known": later["known"]}
 
 
 def day_changes(conn, day: date, codes: list[str]) -> dict[str, float]:
@@ -105,8 +118,9 @@ def main() -> None:
     with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
         decisions = day_decisions(conn, day)
         result = score(decisions, day_changes(conn, day, [d["stock_code"] for d in decisions]))
-        sells = day_sells(conn, day)
-        sold = sell_score(sells, day_closes(conn, day, [s["stock_code"] for s in sells]))
+        sells, deferred = day_sells(conn, day), day_deferrals(conn, day)
+        closes = day_closes(conn, day, [s["stock_code"] for s in sells + deferred])
+        sold, later = sell_score(sells, closes), sell_score(deferred, closes)
     print(f"| 종목 | 마지막 판단 | {day} 등락 |\n|---|---|---|")
     for r in result["rows"]:
         change = "미확인 (종가 없음)" if r["change_pct"] is None else f"{r['change_pct']:+.2f}%"
@@ -123,6 +137,12 @@ def main() -> None:
             print(f"| {r['at']} | {r['stock_name']} | {r['qty']} | {r['price']:,} | {after} |")
         if sold["missed_krw"] is not None:
             print(f"\n판 뒤 더 오른 것 {sold['higher']}/{sold['known']}건, 들고 있었으면 {sold['missed_krw']:+,}원 (세금·수수료 전)")
+    if later["rows"]:
+        print(f"\n| 미룬 시각 | 종목 | 미룬 때 가격 | {day} 종가 | 미룬 때 대비 |\n|---|---|---|---|---|")
+        for r in later["rows"]:
+            after = "미확인 (종가 없음)" if r["close"] is None else f"{r['close']:,} | {r['after_pct']:+.2f}%"
+            print(f"| {r['at']} | {r['stock_name']} | {r['price']:,} | {after} |")
+        print(f"\n미룬 게 맞은 것(종가가 더 높음) {later['higher']}/{later['known']}건")
 
 
 if __name__ == "__main__":

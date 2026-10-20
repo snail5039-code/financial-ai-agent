@@ -44,6 +44,7 @@ class InvestState(TypedDict, total=False):
     metrics: list            # 코드가 계산한 지표 [{metric_id, value, unit, formula, inputs}]
     risk_grade: int          # 종목 위험등급 (1 매우 높음 ~ 6)
     risk_reason: str | None  # 1등급이면 근거 공시 (제목·날짜·출처 ID)
+    today_rejects: list[str]  # 보유 종목: 오늘 이 종목 매도 제안이 검증에서 반려된 이유 (같은 제안 되풀이 막기, 2026-10-20)
     allowed_actions: list    # 성향 규칙상 투자 AI가 낼 수 있는 행동
     buy_block_reason: str | None  # 매수를 뺀 이유 (투자 AI와 사용자에게 알림)
     proposal: dict | None    # 투자 AI 제안서 (최신)
