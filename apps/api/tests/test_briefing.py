@@ -143,6 +143,19 @@ def test_watchlist_api_and_briefing(client, user, ai, migrated) -> None:
     assert client.delete("/api/watchlist/666668", headers=headers).status_code == 204
     assert client.get("/api/watchlist", headers=headers).json() == []
 
+    # 종목 탭: 주제에 없는 분석 대상은 '기타', 등락률은 마지막 종가 ÷ 그 전 거래일 종가
+    other = next(g for g in client.get("/api/themes", headers=headers).json() if g["theme"] == "기타")
+    stock = next(s for s in other["stocks"] if s["code"] == "666668")
+    assert (stock["close"], stock["trade_date"], stock["change_pct"]) == (50000, "2026-10-01", -0.1)  # 50,050 → 50,000
+
+
+def test_themes_put_each_stock_once() -> None:
+    from collections import Counter
+
+    from app.themes import THEMES
+    codes = [code for codes in THEMES.values() for code in codes]
+    assert [c for c, n in Counter(codes).items() if n > 1] == [] and len(codes) == 150
+
 
 def test_refresh_rebuilds_today_briefing_once_per_gap(client, user, monkeypatch, migrated) -> None:
     """장중 매수 후보 다시 찾기: 이 사용자 것만 다시 만들고, REFRESH_GAP_MINUTES(30분) 안에 또 부르면 막는다 (Gemini 비용)"""

@@ -16,6 +16,7 @@ import 'package:invest_client/features/auto/reservations.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/features/home/equity_chart.dart';
+import 'package:invest_client/features/home/themes_page.dart';
 import 'package:invest_client/features/home/rooms_page.dart';
 import 'package:invest_client/features/settings/settings_page.dart';
 import 'package:invest_client/main.dart';
@@ -76,6 +77,7 @@ void main() {
     };
     expect(equitySeries(data, daily: true), [('10/16', 9428986), ('10/19', 9416713)]);
     expect(equitySeries(data, daily: false), [('09:54', 9322536)]);
+    expect([changeText(1.234), changeText(-0.1), changeText(0), changeText(null)], ['+1.23%', '-0.10%', '0.00%', '미확인']); // 종목 탭
     expect(checkTarget('claim:0'), '근거 1');
     expect(checkTarget('freshness'), '자료 시점');
   });
