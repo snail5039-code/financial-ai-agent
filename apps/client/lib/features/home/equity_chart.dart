@@ -29,8 +29,31 @@ class EquityCard extends StatefulWidget {
 }
 
 class _EquityCardState extends State<EquityCard> {
-  late final Future<Map<String, dynamic>> _data = api.get('/api/equity').then((value) => value as Map<String, dynamic>);
+  late Future<Map<String, dynamic>> _data = _load(null);
   bool _daily = false;
+
+  Future<Map<String, dynamic>> _load(String? day) =>
+      api.get(day == null ? '/api/equity' : '/api/equity?day=$day').then((value) => value as Map<String, dynamic>);
+
+  /// 달력에서 기록이 있는 날만 고를 수 있다. 고르면 그날 장중 그래프
+  Future<void> _pickDay(Map<String, dynamic> data) async {
+    final days = {for (final d in (data['days'] as List).cast<Map<String, dynamic>>()) d['date'] as String};
+    if (days.isEmpty) return;
+    final shown = (data['intraday'] as Map)['date'] as String? ?? days.last;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.parse(shown),
+      firstDate: DateTime.parse(days.first),
+      lastDate: DateTime.parse(days.last),
+      selectableDayPredicate: (d) => days.contains(d.toIso8601String().substring(0, 10)),
+      helpText: '장중 그래프를 볼 날짜',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _daily = false;
+      _data = _load(picked.toIso8601String().substring(0, 10));
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Card(
@@ -55,6 +78,12 @@ class _EquityCardState extends State<EquityCard> {
                         onSelected: (_) => setState(() => _daily = daily),
                       ),
                     ),
+                  IconButton(
+                    tooltip: '날짜 고르기',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.calendar_month_outlined, size: 20),
+                    onPressed: data == null ? null : () => _pickDay(data),
+                  ),
                 ]),
                 const SizedBox(height: 8),
                 if (snapshot.hasError)

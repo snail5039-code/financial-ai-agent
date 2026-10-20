@@ -3,6 +3,7 @@
 계좌번호는 받지 않는다 (Balance는 정해진 칸 외에는 거부). 그 사용자에게만 보여준다 (NFR-05a).
 """
 
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -46,8 +47,9 @@ def post_deferral(body: Deferral, conn: Conn, user_id: UserId) -> None:
 
 
 @router.get("/equity")
-def get_equity(conn: Conn, user_id: UserId) -> dict:
-    """총자산 기록 (자산 탭 그래프): 날짜별은 그날 마지막 값, 장중은 기록이 있는 가장 최근 날의 값 전부. 폰이 계산해 올린 값만 쓴다."""
+def get_equity(conn: Conn, user_id: UserId, day: date | None = None) -> dict:
+    """총자산 기록 (자산 탭 그래프): 날짜별은 그날 마지막 값, 장중은 day(달력에서 고른 날, 없으면 기록이 있는 가장 최근 날)의 값 전부.
+    폰이 계산해 올린 값만 쓴다."""
     rows = conn.execute(
         "SELECT (fetched_at AT TIME ZONE 'Asia/Seoul')::date AS day, to_char(fetched_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS time,"
         " total_krw FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
@@ -55,7 +57,7 @@ def get_equity(conn: Conn, user_id: UserId) -> dict:
         (user_id,),
     ).fetchall()
     days = {str(r["day"]): r["total_krw"] for r in rows}  # 시간순이라 마지막 값이 남는다
-    last = str(rows[-1]["day"]) if rows else None
+    last = str(day) if day else str(rows[-1]["day"]) if rows else None
     return {"days": [{"date": d, "total_krw": v} for d, v in days.items()],
             "intraday": {"date": last, "points": [{"time": r["time"], "total_krw": r["total_krw"]}
                                                   for r in rows if str(r["day"]) == last]}}
