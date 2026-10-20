@@ -846,13 +846,18 @@ def test_split_reservation_spreads_qty_over_time(client, custom_user, ai, monkey
 
 # ---------- 자동매매 주문 구분 (3-4) ----------
 
-def test_auto_order_lets_ai_decline_buy_and_needs_confirm(client, custom_user, ai) -> None:
+def test_auto_order_lets_ai_decline_buy_without_approval(client, custom_user, ai) -> None:
     ai["action"] = "watch"  # 투자 AI: 지금은 사지 말고 관찰
     body = {"text": "주문전자 4주 사줘", "client": "app", "origin": "auto"}
     events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
-    card = first(events_of(answer(client, custom_user, events, balance())), "interrupt")["card"]
+    done = events_of(answer(client, custom_user, events, balance()))
     assert "[자동매매 주문]" in ai["invest"][-1] and "자동매매가 낸 주문" in ai["verify"][-1]
-    assert any("관찰하자고 했어요" in c for c in card["confirm_required"])  # 앱은 확인이 필요한 처리안을 자동 승인하지 않는다
+    # 2026-10-20: 처리안을 만들지 않는다 (아무도 승인하지 않아 "만료"로 쌓였다). 판단 기록은 남는다
+    assert not [e for e in done if e[0] == "interrupt"]
+    assert "관찰하자고 했어요" in first(done, "message")["text"] and "처리안도 만들지 않아요" in first(done, "message")["text"]
+    assert client.get("/api/approvals?status=needs_approval", headers=custom_user["headers"]).json() == []
+    [item] = client.get("/api/history?action=watch", headers=custom_user["headers"]).json()
+    assert item["approval_status"] is None and item["policy_ok"] is True
 
     ai["action"] = None  # 사람이 직접 지시한 주문은 그대로 (행동은 지시대로)
     card = first(to_approval(client, custom_user), "interrupt")["card"]

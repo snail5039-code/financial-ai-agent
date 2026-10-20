@@ -29,7 +29,7 @@ from psycopg.rows import dict_row
 from app import clock, config, signals
 from app.agents import llm
 from app.agents.analysis import (
-    VERDICT_LABELS, check_target_node, gather_node, get_account_node, invest_agent_node, save_proposal,
+    ACTION_LABELS, VERDICT_LABELS, check_target_node, gather_node, get_account_node, invest_agent_node, save_proposal,
     verify_agent_node, with_titles,
 )
 from app.agents.interrupts import pause
@@ -283,8 +283,28 @@ def policy_node(state: InvestState, runtime: Runtime[Context]) -> dict:
             "confirm_required": confirm, "card": card}
 
 
+def auto_declined(state: InvestState) -> bool:
+    """자동매매 주문인데 투자 AI가 지금은 그쪽(사기·팔기)이 아니라고 했다 (새 주문일 때만, 가격 재확인은 아님)"""
+    return bool(state.get("auto_origin")) and state["proposal"]["action"] != state["side"] and not state.get("approval_id")
+
+
 def route_after_policy(state: InvestState) -> str:
+    if auto_declined(state):
+        return "auto_declined"
     return "prepare_approval" if state["policy_result"]["ok"] else "blocked"
+
+
+def auto_declined_node(state: InvestState, runtime: Runtime[Context]) -> dict:
+    """자동매매 주문을 AI가 관찰로 돌렸으면 처리안을 만들지 않는다. 제안·검증·정책 검사는 기록한다.
+    2026-10-20: 아무도 승인하지 않는 처리안이 21개 쌓여 10분 뒤 모두 "만료"로 남았다 (놓친 주문처럼 보였다).
+    앱은 처리안이 없으면 그 종목을 30분 뒤 다시 묻는다 (auto_trader.dart autoBuyRetryGap)"""
+    with connect(runtime.context.database_url) as conn:
+        proposal_id = save_proposal(conn, state)
+        save_policy_check(conn, proposal_id, state["policy_result"])
+        audit(conn, state["user_id"], "auto_order_declined", {"proposal_id": str(proposal_id)})
+    side = SIDE_LABELS[state["side"]]
+    return {"answer": f"투자 AI가 지금은 {side}하지 말고 {ACTION_LABELS.get(state['proposal']['action'], '관찰')}하자고 했어요. "
+                      f"자동매매는 {side}하지 않고 처리안도 만들지 않아요 (30분 뒤 다시 판단)."}
 
 
 def save_policy_check(conn, proposal_id: str, result: dict) -> None:
@@ -522,7 +542,8 @@ def build_order_graph():
         ("find_order", find_order_node), ("reserve", reserve_node),
         ("get_account", get_account_node), ("set_price", set_price_node), ("gather", gather_node),
         ("invest_agent", invest_agent_node), ("verify_agent", verify_agent_node), ("policy", policy_node),
-        ("blocked", blocked_node), ("prepare_approval", prepare_approval_node), ("approval", approval_node),
+        ("blocked", blocked_node), ("auto_declined", auto_declined_node), ("prepare_approval", prepare_approval_node),
+        ("approval", approval_node),
         ("check_edit", check_edit_node), ("execute", execute_node),
     ]:
         builder.add_node(name, node)
@@ -538,8 +559,9 @@ def build_order_graph():
     builder.add_edge("gather", "invest_agent")
     builder.add_edge("invest_agent", "verify_agent")
     builder.add_conditional_edges("verify_agent", route_after_verify, ["invest_agent", "policy"])
-    builder.add_conditional_edges("policy", route_after_policy, ["prepare_approval", "blocked"])
+    builder.add_conditional_edges("policy", route_after_policy, ["prepare_approval", "blocked", "auto_declined"])
     builder.add_edge("blocked", END)
+    builder.add_edge("auto_declined", END)
     builder.add_edge("prepare_approval", "approval")
     builder.add_conditional_edges("approval", route_after_approval, ["check_edit", "execute", "approval", END])
     builder.add_conditional_edges("check_edit", end_if_answered("policy"), ["policy", END])
