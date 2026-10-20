@@ -627,3 +627,9 @@ def test_uncomputable_metric_ids_dropped_and_prefix_fixed() -> None:
     assert analysis.fix_source_id("지표: volatility_60d") == "volatility_60d"
     assert analysis.fix_source_id("지표 volatility_60d") == "volatility_60d"  # 2026-10-20 콜론 없이
     assert analysis.fix_source_id("지표volatility_60d") == "volatility_60d"
+    # 2026-10-20 값을 붙인 지표 ID, 코스닥 오타 (반려 4건)
+    assert analysis.fix_source_id("pbr:0.77배") == "pbr"
+    assert analysis.fix_source_id("volatility_60d:38.13%") == "volatility_60d"
+    assert analysis.fix_source_id("market:KOSDAI") == "market:KOSDAQ"
+    assert analysis.fix_source_id("quote:005930") == "quote:005930"  # 진짜 출처 ID는 그대로
+    assert analysis.fix_source_id("price:005930:2026-10-16") == "price:005930:2026-10-16"

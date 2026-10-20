@@ -931,10 +931,13 @@ def fix_source_id(sid: str) -> str:
     내 계좌는 "snapshot" 하나, 시장 지수는 market:KOSPI·market:KOSDAQ 두 개뿐이다"""
     # 2026-10-16 "(출처: 지표: volatility_60d)" 반려 2번, 2026-10-20 "(출처: 지표 volatility_60d)" (콜론 없이) HLB 반려
     sid = re.sub(r"^지표\s*:?\s*", "", sid.strip())
+    # 2026-10-20 지표 ID에 값을 붙여 씀: "pbr:0.77배", "volatility_60d:38.13%" (단위가 붙은 숫자만 뗀다. quote:005930 같은 ID는 그대로)
+    sid = re.sub(r"^([a-z][a-z0-9_]*):\s*-?[\d.,]+\s*(배|%|원)$", r"\1", sid)
     if sid.startswith("snapshot"):
         return "snapshot"
-    return MARKET_ID.sub(lambda m: "market:KOSDAQ" if "DAQ" in m[1].upper()
-                         else "market:KOSPI" if "SPI" in m[1].upper() else m[0], sid)
+    # 2026-10-20 "market:KOSDAI" (KOSD로 시작하면 코스닥, KOSP면 코스피)
+    return MARKET_ID.sub(lambda m: "market:KOSDAQ" if "DAQ" in m[1].upper() or m[1].upper().startswith("KOSD")
+                         else "market:KOSPI" if "SPI" in m[1].upper() or m[1].upper().startswith("KOSP") else m[0], sid)
 
 
 def fix_source_ids(draft: dict) -> dict:
