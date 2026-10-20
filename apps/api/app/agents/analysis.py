@@ -37,10 +37,11 @@ from app.integrations import google_news, opendart
 from app.integrations.opendart import disclosure_url
 
 MAX_REVISIONS = 2
-MAX_ANALYSES_PER_DAY = 150  # Gemini 비용 관리 (NFR-14). 2026-10-12 사용자 결정: 장중 AI 매도 점검으로 20 → 100, 2026-10-16 → 150
+MAX_ANALYSES_PER_DAY = 200  # Gemini 비용 관리 (NFR-14). 2026-10-12 사용자 결정: 장중 AI 매도 점검으로 20 → 100, 2026-10-16 → 150,
+# 2026-10-20 → 200 (급락장에 14시까지 124번을 써서 마감 전 보유 점검이 멈출 뻔했다)
 # 보유 종목 매도 점검 몫. 안 가진 종목(매수 후보) 분석은 MAX - 이만큼까지만 한다
 # (2026-10-16: 100번(보유 판단 58, 매수 후보 48)이 14:32에 다 차서 14:32~15:27 분석이 26번 거절됐다 (보유 종목 매도 판단 17번, 매수 9번). 그 사이 장중 이익을 다 돌려줌)
-HOLDING_RESERVE = 30
+HOLDING_RESERVE = 50  # 2026-10-20: 200 중 50번은 보유 종목 매도 점검용 (보유 9종목 × 30분마다 하루 약 120번)
 # 보유 종목이 오늘 고가에서 이익을 이만큼(%p) 넘게 돌려줬으면 장중 흐름에 따로 적는다 (2026-10-16 오른 만큼 돌려준 날)
 GIVEBACK_PCT = 1.5
 SEARCH_RESULTS = 6

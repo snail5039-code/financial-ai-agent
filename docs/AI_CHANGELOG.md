@@ -26,7 +26,7 @@
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
-| `MAX_ANALYSES_PER_DAY` / `HOLDING_RESERVE` | 150 / 30 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용). 안 가진 종목은 120번까지, 남은 30번은 보유 종목 매도 점검용 |
+| `MAX_ANALYSES_PER_DAY` / `HOLDING_RESERVE` | 200 / 50 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용, 10/20 사용자 결정 150 → 200). 안 가진 종목은 150번까지, 남은 50번은 보유 종목 매도 점검용 |
 | `autoGivebackFromPct` / `autoGivebackPct` | +2% / 1.5%p | `auto_trader.dart` `sellReason` | 오늘 매입가 대비 최고가 +2%를 넘은 뒤 거기서 1.5%p 넘게 내려오면 바로 AI에게 (새 최고 전엔 한 번만) |
 | `autoCloseCheckMin` | 14:30 | 같은 파일 | 보유 종목마다 하루 한 번 마감 전 점검 |
 | `GIVEBACK_PCT` | 1.5%p | `analysis.py` `giveback_text` | 장중 흐름에 오늘 고가·고가 때 수익·지금 수익을 쓰고, 이만큼 넘게 돌려줬으면 "돌려줌"을 붙인다 |
