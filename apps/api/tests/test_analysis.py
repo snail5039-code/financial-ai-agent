@@ -625,3 +625,5 @@ def test_uncomputable_metric_ids_dropped_and_prefix_fixed() -> None:
     assert (fixed[0]["type"], fixed[0]["metric_ids"]) == ("fact", [])
     assert (fixed[1]["type"], fixed[1]["metric_ids"]) == ("calc", ["per"])
     assert analysis.fix_source_id("지표: volatility_60d") == "volatility_60d"
+    assert analysis.fix_source_id("지표 volatility_60d") == "volatility_60d"  # 2026-10-20 콜론 없이
+    assert analysis.fix_source_id("지표volatility_60d") == "volatility_60d"

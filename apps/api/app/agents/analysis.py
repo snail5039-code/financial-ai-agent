@@ -929,7 +929,8 @@ MARKET_ID = re.compile(r"market:([A-Za-z]+)")
 def fix_source_id(sid: str) -> str:
     """AI가 자주 틀리는 출처 ID를 바로잡는다 (2026-10-15 반려 3번: snapshot:, market:KDAQ, market:KOSDAQD).
     내 계좌는 "snapshot" 하나, 시장 지수는 market:KOSPI·market:KOSDAQ 두 개뿐이다"""
-    sid = sid.removeprefix("지표:").strip()  # 2026-10-16 "(출처: 지표: volatility_60d)" 반려 2번
+    # 2026-10-16 "(출처: 지표: volatility_60d)" 반려 2번, 2026-10-20 "(출처: 지표 volatility_60d)" (콜론 없이) HLB 반려
+    sid = re.sub(r"^지표\s*:?\s*", "", sid.strip())
     if sid.startswith("snapshot"):
         return "snapshot"
     return MARKET_ID.sub(lambda m: "market:KOSDAQ" if "DAQ" in m[1].upper()
