@@ -53,7 +53,7 @@ class _ThemesPageState extends State<ThemesPage> {
         body: FutureBuilder(
           future: _themes,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() => _themes = _load()));
+            if (snapshot.hasError) return ErrorRetry(snapshot.error!, () => setState(() { _themes = _load(); }));
             final themes = snapshot.data;
             if (themes == null) return const Center(child: CircularProgressIndicator());
             if (themes.isEmpty) return const Center(child: Text('분석 대상 종목이 아직 없어요', style: TextStyle(color: mutedText)));
@@ -103,7 +103,7 @@ class _ThemesPageState extends State<ThemesPage> {
                 child: RefreshIndicator(
                   onRefresh: () async {
                     final next = _load();
-                    setState(() => _themes = next);
+                    setState(() { _themes = next; });
                     await next;
                   },
                   child: ListView(children: [

@@ -31,6 +31,7 @@ class EquityCard extends StatefulWidget {
 class _EquityCardState extends State<EquityCard> {
   late Future<Map<String, dynamic>> _data = _load(null);
   bool _daily = false;
+  int? _touched; // 그래프에서 누르거나 마우스를 올린 점
 
   Future<Map<String, dynamic>> _load(String? day) =>
       api.get(day == null ? '/api/equity' : '/api/equity?day=$day').then((value) => value as Map<String, dynamic>);
@@ -51,6 +52,7 @@ class _EquityCardState extends State<EquityCard> {
     if (picked == null || !mounted) return;
     setState(() {
       _daily = false;
+      _touched = null;
       _data = _load(picked.toIso8601String().substring(0, 10));
     });
   }
@@ -75,7 +77,7 @@ class _EquityCardState extends State<EquityCard> {
                         label: Text(label, style: const TextStyle(fontSize: 12)),
                         visualDensity: VisualDensity.compact,
                         selected: _daily == daily,
-                        onSelected: (_) => setState(() => _daily = daily),
+                        onSelected: (_) => setState(() { _daily = daily; _touched = null; }),
                       ),
                     ),
                   IconButton(
@@ -107,15 +109,34 @@ class _EquityCardState extends State<EquityCard> {
     }
     final first = series.first.$2, last = series.last.$2;
     final color = changeColor(last - first) ?? brandBlue;
+    final touched = _touched == null ? null : series[_touched!.clamp(0, series.length - 1)];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('${series.first.$1} 대비 ${signedWon(last - first)} (${rateText(last - first, first)})',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+      Text(
+          touched == null
+              ? '${series.first.$1} 대비 ${signedWon(last - first)} (${rateText(last - first, first)})'
+              : '${touched.$1} · ${won(touched.$2)} (${series.first.$1} 대비 ${rateText(touched.$2 - first, first)})',
+          style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.bold, color: touched == null ? color : changeColor(touched.$2 - first) ?? brandBlue)),
       const SizedBox(height: 8),
-      SizedBox(
-        height: 140,
-        width: double.infinity,
-        child: CustomPaint(painter: _Line([for (final (_, v) in series) v], color)),
-      ),
+      LayoutBuilder(builder: (context, box) {
+        // 누른(마우스를 올린) x 위치에서 가장 가까운 점
+        void touch(Offset at) => setState(() {
+              _touched = (at.dx / box.maxWidth * (series.length - 1)).round().clamp(0, series.length - 1);
+            });
+        return MouseRegion(
+          onHover: (e) => touch(e.localPosition),
+          onExit: (_) => setState(() { _touched = null; }),
+          child: GestureDetector(
+            onTapDown: (d) => touch(d.localPosition),
+            onHorizontalDragUpdate: (d) => touch(d.localPosition),
+            child: SizedBox(
+              height: 140,
+              width: double.infinity,
+              child: CustomPaint(painter: _Line([for (final (_, v) in series) v], color, touched: _touched)),
+            ),
+          ),
+        );
+      }),
       const SizedBox(height: 4),
       Row(children: [
         Text(series.first.$1, style: const TextStyle(fontSize: 11, color: mutedText)),
@@ -128,9 +149,10 @@ class _EquityCardState extends State<EquityCard> {
 
 /// 선 그래프: 첫 값 높이에 점선(기준선), 마지막 값에 점. 위아래 끝에 최고·최저 금액
 class _Line extends CustomPainter {
-  _Line(this.values, this.color);
+  _Line(this.values, this.color, {this.touched});
   final List<int> values;
   final Color color;
+  final int? touched; // 세로선과 점을 그릴 위치
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -155,6 +177,11 @@ class _Line extends CustomPainter {
       ..strokeWidth = 2
       ..strokeJoin = StrokeJoin.round);
     canvas.drawCircle(at(values.length - 1), 4, Paint()..color = color);
+    if (touched case final i? when i >= 0 && i < values.length) {
+      canvas.drawLine(Offset(at(i).dx, 0), Offset(at(i).dx, size.height), Paint()..color = mutedText.withValues(alpha: 0.6));
+      canvas.drawCircle(at(i), 5, Paint()..color = color);
+      canvas.drawCircle(at(i), 2.5, Paint()..color = Colors.white);
+    }
     for (final (value, y) in [(hi, 0.0), (lo, size.height - 12)]) {
       (TextPainter(text: TextSpan(text: won(value), style: const TextStyle(fontSize: 10, color: mutedText)),
               textDirection: TextDirection.ltr)
@@ -164,5 +191,5 @@ class _Line extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Line old) => old.values != values || old.color != color;
+  bool shouldRepaint(_Line old) => old.values != values || old.color != color || old.touched != touched;
 }
