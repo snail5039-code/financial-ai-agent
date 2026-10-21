@@ -58,7 +58,9 @@ class EquityCard extends StatefulWidget {
 class _EquityCardState extends State<EquityCard> {
   late Future<Map<String, dynamic>> _data = _load(null);
   int? _start; // 시작 금액 (자산 탭 위에서 넣은 것)
-  bool _daily = false;
+  static bool _tableOpen = false; // 날짜별 표는 접어 두고 누르면 편다
+  // 자산 탭을 새로 읽을 때마다 카드가 새로 만들어져서, 고른 보기는 앱이 켜져 있는 동안 기억한다
+  static bool _daily = false;
   int? _touched; // 그래프에서 누르거나 마우스를 올린 점
 
   Future<Map<String, dynamic>> _load(String? day) async {
@@ -71,7 +73,20 @@ class _EquityCardState extends State<EquityCard> {
     final rows = dailyRows(data);
     const small = TextStyle(fontSize: 11, color: mutedText);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 10),
+      const SizedBox(height: 6),
+      InkWell(
+        onTap: () => setState(() { _tableOpen = !_tableOpen; }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Text('날짜별 기록 ${rows.length}일', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            Text(_tableOpen ? '접기' : '펼치기', style: const TextStyle(fontSize: 12, color: mutedText)),
+            Icon(_tableOpen ? Icons.expand_less : Icons.expand_more, color: mutedText),
+          ]),
+        ),
+      ),
+      if (_tableOpen)
       for (final r in rows)
         InkWell(
           onTap: () => setState(() {
@@ -105,7 +120,7 @@ class _EquityCardState extends State<EquityCard> {
             ]),
           ),
         ),
-      const SourceText('그날 마지막 기록 (폰이 올린 값) · 주식은 매입 → 평가 · 그날 손익은 전 거래일 대비, 판 종목 손익 포함 · 줄을 누르면 그날 장중'),
+      if (_tableOpen) const SourceText('그날 마지막 기록 (폰이 올린 값) · 주식은 매입 → 평가 · 그날 손익은 전 거래일 대비, 판 종목 손익 포함 · 줄을 누르면 그날 장중'),
     ]);
   }
 
