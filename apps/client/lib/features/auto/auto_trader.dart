@@ -495,6 +495,7 @@ class AutoTrader extends ChangeNotifier {
       await api.post('/api/snapshot',
           {...balance, if (equityTime(_now())) 'total_krw': equityOf(balance, broker.lastPrices)});
     } catch (_) {}
+    await _restoreUnfilledSells(holdings);
     final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
     // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
     double? kospi;
@@ -602,6 +603,24 @@ class AutoTrader extends ChangeNotifier {
         await _addPosition(code, name, -part);
       }
     }
+  }
+
+  /// 지난 날 체결되지 않은 자동 매도(지정가 미체결)가 계좌에 남아 있으면 자동매매 보유로 되돌린다. 하루 한 번.
+  /// 2026-10-21 HLB 21주: "접수"를 판 것으로 보고 보유에서 빼서 그 뒤로 점검하지 않았다.
+  /// ponytail: 그 사이 사람이 같은 종목을 직접 샀으면 그것도 맡는다 (최근 3일 주문만 본다)
+  Future<void> _restoreUnfilledSells(List<Map<String, dynamic>> holdings) async {
+    if (await _box.read('auto_restored:$_today') != null) return;
+    await _box.write('auto_restored:$_today', '1');
+    try {
+      for (final u in (await api.get('/api/orders/unfilled-sells') as List).cast<Map<String, dynamic>>()) {
+        final code = u['stock_code'] as String;
+        final held = holdings.where((h) => h['stock_code'] == code).firstOrNull?['qty'] as int? ?? 0;
+        if (positions.containsKey(code) || held == 0) continue; // 실패한 주문은 보유에서 빼지 않았다
+        final qty = held < (u['qty'] as int) ? held : u['qty'] as int;
+        await _addPosition(code, u['stock_name'] as String, qty);
+        await _note('${u['stock_name']} $qty주: 지난 매도 주문이 체결되지 않아 다시 자동매매가 맡아요');
+      }
+    } catch (_) {} // 못 받으면 다음 날 다시 (매매는 계속)
   }
 
   Map<String, String>? _markets; // 종목코드 → KOSPI/KOSDAQ (서버 분석 대상 목록, 하루 한 번)

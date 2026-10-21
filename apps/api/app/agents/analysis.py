@@ -984,7 +984,7 @@ def fix_source_id(sid: str) -> str:
     """AI가 자주 틀리는 출처 ID를 바로잡는다 (2026-10-15 반려 3번: snapshot:, market:KDAQ, market:KOSDAQD).
     내 계좌는 "snapshot" 하나, 시장 지수는 market:KOSPI·market:KOSDAQ 두 개뿐이다"""
     # 2026-10-16 "(출처: 지표: volatility_60d)" 반려 2번, 2026-10-20 "(출처: 지표 volatility_60d)" (콜론 없이) HLB 반려
-    sid = re.sub(r"^지표\s*:?\s*", "", sid.strip())
+    sid = re.sub(r"^(지표|metric)\s*:?\s*", "", sid.strip())  # 2026-10-21 "metric: op_income_yoy" (한국타이어 반려)
     # 2026-10-20 지표 ID에 값을 붙여 씀: "pbr:0.77배", "volatility_60d:38.13%" (단위가 붙은 숫자만 뗀다. quote:005930 같은 ID는 그대로)
     sid = re.sub(r"^([a-z][a-z0-9_]*):\s*-?[\d.,]+\s*(배|%|원)$", r"\1", sid)
     # 2026-10-21 SK이노베이션 반려 3번: "per:계산 불가" (값 대신 설명), "fin:20260814002500#91" (재무 ID엔 조각 번호가 없다. dart:만 #조각)

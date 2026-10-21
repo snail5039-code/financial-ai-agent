@@ -161,12 +161,22 @@ def reserve_node(state: InvestState, runtime: Runtime[Context]) -> dict:
                       "앱이 켜져 있어야 하고, 장중(평일 09:05~15:20)에만 확인해요. 더보기 > 예약 주문에서 취소할 수 있어요."}
 
 
+def tick_below(price: int) -> int:
+    """한 호가 아래 가격 (한국거래소 호가 단위, 코스피·코스닥 같음)"""
+    below = price - 1
+    tick = next(t for limit, t in ((2_000, 1), (5_000, 5), (20_000, 10), (50_000, 50), (200_000, 100), (500_000, 500),
+                                    (float("inf"), 1_000)) if below < limit)
+    return max(tick, below // tick * tick)
+
+
 def set_price_node(state: InvestState, runtime: Runtime[Context]) -> dict:
-    """지정가: 사용자가 말한 가격, 없으면 폰이 받은 현재가, 웹이면 최근 종가. 시장가는 MVP에서 지원하지 않는다."""
+    """지정가: 사용자가 말한 가격, 없으면 폰이 받은 현재가, 웹이면 최근 종가. 시장가는 MVP에서 지원하지 않는다.
+    자동매매 매도는 현재가보다 한 호가 낮게 낸다 (2026-10-21 HLB: 현재가 42,450원 매도가 그 아래에 머물러 체결 0주)"""
     if state.get("limit_price"):
         return {}
     if state.get("prices"):
-        return {"limit_price": state["prices"][0]["price"]}
+        price = state["prices"][0]["price"]
+        return {"limit_price": tick_below(price) if state.get("auto_origin") and state.get("side") == "sell" else price}
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         last = latest_close(conn, state["stock_code"])
     if last is None:

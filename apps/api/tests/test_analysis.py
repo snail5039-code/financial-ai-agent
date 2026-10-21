@@ -632,6 +632,8 @@ def test_uncomputable_metric_ids_dropped_and_prefix_fixed() -> None:
     assert analysis.fix_source_id("volatility_60d:38.13%") == "volatility_60d"
     assert analysis.fix_source_id("market:KOSDAI") == "market:KOSDAQ"
     assert analysis.fix_source_id("per:계산 불가") == "per"  # 2026-10-21
+    assert analysis.fix_source_id("metric: op_income_yoy") == "op_income_yoy"
+    assert analysis.fix_source_id("market:KOSPI") == "market:KOSPI"
     assert analysis.fix_source_id("fin:20260814002500#91") == "fin:20260814002500"
     assert analysis.fix_source_id("dart:20260814002500#91") == "dart:20260814002500#91"  # 공시 본문 조각은 그대로
     assert analysis.fix_source_id("quote:005930") == "quote:005930"  # 진짜 출처 ID는 그대로

@@ -508,6 +508,30 @@ def test_fill_sync_updates_accepted_order(client, custom_user, ai) -> None:
     assert "체결됐어요" in text and "체결 4주 × 99,500원" in text and "증권사에서 확인한 기록" in text
 
 
+def test_unfilled_auto_sells_from_earlier_days(client, custom_user, ai, migrated) -> None:
+    """2026-10-21 HLB: 자동 매도가 접수만 되고 체결 0주로 그날 끝났다. 다음 날 앱이 자동매매 보유로 되돌릴 수 있게 알려 준다"""
+    headers = custom_user["headers"]
+    key = place_accepted_order(client, custom_user)
+    assert client.get("/api/orders/unfilled-sells", headers=headers).json() == []  # 오늘 주문은 아직 살아 있다
+    db(migrated, "UPDATE orders SET side = 'sell', created_at = now() - interval '1 day' WHERE idempotency_key = %s RETURNING id", key)
+    assert client.get("/api/orders/unfilled-sells", headers=headers).json() == []  # 사람이 낸 주문은 아니다
+    db(migrated, "UPDATE approvals SET card = card || '{\"auto_origin\": true}'"
+       " WHERE id = (SELECT approval_id FROM orders WHERE idempotency_key = %s) RETURNING id", key)
+    [unfilled] = client.get("/api/orders/unfilled-sells", headers=headers).json()
+    assert unfilled["stock_code"] == CODE and unfilled["qty"] == 4
+    db(migrated, "UPDATE orders SET filled_qty = 3, filled_price = 1 WHERE idempotency_key = %s RETURNING id", key)
+    assert client.get("/api/orders/unfilled-sells", headers=headers).json()[0]["qty"] == 1  # 일부 체결이면 남은 만큼
+    db(migrated, "UPDATE orders SET created_at = now() - interval '5 days' WHERE idempotency_key = %s RETURNING id", key)
+    assert client.get("/api/orders/unfilled-sells", headers=headers).json() == []  # 최근 3일만
+
+
+def test_auto_sell_price_is_one_tick_below() -> None:
+    """2026-10-21 HLB: 현재가 42,450원 매도가 그 아래에 머물러 체결되지 않았다. 자동 매도는 한 호가 낮게"""
+    from app.agents.order import tick_below
+    assert [tick_below(p) for p in (42_450, 100_000, 197_600, 554_000, 1_999, 5_000, 2_000)] == \
+        [42_400, 99_900, 197_500, 553_000, 1_998, 4_995, 1_999]
+
+
 def test_fill_sync_ignores_other_users_orders(client, custom_user, ai) -> None:
     key = place_accepted_order(client, custom_user)
     email = "fill-" + custom_user["email"]
