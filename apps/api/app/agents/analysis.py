@@ -971,6 +971,9 @@ def fix_source_id(sid: str) -> str:
     sid = re.sub(r"^지표\s*:?\s*", "", sid.strip())
     # 2026-10-20 지표 ID에 값을 붙여 씀: "pbr:0.77배", "volatility_60d:38.13%" (단위가 붙은 숫자만 뗀다. quote:005930 같은 ID는 그대로)
     sid = re.sub(r"^([a-z][a-z0-9_]*):\s*-?[\d.,]+\s*(배|%|원)$", r"\1", sid)
+    # 2026-10-21 SK이노베이션 반려 3번: "per:계산 불가" (값 대신 설명), "fin:20260814002500#91" (재무 ID엔 조각 번호가 없다. dart:만 #조각)
+    sid = re.sub(r"^([a-z][a-z0-9_]*):\s*(계산\s*불가|미확인|없음)$", r"\1", sid)
+    sid = re.sub(r"^(fin:\d+)#\d+$", r"\1", sid)
     if sid.startswith("snapshot"):
         return "snapshot"
     # 2026-10-20 "market:KOSDAI" (KOSD로 시작하면 코스닥, KOSP면 코스피)
