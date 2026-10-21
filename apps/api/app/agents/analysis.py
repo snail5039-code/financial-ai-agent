@@ -762,7 +762,9 @@ def invest_context(state: InvestState) -> str:
     if state.get("auto_origin") and state.get("user_directed"):
         parts.append(f"[자동매매 주문] {directed_order_text(state)}. 사용자가 지금 직접 지시한 것이 아니라 앱의 자동매매·예약이 낸 주문이다. "
                      "[자료]의 장중 흐름(intraday), 시장 지수(market), 뉴스, 공시를 보고 지금 이 행동이 적절한지 판단한다. "
-                     "매수인데 하락 중이거나 악재 보도가 있는 등 지금 사기 적절하지 않으면 행동을 watch(관찰)로 쓰고 이유를 근거에 쓴다.")
+                     "매수인데 하락 중이거나 악재 보도가 있는 등 지금 사기 적절하지 않으면 행동을 watch(관찰)로 쓰고 이유를 근거에 쓴다. "
+                     # 2026-10-21: 자동 매도 근거에 "사용자의 지시에 따라", "사용자의 1주 매도 요청에 맞춰"라고 썼다 (사실과 다름)
+                     "근거에 '사용자의 지시·요청에 따라'라고 쓰지 않는다. 자동매매가 낸 주문이라고 쓰거나 이 행동의 근거만 쓴다.")
     elif state.get("user_directed"):
         parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
                      "행동은 지시대로 쓰고, 이 주문의 근거와 함께 반대 근거·위험을 경고 위주로 쓴다 (FR-21).")

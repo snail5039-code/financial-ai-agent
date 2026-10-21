@@ -875,6 +875,7 @@ def test_auto_order_lets_ai_decline_buy_without_approval(client, custom_user, ai
     events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
     done = events_of(answer(client, custom_user, events, balance()))
     assert "[자동매매 주문]" in ai["invest"][-1] and "자동매매가 낸 주문" in ai["verify"][-1]
+    assert "지시·요청에 따라'라고 쓰지 않는다" in ai["invest"][-1]  # 10/21: 자동 매도를 "사용자의 지시에 따라"라고 썼다
     # 2026-10-20: 처리안을 만들지 않는다 (아무도 승인하지 않아 "만료"로 쌓였다). 판단 기록은 남는다
     assert not [e for e in done if e[0] == "interrupt"]
     assert "관찰하자고 했어요" in first(done, "message")["text"] and "처리안도 만들지 않아요" in first(done, "message")["text"]

@@ -54,6 +54,8 @@ const autoMarketDropPct = 1.5;
 // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지). 2026-10-13: 두 번뿐이라 오후 내내 살 후보가 없었다
 const autoRescanSlots = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 14 * 60 + 35];
 const autoBuyRetryGap = Duration(minutes: 30); // AI가 '관찰'이라 안 산 종목도 이만큼 지나면 새 판단으로 다시 묻는다
+// 산 뒤 이 분까지는 매도 판단을 묻지 않는다 (강제 손절만). 2026-10-21 한화시스템: 09:39에 사고 18분 뒤 −3.1%에 팔았다
+const autoBuyHoldMin = 30;
 const autoReviewGap = Duration(minutes: 30);
 const autoMaxReviews = 20; // 종목마다 하루에 묻는 횟수 (30분마다 + 급락 재질문, 서버 하루 분석 한도 100 안)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
@@ -100,6 +102,8 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   // 장 시작 30분(09:00~09:30)은 묻지 않는다. 10/13 시초가 급락 때 판 종목이 모두 종가가 더 높았다 (공포성 매도).
   // 2026-10-20: −7% 손절선도 기다린다 (10/19 한화시스템 09:18 −9.09%에 팔았는데 그날 저가 바로 위였고 종가 +10.14%). 강제 손절(−10%·−15%)은 hardStop이 바로 한다
   if (openingWait(now)) return null;
+  final boughtAt = DateTime.tryParse(seen['bought_at'] as String? ?? '');
+  if (boughtAt != null && now.difference(boughtAt) < const Duration(minutes: autoBuyHoldMin)) return null;
   final stopPct = (seen['stop_pct'] as num?)?.toDouble(); // 지난번 손절선 질문 때 매입가 대비 %
   if (dropPct <= -autoStopLossPct && (seen['stopped'] != true || (stopPct != null && dropPct <= stopPct - autoStopRepeatPct))) {
     return 'stop';
@@ -380,7 +384,9 @@ class AutoTrader extends ChangeNotifier {
     final picks = [...(content['picks'] as List), ...(content['rechecks'] as List? ?? [])].cast<Map<String, dynamic>>()
         // 브리핑(서버만, 실시간 시세 없음)의 조건부 승인은 후보까지. 실제 주문 때 실시간 시세·지수로 다시 검증해 '승인'일 때만 산다
         .where((p) => const {'approve', 'conditional'}.contains(p['verdict'])).toList();
-    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String);
+    // 사람 확인이 필요한 매수(급등 직후 등)는 그날 다시 묻지 않는다. 2026-10-21 엘앤씨바이오: 10분 만료 처리안이 두 번 쌓였다
+    final needsPerson = (jsonDecode(await _box.read('auto_needs_person:$_today') ?? '[]') as List).cast<String>();
+    bool skip(Map<String, dynamic> p) => settled(p['stock_code'] as String) || needsPerson.contains(p['stock_code']);
     if (picks.every(skip)) return;
     // 오늘 쓴 금액 (예전 기록에 없으면 산 수량 × 브리핑 종가로 처음 한 번 계산)
     var spent = int.tryParse(await _box.read('auto_spent:$_today') ?? '') ??
@@ -436,6 +442,11 @@ class AutoTrader extends ChangeNotifier {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
         final result = await _order(name, qty, 'buy');
+        if (result == false && _needsPerson) {
+          needsPerson.add(code);
+          await _box.write('auto_needs_person:$_today', jsonEncode(needsPerson));
+          await _note('$name: 사람 확인이 필요한 매수라 오늘은 자동매매가 다시 묻지 않아요');
+        }
         if (result != true) break;
         bought[code] = {'name': name, 'qty': ((bought[code] as Map?)?['qty'] as int? ?? 0) + qty};
         await _box.write('auto_bought:$_today', jsonEncode(bought));
@@ -443,6 +454,7 @@ class AutoTrader extends ChangeNotifier {
         invested += qty * close;
         await _box.write('auto_spent:$_today', '$spent');
         await _addPosition(code, name, qty);
+        await _markBought(code);
         left -= qty * close;
       }
       // 판단을 끝냈든 오류(AI 사용량 제한 등)로 멈췄든 autoBuyRetryGap 뒤에 남은 금액만큼 다시 묻는다
@@ -452,6 +464,13 @@ class AutoTrader extends ChangeNotifier {
         await _box.write('auto_settled2:$_today', jsonEncode(done));
       }
     }
+  }
+
+  /// 산 시각을 매도 점검 기록에 남긴다 (autoBuyHoldMin 동안 매도 판단을 묻지 않게)
+  Future<void> _markBought(String code) async {
+    final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
+    reviews[code] = {...?(reviews[code] as Map?)?.cast<String, dynamic>(), 'bought_at': _now().toIso8601String()};
+    await _box.write('auto_reviews:$_today', jsonEncode(reviews));
   }
 
   Future<void> _addPosition(String code, String name, int qty) async {
@@ -610,6 +629,7 @@ class AutoTrader extends ChangeNotifier {
   /// 한 번 주문 (사람이 채팅에 말한 것과 같은 흐름). 자동 승인해서 실행까지 갔으면 true,
   /// 처리안이 나왔지만 자동 승인하지 않았으면 false, 처리안까지 못 갔거나 실행이 실패했으면(오류) null
   Future<bool?> _order(String name, int qty, String side, {String why = ''}) async {
+    _needsPerson = false;
     final tag = why.isEmpty ? '' : '[$why] ';
     final conversation = Conversation(unlock: () async => on && plan != null, auto: true); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
     await conversation.send(side == 'buy' ? '$name $qty주 사줘' : '$name $qty주 팔아줘');
@@ -624,6 +644,7 @@ class AutoTrader extends ChangeNotifier {
       final card = conversation.waiting!['card'] as Map<String, dynamic>;
       final confirm = (card['confirm_required'] as List).cast<String>();
       if (!on || plan == null || confirm.isNotEmpty || !autoApproves(side, card['verdict'])) {
+        _needsPerson = on && plan != null && confirm.isNotEmpty;
         final reason = !on || plan == null ? '자동매매가 꺼져 있거나 오늘 계획을 승인하지 않았어요'
             : confirm.isNotEmpty ? confirm.join(' ') : '검증 ${card['verdict']}';
         await _note('$tag$name $qty주: 자동으로 승인하지 않았어요 ($reason). 처리안 모아보기에서 직접 판단해 주세요');
@@ -642,6 +663,8 @@ class AutoTrader extends ChangeNotifier {
     // 실행 실패는 처리안을 다 쓴 것이라 다시 시도해도 중복 주문이 남지 않는다
     return result.contains('실패') ? null : !result.contains('않았어요');
   }
+
+  bool _needsPerson = false; // 마지막 _order가 사람 확인(confirm_required) 때문에 멈췄는지
 
   String _last(Conversation c) =>
       c.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '응답 없음')).text.split('\n').first;

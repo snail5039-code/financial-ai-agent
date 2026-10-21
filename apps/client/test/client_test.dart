@@ -554,6 +554,9 @@ void main() {
     // 2026-10-20 고영: 손절선 질문 뒤 1.5%p 더 빠지면 손절선 질문을 다시 한다
     expect(sellReason(-8.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), isNot('stop'));
     expect(sellReason(-9.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), 'stop');
+    // 2026-10-21 한화시스템: 산 뒤 30분은 묻지 않는다 (18분 뒤 −3.1%에 팔았다). 강제 손절은 hardStop이 따로 본다
+    expect([sellReason(-3.2, {'bought_at': ago(18)}, now), sellReason(-7.5, {'bought_at': ago(29)}, now), sellReason(-3.2, {'bought_at': ago(31)}, now)],
+        [null, null, 'drop']);
     // 강제 손절 (2026-10-15): −10%면 절반, −15%면 남은 것 전부. 한 번씩만
     expect([hardStop(-9.9, {}), hardStop(-10, {}), hardStop(-12, {'hard_half': true}), hardStop(-15.5, {'hard_half': true}),
         hardStop(-16, {'hard_half': true, 'hard_all': true})], [null, 'hard_half', null, 'hard_all', null]);
