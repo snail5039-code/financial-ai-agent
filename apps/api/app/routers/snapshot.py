@@ -52,13 +52,16 @@ def get_equity(conn: Conn, user_id: UserId, day: date | None = None) -> dict:
     폰이 계산해 올린 값만 쓴다."""
     rows = conn.execute(
         "SELECT (fetched_at AT TIME ZONE 'Asia/Seoul')::date AS day, to_char(fetched_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS time,"
-        " total_krw FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
+        " total_krw, cash_krw, holdings FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
         " AND fetched_at >= now() - interval '120 days' ORDER BY fetched_at",
         (user_id,),
     ).fetchall()
-    days = {str(r["day"]): r["total_krw"] for r in rows}  # 시간순이라 마지막 값이 남는다
+    # 날짜별 표 (2026-10-21 사용자 요청): 그날 마지막 기록의 총자산·현금·주식 매입금액. 평가금액 = 총자산 − 현금
+    days = {str(r["day"]): {"date": str(r["day"]), "time": r["time"], "total_krw": r["total_krw"], "cash_krw": r["cash_krw"],
+                            "cost_krw": sum(h["qty"] * h["avg_price"] for h in r["holdings"])}
+            for r in rows}  # 시간순이라 마지막 값이 남는다
     last = str(day) if day else str(rows[-1]["day"]) if rows else None
-    return {"days": [{"date": d, "total_krw": v} for d, v in days.items()],
+    return {"days": list(days.values()),
             "intraday": {"date": last, "points": [{"time": r["time"], "total_krw": r["total_krw"]}
                                                   for r in rows if str(r["day"]) == last]}}
 

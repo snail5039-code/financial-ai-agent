@@ -81,6 +81,14 @@ void main() {
     // 자산 탭 '오늘' 줄: 전 거래일 마지막 총자산 (오늘 기록은 빼고)
     final days = [{'date': '2026-10-19', 'total_krw': 9424763}, {'date': '2026-10-20', 'total_krw': 9115405}, {'date': '2026-10-21', 'total_krw': 9149914}];
     expect([prevDayTotal(days, '20261021'), prevDayTotal(days, '20261020'), prevDayTotal(days, '20261019')], [9115405, 9424763, null]);
+    // 날짜별 표: 최근 날이 위, 그날 손익은 전 거래일 대비 (첫 날은 미확인), 평가 = 총자산 − 현금
+    final table = dailyRows({'days': [
+      {'date': '2026-10-19', 'time': '15:19', 'total_krw': 9424763, 'cash_krw': 3000000, 'cost_krw': 6500000},
+      {'date': '2026-10-20', 'time': '15:34', 'total_krw': 9115405, 'cash_krw': 3542605, 'cost_krw': 5623090},
+      {'date': '2026-10-21', 'time': '11:47', 'total_krw': 9147289, 'cash_krw': 15493152, 'cost_krw': 1081840}, // 10/14처럼 현금이 이상한 기록
+    ]});
+    expect([for (final r in table) (r.date, r.value, r.change)],
+        [('2026-10-21', null, 31884), ('2026-10-20', 5572800, -309358), ('2026-10-19', 6424763, null)]);
     expect([changeText(1.234), changeText(-0.1), changeText(0), changeText(null)], ['+1.23%', '-0.10%', '0.00%', '미확인']); // 종목 탭
     final themes = [
       {'theme': '반도체', 'stocks': [{'code': '005930', 'name': '삼성전자'}, {'code': '000660', 'name': 'SK하이닉스'}]},

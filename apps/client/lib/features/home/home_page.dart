@@ -33,9 +33,6 @@ Future<BrokerExtras?> loadBrokerExtras() async {
 int? prevDayTotal(List<Map<String, dynamic>> days, String today) =>
     days.where((d) => (d['date'] as String).replaceAll('-', '').compareTo(today) < 0).lastOrNull?['total_krw'] as int?;
 
-/// 시작 금액은 폰에만 둔다 (증권사 잔고엔 처음 넣은 돈이 없다). 모의·실전을 따로
-String startKey() => 'start_krw:${realMode.value ? 'real' : 'mock'}';
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onAsk, required this.active});
   final void Function(String text) onAsk;

@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 
 import '../../api/api.dart';
+import '../../broker/broker.dart';
 import '../../common/common.dart';
 import 'overview.dart';
+import '../../secure/key_store.dart';
 
 /// 그래프에 쓸 (이름표, 총자산) 목록. 장중은 "HH:MM", 날짜별은 "M/D"
 List<(String, int)> equitySeries(Map<String, dynamic> data, {required bool daily}) => daily
@@ -17,6 +19,31 @@ List<(String, int)> equitySeries(Map<String, dynamic> data, {required bool daily
         for (final p in ((data['intraday'] as Map)['points'] as List).cast<Map<String, dynamic>>())
           (p['time'] as String, p['total_krw'] as int),
       ];
+
+/// 시작 금액은 폰에만 둔다 (증권사 잔고엔 처음 넣은 돈이 없다). 모의·실전을 따로
+String startKey() => 'start_krw:${realMode.value ? 'real' : 'mock'}';
+
+/// 날짜별 표 한 줄: 그날 마지막 기록과 전 거래일 대비 손익 (첫 날은 null = 미확인). 최근 날이 위
+List<({String date, String time, int total, int cost, int? value, int? change})> dailyRows(Map<String, dynamic> data) {
+  final days = (data['days'] as List).cast<Map<String, dynamic>>();
+  return [
+    for (var i = days.length - 1; i >= 0; i--)
+      (
+        date: days[i]['date'] as String,
+        time: days[i]['time'] as String? ?? '',
+        total: days[i]['total_krw'] as int,
+        cost: days[i]['cost_krw'] as int? ?? 0,
+        value: _value(days[i]),
+        change: i == 0 ? null : (days[i]['total_krw'] as int) - (days[i - 1]['total_krw'] as int),
+      ),
+  ];
+}
+
+/// 주식 평가금액 = 총자산 − 현금. 기록의 현금이 이상하면(10/14 현금 15,493,152원 > 총자산) null = 미확인
+int? _value(Map<String, dynamic> day) {
+  final cash = day['cash_krw'] as int?, total = day['total_krw'] as int;
+  return cash == null || cash < 0 || cash > total ? null : total - cash;
+}
 
 /// "2026-10-19" → "10/19"
 String monthDay(String ymd) => '${int.parse(ymd.substring(5, 7))}/${int.parse(ymd.substring(8, 10))}';
@@ -30,11 +57,57 @@ class EquityCard extends StatefulWidget {
 
 class _EquityCardState extends State<EquityCard> {
   late Future<Map<String, dynamic>> _data = _load(null);
+  int? _start; // 시작 금액 (자산 탭 위에서 넣은 것)
   bool _daily = false;
   int? _touched; // 그래프에서 누르거나 마우스를 올린 점
 
-  Future<Map<String, dynamic>> _load(String? day) =>
-      api.get(day == null ? '/api/equity' : '/api/equity?day=$day').then((value) => value as Map<String, dynamic>);
+  Future<Map<String, dynamic>> _load(String? day) async {
+    _start = int.tryParse(await secureBox.read(startKey()) ?? '');
+    return await api.get(day == null ? '/api/equity' : '/api/equity?day=$day') as Map<String, dynamic>;
+  }
+
+  /// 날짜별 표: 날짜 · 총자산 · 주식(매입 → 평가) · 그날 손익 · 시작 대비. 줄을 누르면 그날 장중 그래프
+  Widget _table(Map<String, dynamic> data) {
+    final rows = dailyRows(data);
+    const small = TextStyle(fontSize: 11, color: mutedText);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 10),
+      for (final r in rows)
+        InkWell(
+          onTap: () => setState(() {
+            _daily = false;
+            _touched = null;
+            _data = _load(r.date);
+          }),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0x14000000)))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(
+                width: 46,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(monthDay(r.date), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(r.time, style: small),
+                ]),
+              ),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(won(r.total), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('주식 ${comma(r.cost)} → ${r.value == null ? '미확인' : won(r.value!)}', style: small),
+                ]),
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(r.change == null ? '미확인' : '${signedWon(r.change!)} (${rateText(r.change!, r.total - r.change!)})',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: changeColor(r.change ?? 0) ?? mutedText)),
+                if (_start case final start?)
+                  Text('시작 대비 ${rateText(r.total - start, start)}', style: small),
+              ]),
+            ]),
+          ),
+        ),
+      const SourceText('그날 마지막 기록 (폰이 올린 값) · 주식은 매입 → 평가 · 그날 손익은 전 거래일 대비, 판 종목 손익 포함 · 줄을 누르면 그날 장중'),
+    ]);
+  }
 
   /// 달력에서 기록이 있는 날만 고를 수 있다. 고르면 그날 장중 그래프
   Future<void> _pickDay(Map<String, dynamic> data) async {
@@ -92,8 +165,10 @@ class _EquityCardState extends State<EquityCard> {
                   const Text('기록을 불러오지 못했어요', style: TextStyle(color: mutedText))
                 else if (data == null)
                   const SizedBox(height: 140, child: Center(child: CircularProgressIndicator()))
-                else
+                else ...[
                   _chart(equitySeries(data, daily: _daily)),
+                  if (_daily) _table(data),
+                ],
               ]);
             },
           ),

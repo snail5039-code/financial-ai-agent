@@ -322,6 +322,8 @@ def test_equity_history_from_phone_totals(client, user) -> None:
     client.post("/api/snapshot", headers=headers, json={**BALANCE, "fetched_at": now_iso()})  # 총자산 없는 예전 앱: 그래프에 안 들어감
     found = client.get("/api/equity", headers=headers).json()
     assert [d["total_krw"] for d in found["days"]] == [9_428_986, 9_416_713]  # 날짜별은 그날 마지막 값
+    assert {k: found["days"][-1][k] for k in ("cash_krw", "cost_krw")} == {"cash_krw": 1_500_000, "cost_krw": 20 * 68_000}
+    assert found["days"][-1]["time"] == "15:00"
     assert [p["total_krw"] for p in found["intraday"]["points"]] == [9_300_000, 9_416_713]
     picked = client.get(f"/api/equity?day={found['days'][0]['date']}", headers=headers).json()["intraday"]  # 달력에서 고른 날
     assert [p["total_krw"] for p in picked["points"]] == [9_461_096, 9_428_986] and picked["date"] == found["days"][0]["date"]
