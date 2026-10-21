@@ -658,3 +658,16 @@ def test_invest_context_shows_todays_sell_rejects() -> None:
     text = analysis.invest_context(state)
     assert "[오늘 이 종목 매도 반려]" in text and "시장 전체 급락 외에" in text
     assert "[오늘 이 종목 매도 반려]" not in analysis.invest_context({**state, "today_rejects": []})
+
+
+def test_invest_context_shows_todays_sells_and_short_signal_rule() -> None:
+    """2026-10-21 한화시스템: 70,800원에 팔고 73,000원에 다시 삼. 막지 않고 판 기록을 보여 다시 사는 근거를 쓰게.
+    같은 날 "VWAP 아래·5분 저가 하락"만으로 산 지 얼마 안 된 종목을 팔아 손해. 지시문에 단기 신호만으로는 팔지 않는다"""
+    from app.agents import llm
+    state = {"query": "한화시스템 2주 사줘", "stock_name": "한화시스템", "stock_code": "272210", "risk_grade": 2, "mode": "custom",
+             "risk_level": 4, "flags": [], "allowed_actions": ["buy", "watch"], "sources": {}, "metrics": [],
+             "today_sells": ["09:57 8주 70,800원에 팜 (판 근거: 장중 VWAP 아래)"]}
+    text = analysis.invest_context(state)
+    assert "[오늘 이 종목 매도]" in text and "70,800원에 팜" in text
+    assert "[오늘 이 종목 매도]" not in analysis.invest_context({**state, "today_sells": []})
+    assert "단기 신호" in llm.INVEST_PROMPT and "장중 단기 신호" in llm.VERIFY_PROMPT and "[오늘 이 종목 매도]가 있는데" in llm.VERIFY_PROMPT

@@ -739,6 +739,17 @@ def grade_text(state: InvestState) -> str:
 REJECTS_SHOWN = 3
 
 
+def today_sells(conn, user_id: str, code: str) -> list[str]:
+    """오늘 이 종목을 판 기록 (체결된 매도, 시각·수량·가격·판 근거 첫 줄).
+    2026-10-21 한화시스템: 09:57 70,800원에 팔고 12:34 73,000원에 다시 샀다. 막지 않고 투자·검증 AI에게 보여 다시 사는 근거를 쓰게 한다"""
+    return [f"{r['at']} {r['qty']}주 {r['price']:,}원에 팜 (판 근거: {r['why'] or '미확인'})" for r in conn.execute(
+        "SELECT to_char(o.created_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS at, o.filled_qty AS qty, o.filled_price AS price,"
+        " p.claims->0->>'text' AS why FROM orders o JOIN approvals a ON a.id = o.approval_id JOIN proposals p ON p.id = a.proposal_id"
+        " WHERE p.user_id = %s AND p.stock_code = %s AND o.side = 'sell' AND o.filled_qty > 0"
+        " AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date = (now() AT TIME ZONE 'Asia/Seoul')::date ORDER BY o.created_at",
+        (user_id, code))]
+
+
 def today_sell_rejects(conn, user_id: str, code: str) -> list[str]:
     """오늘 이 종목 매도 제안을 검증 AI가 반려한 이유 (최근 것부터 REJECTS_SHOWN개).
     2026-10-20 삼성SDI: "시장 하락만으로 매도"를 4번 내고 4번 반려됐다. 투자 AI에게 보여 같은 근거로 다시 내지 않게 한다"""
@@ -772,6 +783,9 @@ def invest_context(state: InvestState) -> str:
         if signal in signals.WARNINGS:  # 투자 AI에게만 준다. 검증 AI는 원문으로 따로 본다
             parts.append(f"[대화 신호] {signals.WARNINGS[signal]} 이 위험을 위험(risks)에 쓰고, "
                          "매수를 고르려 했다면 관찰(watch)이 더 맞는지 따져 근거에 쓴다.")
+    if sold := state.get("today_sells"):
+        parts.append("[오늘 이 종목 매도] 오늘 이미 이 종목을 팔았다. 다시 사려면 판 이유가 사라졌다는 새 근거를 쓰고, "
+                     "판 가격보다 비싸게 사는 것이면 그래도 사는 이유를 쓴다\n" + "\n".join(f"- {x}" for x in sold))
     if rejects := state.get("today_rejects"):
         parts.append("[오늘 이 종목 매도 반려] 오늘 이 종목 매도 제안이 검증에서 아래 이유로 반려됐다. 같은 근거로 매도를 다시 내지 말고, "
                      "그 뒤 새로 생긴 종목만의 근거(추세 꺾임, 시장보다 뚜렷한 약세, 공식 악재)가 있을 때만 매도를 고른다\n"
@@ -797,6 +811,7 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
         "[반대 근거]\n" + "\n".join(f"- {x}" for x in proposal["counter_arguments"]),
         "[위험]\n" + "\n".join(f"- {x}" for x in proposal["risks"]),
         "[판단이 틀리는 조건]\n" + "\n".join(f"- {x}" for x in proposal["invalid_if"]),
+        *(["[오늘 이 종목 매도]\n" + "\n".join(f"- {x}" for x in state["today_sells"])] if state.get("today_sells") else []),
         "[원문] (출처 ID로 다시 읽은 것)\n" + "\n".join(source_lines(reloaded)),
         "[다시 계산한 지표]\n" + "\n".join(metric_line(m) for m in recomputed),
         "[코드 검사]\n" + "\n".join(f"- {c['target']}: {c['result']} ({c['detail']})" for c in checks),
@@ -941,6 +956,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
     with connect(runtime.context.database_url, row_factory=dict_row) as conn:
         rank = volatility_rank(conn, code)
         rejects = today_sell_rejects(conn, state["user_id"], code) if holds else []
+        sold = today_sells(conn, state["user_id"], code)
     profile = (state["mode"], state.get("risk_level"), state.get("flags") or [], grade)
     mock = not state.get("real_mode")  # 모의투자는 1등급도 AI가 매수 여부를 판단한다 (suitability.buy_block_reason)
     auto_buy = bool(state.get("user_directed") and state.get("auto_origin") and state["side"] == "buy")
@@ -955,7 +971,7 @@ def gather_node(state: InvestState, runtime: Runtime[Context]) -> dict:
         "allowed_actions": (["watch"] if falling else [state["side"], "watch"]) if auto_buy
         else [state["side"]] if state.get("user_directed") else allowed_actions(*profile, holds, rank, mock),
         "buy_block_reason": FALLING_REASON if auto_buy and falling else buy_block_reason(*profile, rank, mock),
-        "verifications": [], "revision_round": 0, "today_rejects": rejects,
+        "verifications": [], "revision_round": 0, "today_rejects": rejects, "today_sells": sold,
         # 5-4 대화 속 성향 신호 (모델이 꺼져 있으면 None). 사람이 쓴 말만 본다
         "conversation_signal": None if state.get("auto_origin") else signals.model_signal(state["query"]),
     }

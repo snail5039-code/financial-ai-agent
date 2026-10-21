@@ -23,6 +23,7 @@
 | `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 3%p / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
 | `autoDeferMoreDropPct` | 1%p | 같은 파일 `deferSell` | 미룬 뒤 지수가 이만큼 더 빠지면 30분을 기다리지 않고 묻는다 (10/20 뒤) |
 | `autoStopRepeatPct` | 1.5%p | 같은 파일 `sellReason` | 손절선 질문 뒤 이만큼 더 빠지면 손절선 질문을 다시 (10/20 뒤) |
+| `autoBuyHoldMin` | 30분 | 같은 파일 `sellReason` | 산 뒤 이만큼은 매도 판단을 묻지 않는다 (강제 손절만, 10/21) |
 | `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
 | `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준. 매도 점수(판 가격 대비 종가)는 같은 파일 `sell_score`, 장 마감 요약에 전 거래일 점수가 붙는다 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
@@ -41,6 +42,19 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/21 장중·장 마감 뒤 (9일차, 코스피 +3%대 상승일에 계좌는 제자리)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 한화시스템 09:39 매수 → 18분 뒤 매입가 −3%로 바로 물어 −3.1%에 팜 | 산 뒤 `autoBuyHoldMin`(30분)은 매도 판단을 묻지 않는다 (강제 손절은 그대로). 11:07 반영 | `auto_trader.dart` `sellReason` `bought_at`, `_markBought` | `client_test` 매도 판단 |
+| 엘앤씨바이오 급등 경고(5일 +17.4%)로 사람 확인 처리안이 10분 만료로 반복 | 사람 확인 때문에 멈춘 매수는 그날 다시 묻지 않는다. 11:07 반영 | `auto_trader.dart` `auto_needs_person`, `_needsPerson` | 수동 확인 (11:33 뒤 다시 안 물음) |
+| 자동 매도 근거에 "사용자의 지시에 따라" (사실과 다름) | [자동매매 주문]에 '사용자 지시·요청'이라고 쓰지 말라고 더함. 11:07 반영 | `analysis.py` `invest_context` | `test_order` 자동매매 주문 |
+| SK이노베이션 매수가 출처 ID 형식만으로 3번 반려 (`per:계산 불가`, `fin:…#91`) | 출처 ID 바로잡기에 두 모양 더함. 11:40 반영 | `analysis.py` `fix_source_id` | `test_fix_source_ids_corrects_common_typos` |
+| 상승일에 "VWAP 아래·5분 저가 하락" 같은 몇 분짜리 신호만으로 산 지 얼마 안 된 종목을 팜 (한화시스템 −3.1%, 피에스케이홀딩스 −1.5%) | 투자·검증 지시문: 장중 단기 신호만으로는 팔지 않는다. 추세 꺾임·손절선·공식 악재·큰 이익 반납 같은 더 긴 근거가 함께 있어야 (검증 AI는 반려) | `llm.py` `INVEST_PROMPT`, `VERIFY_PROMPT` 9번 | `test_invest_context_shows_todays_sells_and_short_signal_rule` |
+| 한화시스템을 70,800원에 팔고 3시간 뒤 73,000원에 다시 삼 | 막지 않고, 오늘 판 기록(시각·가격·판 근거)을 투자·검증 AI에게 보여 "판 이유가 사라졌다는 새 근거"를 쓰게 함 (사용자 결정: 일괄 금지는 너무 거침) | `analysis.py` `today_sells`, `invest_context`, `verify_context` | 같은 테스트 |
+
+그대로 둔 것: 급등 경고 매수는 사람 확인 없이 사지 않는다 (사용자와 합의, 엘앤씨바이오 종가를 보고 다시 정함). 현금 비중(오늘 약 38%)은 내일 점수표의 관찰 종목 등락을 보고 정한다.
 
 ## 10/20 장 마감 뒤 (8일차 기록으로)
 
