@@ -16,6 +16,7 @@ import 'package:invest_client/features/auto/reservations.dart';
 import 'package:invest_client/features/history/history_page.dart';
 import 'package:invest_client/features/home/briefing_page.dart';
 import 'package:invest_client/features/home/equity_chart.dart';
+import 'package:invest_client/features/home/home_page.dart';
 import 'package:invest_client/features/home/themes_page.dart';
 import 'package:invest_client/features/home/rooms_page.dart';
 import 'package:invest_client/features/settings/settings_page.dart';
@@ -77,6 +78,9 @@ void main() {
     };
     expect(equitySeries(data, daily: true), [('10/16', 9428986), ('10/19', 9416713)]);
     expect(equitySeries(data, daily: false), [('09:54', 9322536)]);
+    // 자산 탭 '오늘' 줄: 전 거래일 마지막 총자산 (오늘 기록은 빼고)
+    final days = [{'date': '2026-10-19', 'total_krw': 9424763}, {'date': '2026-10-20', 'total_krw': 9115405}, {'date': '2026-10-21', 'total_krw': 9149914}];
+    expect([prevDayTotal(days, '20261021'), prevDayTotal(days, '20261020'), prevDayTotal(days, '20261019')], [9115405, 9424763, null]);
     expect([changeText(1.234), changeText(-0.1), changeText(0), changeText(null)], ['+1.23%', '-0.10%', '0.00%', '미확인']); // 종목 탭
     final themes = [
       {'theme': '반도체', 'stocks': [{'code': '005930', 'name': '삼성전자'}, {'code': '000660', 'name': 'SK하이닉스'}]},

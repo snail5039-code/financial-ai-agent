@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../broker/broker.dart';
+import '../../api/api.dart';
 import '../../common/common.dart';
+import '../../secure/key_store.dart';
 import '../history/history_page.dart';
 import '../settings/broker_page.dart';
 import 'equity_chart.dart';
@@ -27,6 +29,13 @@ Future<BrokerExtras?> loadBrokerExtras() async {
   }
 }
 
+/// 전 거래일 마지막 총자산 (서버 날짜별 기록, 폰이 올린 값). today: "20261021"
+int? prevDayTotal(List<Map<String, dynamic>> days, String today) =>
+    days.where((d) => (d['date'] as String).replaceAll('-', '').compareTo(today) < 0).lastOrNull?['total_krw'] as int?;
+
+/// 시작 금액은 폰에만 둔다 (증권사 잔고엔 처음 넣은 돈이 없다). 모의·실전을 따로
+String startKey() => 'start_krw:${realMode.value ? 'real' : 'mock'}';
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onAsk, required this.active});
   final void Function(String text) onAsk;
@@ -38,11 +47,50 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late Future<(Overview, BrokerExtras?)> _data = _load();
+  int? _prev; // 전 거래일 마지막 총자산
+  int? _start; // 사용자가 넣은 시작 금액
 
   // 증권사 호출은 차례로 (KIS 모의는 초당 호출 수가 적다)
   Future<(Overview, BrokerExtras?)> _load() async {
     final overview = await loadOverview();
+    try {
+      final days = ((await api.get('/api/equity') as Map)['days'] as List).cast<Map<String, dynamic>>();
+      _prev = prevDayTotal(days, kstYmd(DateTime.now()));
+    } catch (_) {
+      _prev = null; // 기록을 못 받으면 '오늘' 줄만 빠진다
+    }
+    _start = int.tryParse(await secureBox.read(startKey()) ?? '');
     return (overview, await loadBrokerExtras());
+  }
+
+  /// 시작 금액 넣기·고치기. 비우면 지운다
+  Future<void> _editStart() async {
+    final field = TextEditingController(text: _start?.toString() ?? '');
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('시작 금액'),
+        content: TextField(
+          controller: field,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: '예: 10000000', suffixText: '원',
+              helperText: '처음 넣은 돈. 이 폰에만 저장해요'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(field.text), child: const Text('저장')),
+        ],
+      ),
+    );
+    if (text == null) return;
+    final value = int.tryParse(text.replaceAll(RegExp(r'[,\s원]'), ''));
+    if (value == null || value <= 0) {
+      await secureBox.delete(startKey());
+    } else {
+      await secureBox.write(startKey(), '$value');
+    }
+    setState(() { _start = value != null && value > 0 ? value : null; });
   }
 
   void _reload() => setState(() { _data = _load(); });
@@ -103,8 +151,27 @@ class _HomePageState extends State<HomePage> {
               fit: BoxFit.scaleDown,
               child: Text(won(t.total), style: const TextStyle(fontFamily: displayFont, fontSize: 34)),
             ),
-            Text('평가손익 ${signedWon(gain)} (${rateText(gain, t.cost)})',
-                style: TextStyle(fontWeight: FontWeight.bold, color: changeColor(gain))),
+            if (_prev case final prev?)
+              Text('오늘 ${signedWon(t.total - prev)} (${rateText(t.total - prev, prev)})',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: changeColor(t.total - prev))),
+            InkWell(
+              onTap: _editStart,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(children: [
+                  Flexible(
+                    child: _start == null
+                        ? const Text('시작 금액을 넣으면 처음 대비 손익이 보여요', style: TextStyle(color: brandBlue))
+                        : Text('시작 ${won(_start!)} 대비 ${signedWon(t.total - _start!)} (${rateText(t.total - _start!, _start!)})',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: changeColor(t.total - _start!))),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.edit_outlined, size: 14, color: mutedText),
+                ]),
+              ),
+            ),
+            Text('보유 종목 평가손익 ${signedWon(gain)} (${rateText(gain, t.cost)})',
+                style: TextStyle(fontSize: 13, color: changeColor(gain) ?? mutedText)),
             const SizedBox(height: 4),
             SourceText(sourceOf(balance)),
           ]),
