@@ -610,9 +610,10 @@ class AutoTrader extends ChangeNotifier {
   /// ponytail: 그 사이 사람이 같은 종목을 직접 샀으면 그것도 맡는다 (최근 3일 주문만 본다)
   Future<void> _restoreUnfilledSells(List<Map<String, dynamic>> holdings) async {
     if (await _box.read('auto_restored:$_today') != null) return;
-    await _box.write('auto_restored:$_today', '1');
     try {
-      for (final u in (await api.get('/api/orders/unfilled-sells') as List).cast<Map<String, dynamic>>()) {
+      final unfilled = (await api.get('/api/orders/unfilled-sells') as List).cast<Map<String, dynamic>>();
+      await _box.write('auto_restored:$_today', '1'); // 받은 뒤에만 남긴다 (못 받으면 다음 점검 때 다시)
+      for (final u in unfilled) {
         final code = u['stock_code'] as String;
         final held = holdings.where((h) => h['stock_code'] == code).firstOrNull?['qty'] as int? ?? 0;
         if (positions.containsKey(code) || held == 0) continue; // 실패한 주문은 보유에서 빼지 않았다
@@ -620,7 +621,7 @@ class AutoTrader extends ChangeNotifier {
         await _addPosition(code, u['stock_name'] as String, qty);
         await _note('${u['stock_name']} $qty주: 지난 매도 주문이 체결되지 않아 다시 자동매매가 맡아요');
       }
-    } catch (_) {} // 못 받으면 다음 날 다시 (매매는 계속)
+    } catch (_) {} // 못 받아도 매매는 계속
   }
 
   Map<String, String>? _markets; // 종목코드 → KOSPI/KOSDAQ (서버 분석 대상 목록, 하루 한 번)

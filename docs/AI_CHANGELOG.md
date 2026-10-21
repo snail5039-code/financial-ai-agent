@@ -54,7 +54,7 @@
 | 상승일에 "VWAP 아래·5분 저가 하락" 같은 몇 분짜리 신호만으로 산 지 얼마 안 된 종목을 팜 (한화시스템 −3.1%, 피에스케이홀딩스 −1.5%) | 투자·검증 지시문: 장중 단기 신호만으로는 팔지 않는다. 추세 꺾임·손절선·공식 악재·큰 이익 반납 같은 더 긴 근거가 함께 있어야 (검증 AI는 반려) | `llm.py` `INVEST_PROMPT`, `VERIFY_PROMPT` 9번 | `test_invest_context_shows_todays_sells_and_short_signal_rule` |
 | 한화시스템을 70,800원에 팔고 3시간 뒤 73,000원에 다시 삼 | 막지 않고, 오늘 판 기록(시각·가격·판 근거)을 투자·검증 AI에게 보여 "판 이유가 사라졌다는 새 근거"를 쓰게 함 (사용자 결정: 일괄 금지는 너무 거침) | `analysis.py` `today_sells`, `invest_context`, `verify_context` | 같은 테스트 |
 
-| HLB 21주 현재가 42,450원 지정가 매도가 체결 0주로 끝났는데(종가 42,350원), 앱은 판 것으로 보고 점검에서 뺌 | 지난 날 체결 안 된 자동 매도를 서버가 알려 주고, 앱이 다음 날 첫 점검 때 계좌에 남아 있으면 보유로 되돌린다. 자동 매도 지정가는 한 호가 낮게 | `routers/orders.py` `unfilled_sells`, `auto_trader.dart` `_restoreUnfilledSells`, `order.py` `tick_below` | `test_unfilled_auto_sells_from_earlier_days`, `test_auto_sell_price_is_one_tick_below` |
+| HLB 21주 현재가 42,450원 지정가 매도가 체결 0주로 끝났는데(종가 42,350원), 앱은 판 것으로 보고 점검에서 뺌 | 지난 날 체결 안 된 자동 매도를 서버가 알려 주고, 앱이 다음 날 첫 점검 때 계좌에 남아 있으면 보유로 되돌린다 (10/22: 서버를 못 읽으면 다음 점검 때 다시 묻는다). 자동 매도 지정가는 한 호가 낮게 | `routers/orders.py` `unfilled_sells`, `auto_trader.dart` `_restoreUnfilledSells`, `order.py` `tick_below` | `test_unfilled_auto_sells_from_earlier_days`, `test_auto_sell_price_is_one_tick_below` |
 | 출처 ID `metric: op_income_yoy`로 반려 1건 (한국타이어) | `metric` 앞머리도 뗀다 | `analysis.py` `fix_source_id` | `test_fix_source_ids_corrects_common_typos` |
 
 그대로 둔 것: 급등 경고 매수는 사람 확인 없이 사지 않는다 (사용자와 합의, 엘앤씨바이오 종가를 보고 다시 정함). 현금 비중(오늘 약 38%)은 내일 점수표의 관찰 종목 등락을 보고 정한다.
