@@ -47,6 +47,10 @@ const autoRisePct = 3; // 매입가보다 이만큼(%) 넘게 오르면 바로 A
 // 오늘 매입가 대비 최고 +autoGivebackFromPct% 넘게 갔다가 거기서 autoGivebackPct%p 넘게 내려오면 바로 묻는다.
 // 2026-10-16: 4종목이 +2~3%까지 갔다가 내려왔는데, 매입가 기준 ±3%만 봐서 아무 질문도 없었다
 const autoGivebackFromPct = 2.0;
+// 매입가보다 이만큼(%) 넘게 이익이면 30분을 기다리지 않고 바로 AI에게 "지금 팔아 이익을 확정할지" 묻는다.
+// 2026-10-23 사용자 결정: 이득을 볼 수 있다면 단기 신호로도 바로 판다 (+0.5% 넘는 이익은 단기 신호만으로 팔 수 있다, llm.py). 세금·수수료 0.2%를 넘으려면 최소 +0.5%
+const autoProfitPct = 1.0;
+const autoProfitStepPct = 0.5; // 지난번 질문 때보다 이만큼(%p) 더 올라야 다시 묻는다 (같은 이익 수준에서 되풀이 질문하지 않게)
 const autoGivebackPct = 1.5;
 const autoCloseCheckMin = 14 * 60 + 30; // 이 시각에 보유 종목마다 한 번 "들고 넘어갈지" 마감 전 점검 (장 마감 15:30)
 // 코스피가 전일보다 이만큼(%) 넘게 빠지면 보유 종목 전부를 30분 기다리지 않고 AI에게 묻는다 (10/8 −2.62%, 10/12 −3.65% 날 손실)
@@ -54,7 +58,6 @@ const autoMarketDropPct = 1.5;
 // 이 시각이 지나면 브리핑을 다시 만들어 새 매수 후보를 찾는다 (서버는 1시간에 한 번까지). 2026-10-13: 두 번뿐이라 오후 내내 살 후보가 없었다
 const autoRescanSlots = [10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 14 * 60 + 35];
 const autoBuyRetryGap = Duration(minutes: 30); // AI가 '관찰'이라 안 산 종목도 이만큼 지나면 새 판단으로 다시 묻는다
-// 산 뒤 이 분까지는 매도 판단을 묻지 않는다 (강제 손절만). 2026-10-21 한화시스템: 09:39에 사고 18분 뒤 −3.1%에 팔았다
 const autoReviewGap = Duration(minutes: 30);
 const autoMaxReviews = 20; // 종목마다 하루에 묻는 횟수 (30분마다 + 급락 재질문, 서버 하루 분석 한도 100 안)
 const _watchGap = Duration(minutes: 5); // 잔고 조회가 느려서(모의 12초) 5분마다만 본다
@@ -92,7 +95,7 @@ bool marketDropped(double? kospiPct, double? lastAlertPct, DateTime now) =>
 
 /// 보유 종목 하나를 지금 어떻게 볼지. 모두 AI에게 묻고, AI가 팔자고 하고 검증 AI가 승인할 때만 판다.
 /// 'stop'(손절선, 한 번은 횟수 제한 없이 바로), 'drop'(급락, 바로), 'rise'(급등, 바로), 'market'(시장 급락, 바로),
-/// 'giveback'(오늘 최고에서 이익을 돌려줌, 바로), 'close'(14:30 마감 전 점검, 하루 한 번),
+/// 'giveback'(오늘 최고에서 이익을 돌려줌, 바로), 'profit'(이익이 autoProfitPct% 넘음, 바로), 'close'(14:30 마감 전 점검, 하루 한 번),
 /// 'check'(정기 점검, autoReviewGap마다), null(아직 물을 때가 아님).
 /// seen: 오늘 이 종목에 한 일 {n: AI에게 물은 횟수, at: 마지막으로 물은 시각, pct: 그때 매입가 대비 %, stopped: 손절 시도함,
 ///   peak: 오늘 본 매입가 대비 최고 %, gave: 이익 돌려줌으로 물었을 때의 peak, closed: 마감 전 점검 함}
@@ -117,6 +120,7 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   if (peak != null && peak >= autoGivebackFromPct && peak - dropPct >= autoGivebackPct && (gave == null || peak > gave) && waited) {
     return 'giveback';
   }
+  if (dropPct >= autoProfitPct && (lastPct == null || dropPct >= lastPct + autoProfitStepPct) && waited) return 'profit';
   if (marketDrop && waited) return 'market';
   if (kst.hour * 60 + kst.minute >= autoCloseCheckMin && seen['closed'] != true && waited) return 'close';
   return last == null || now.difference(last) >= autoReviewGap ? 'check' : null;
@@ -183,6 +187,7 @@ const _why = {
   'drop': '매입가보다 크게 내렸어. ',
   'market': '시장 전체가 급하게 빠지고 있어. ',
   'giveback': '오른 이익을 지킬지, 다시 오를 근거가 있어 들고 있을지 판단해 줘. ',
+  'profit': '지금 팔아도 세금·수수료를 빼고 이익이 남아. 이익을 지금 확정할지, 더 오를 근거가 있어 들고 갈지 판단해 줘. 이익이 나는 지금은 장중 단기 신호(VWAP 아래·5분 저가 하락·고가에서 밀림)만으로도 팔 수 있어. ',
   'close': '곧 장이 끝나. 오늘 흐름을 보고 이대로 들고 내일로 넘어갈지 판단해 줘. ',
 };
 
@@ -610,7 +615,7 @@ class AutoTrader extends ChangeNotifier {
       reviews[code] = {...seen, 'n': (seen['n'] as int? ?? 0) + 1, 'at': _now().toIso8601String(), 'pct': drop,
           if (reason == 'stop') 'stopped': true, if (reason == 'stop') 'stop_pct': drop, if (reason == 'giveback') 'gave': seen['peak'], if (reason == 'close') 'closed': true};
       await _box.write('auto_reviews:$_today', jsonEncode(reviews));
-      await _note('$name 매입가 대비 $pct%: ${const {'stop': '손절선이라', 'drop': '급락이라', 'rise': '급등이라', 'market': '시장 급락이라', 'giveback': '오른 이익을 돌려줘서', 'close': '마감 전 점검으로'}[reason] ?? '정기 점검으로'} 투자 AI·검증 AI에게 매도 판단을 물어요');
+      await _note('$name 매입가 대비 $pct%: ${const {'stop': '손절선이라', 'drop': '급락이라', 'rise': '급등이라', 'market': '시장 급락이라', 'giveback': '오른 이익을 돌려줘서', 'profit': '이익이 나서', 'close': '마감 전 점검으로'}[reason] ?? '정기 점검으로'} 투자 AI·검증 AI에게 매도 판단을 물어요');
       final conversation = Conversation(unlock: () async => false); // 분석만 한다. 주문은 아래에서 따로
       await conversation.send(sellQuestion(name, avg, pct, reason: reason, peak: (seen['peak'] as num?)?.toDouble(), market: marketText));
       final answer = conversation.items.lastWhere((i) => i.role != 'user', orElse: () => ChatItem('info', '')).text;

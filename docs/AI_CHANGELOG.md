@@ -30,7 +30,7 @@
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
 | 매수 시간 | 09:05~15:20 | `tick()` | 매도 판단은 15:28까지 |
 | `autoApproves()` | 매수=승인만, 매도=조건부까지 | 같은 파일 | 자동으로 승인할 검증 판정 |
-| `MAX_ANALYSES_PER_DAY` / `HOLDING_RESERVE` | 200 / 50 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용, 10/20 사용자 결정 150 → 200). 안 가진 종목은 150번까지, 남은 50번은 보유 종목 매도 점검용 |
+| `MAX_ANALYSES_PER_DAY` / `HOLDING_RESERVE` | 250 / 70 | `apps/api/app/agents/analysis.py` | 하루 AI 분석 한도 (Gemini 비용, 10/20 사용자 결정 150 → 200). 안 가진 종목은 150번까지, 남은 50번은 보유 종목 매도 점검용 |
 | `autoGivebackFromPct` / `autoGivebackPct` | +2% / 1.5%p | `auto_trader.dart` `sellReason` | 오늘 매입가 대비 최고가 +2%를 넘은 뒤 거기서 1.5%p 넘게 내려오면 바로 AI에게 (새 최고 전엔 한 번만) |
 | `autoCloseCheckMin` | 14:30 | 같은 파일 | 보유 종목마다 하루 한 번 마감 전 점검 |
 | `GIVEBACK_PCT` | 1.5%p | `analysis.py` `giveback_text` | 장중 흐름에 오늘 고가·고가 때 수익·지금 수익을 쓰고, 이만큼 넘게 돌려줬으면 "돌려줌"을 붙인다 |
@@ -50,6 +50,7 @@
 |---|---|---|---|
 | 강제 손절(−10%·−15%)도 일반 매도와 같은 주문 길(투자 AI → 검증 AI)을 타는데 이유를 안 보내, 10/22 SK이노베이션처럼 "단기 신호만"으로 반려될 수 있음. 게다가 "강제 손절 함" 표시를 주문 전에 먼저 남겨 막히면 다음 단계(−15%)까지 안 팖 | 강제 손절에도 이유("강제 손절선 −10% 이탈…")를 보내고, 주문이 막히면 5분 뒤 최대 3번 다시 한다 (팔렸으면 그 단계 끝) | `auto_trader.dart` `sellBasis`·강제 손절 블록 | client_test `sellBasis` (재시도는 실제 실행에서 확인) |
 | 직접 산 종목 자동 점검(10/22)이 전량 매도가 체결 전일 때 5분 뒤 그 종목을 다시 "직접 산 종목"으로 맡아 중복 매도를 낼 수 있음 | 오늘 자동으로 판 종목은 그날 다시 맡지 않음 (`auto_sold:날짜`). 미체결은 다음 날 기존 되돌리기가 처리 | `auto_trader.dart` `adoptable`·`_markSold` | client_test `adoptable` |
+| 이익이 나도 30분 점검을 기다려야 해서 "바로 팔 수 있게"가 안 됨 (사용자 10/23). 점검이 늘어 분석 한도(200)도 빠듯해질 수 있음 | **이익이 +1% 넘으면 바로 AI에게 묻는다** (`autoProfitPct`, 지난번 질문보다 +0.5%p 더 올라야 다시 묻고 10분 간격). 하루 분석 한도 200 → **250**, 보유 몫 50 → **70** (사용자 결정, 최근 사흘 146~150번 사용) | `auto_trader.dart` `sellReason`·`_why`, `analysis.py` `MAX_ANALYSES_PER_DAY`·`HOLDING_RESERVE` | client_test `sellReason` |
 | 짧은 신호로는 이익이 나도 못 팖 (사용자 10/23: "이득을 볼 수 있다면 단기로도 바로 팔 수 있게") | 투자 AI·검증 AI 지시문에 예외: 지금 팔아 매입가보다 +0.5% 이상 이익(세금·수수료 0.2% 뺀 뒤에도 이익)이면 VWAP 아래·5분 저가 하락 같은 단기 신호만으로도 판다. 손실 중이면 "단기 신호만으로는 팔지 않기" 그대로. 점검 주기·바로 묻는 조건(+3% 등)은 그대로 | `llm.py` INVEST_PROMPT·VERIFY_PROMPT | `test_invest_context_shows_todays_sells_and_short_signal_rule` |
 | 산 직후 30분은 매도 판단을 묻지 않음 (사용자: "사도 바로 팔 수 있게") | 산 뒤 대기 `autoBuyHoldMin`과 산 시각 기록을 없앴다. 10/21 한화시스템 같은 일은 "단기 신호만으로는 팔지 않기"가 막는다 | `auto_trader.dart` `sellReason` | client_test `sellReason` |
 

@@ -580,9 +580,16 @@ void main() {
     expect(sellReason(-3.2, {'at': ago(5)}, now), isNull); // 그래도 10분 안에 또 묻지는 않는다
     expect(sellReason(-3.5, {'at': ago(15), 'pct': -3.2}, now), isNull); // 급락이 이어지기만 하면 30분 점검까지 기다린다
     expect(sellReason(-4.3, {'at': ago(15), 'pct': -3.2}, now), 'drop'); // 1%p 더 빠지면 바로
-    expect(sellReason(2.0, {}, now), 'check'); // 오른 종목도 AI가 앞을 보고 판단
-    expect(sellReason(2.0, {'at': ago(20)}, now), isNull);
-    expect(sellReason(2.0, {'at': ago(31)}, now), 'check');
+    expect(sellReason(0.4, {}, now), 'check'); // 오른 종목도 AI가 앞을 보고 판단
+    expect(sellReason(0.4, {'at': ago(20), 'pct': 0.4}, now), isNull);
+    expect(sellReason(0.4, {'at': ago(31), 'pct': 0.4}, now), 'check');
+    // 2026-10-23 사용자 결정: 이익이 +1%를 넘으면 30분을 기다리지 않고 바로 묻는다 (이익이 나면 단기 신호로도 팔 수 있다)
+    expect(sellReason(1.2, {}, now), 'profit');
+    expect(sellReason(1.2, {'at': ago(15), 'pct': 0.4}, now), 'profit');
+    expect(sellReason(1.2, {'at': ago(5), 'pct': 0.4}, now), isNull); // 10분 안에 또 묻지는 않는다
+    expect(sellReason(1.4, {'at': ago(15), 'pct': 1.2}, now), isNull); // 0.5%p 더 오르기 전엔 같은 수준에서 되풀이하지 않는다
+    expect(sellReason(1.8, {'at': ago(15), 'pct': 1.2}, now), 'profit');
+    expect(sellReason(0.9, {'at': ago(15), 'pct': 0.4}, now), isNull);
     expect(sellReason(-3.2, {'n': 20}, now), isNull); // 하루 20번까지
     expect(sellReason(-7.5, {'n': 20}, now), 'stop'); // 손절선 질문은 횟수 제한과 상관없다 (팔지는 AI가 판단)
     // 급등도 바로 AI에게 (팔지 말지는 AI가 판단), 지난번보다 1%p 더 올랐을 때만 다시
@@ -613,9 +620,9 @@ void main() {
     final pm = DateTime.utc(2026, 10, 16, 5, 0); // 14:00
     String pmAgo(int minutes) => pm.subtract(Duration(minutes: minutes)).toIso8601String();
     expect(sellReason(1.3, {'at': pmAgo(15), 'peak': 3.3}, pm), 'giveback');
-    expect(sellReason(2.3, {'at': pmAgo(15), 'peak': 3.3}, pm), isNull); // 1%p만 내려왔으면 30분 점검까지
+    expect(sellReason(2.3, {'at': pmAgo(15), 'pct': 2.3, 'peak': 3.3}, pm), isNull); // 1%p만 내려왔으면 30분 점검까지
     expect(sellReason(0.4, {'at': pmAgo(15), 'peak': 1.8}, pm), isNull); // 최고가 +2% 안 됐으면 이익 돌려줌이 아니다
-    expect(sellReason(1.0, {'at': pmAgo(15), 'peak': 3.3, 'gave': 3.3}, pm), isNull); // 같은 최고로는 한 번만
+    expect(sellReason(1.0, {'at': pmAgo(15), 'pct': 1.0, 'peak': 3.3, 'gave': 3.3}, pm), isNull); // 같은 최고로는 한 번만
     expect(sellReason(1.0, {'at': pmAgo(15), 'peak': 3.8, 'gave': 3.3}, pm), 'giveback'); // 새 최고가 나온 뒤 다시 내려오면 또
     expect(sellReason(1.3, {'at': pmAgo(5), 'peak': 3.3}, pm), isNull); // 10분 안에는 또 묻지 않는다
     final close = DateTime.utc(2026, 10, 16, 5, 31); // 14:31
