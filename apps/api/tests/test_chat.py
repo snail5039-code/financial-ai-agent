@@ -311,6 +311,15 @@ def test_snapshot_api(client, user) -> None:
     assert client.post("/api/snapshot", headers=user["headers"], json=with_account).status_code == 422
 
 
+def test_snapshot_keeps_market_pct(client, user, migrated) -> None:
+    snapshot = {**BALANCE, "fetched_at": now_iso(), "kospi_pct": -0.9, "kosdaq_pct": -1.6}
+    assert client.post("/api/snapshot", headers=user["headers"], json=snapshot).status_code == 204
+    with psycopg.connect(migrated) as conn:
+        row = conn.execute("SELECT kospi_pct, kosdaq_pct FROM account_snapshots WHERE user_id = %s", (user["id"],)).fetchone()
+    assert (float(row[0]), float(row[1])) == (-0.9, -1.6)
+    assert client.post("/api/snapshot", headers=user["headers"], json={**snapshot, "kospi_pct": 31}).status_code == 422
+
+
 def test_equity_history_from_phone_totals(client, user) -> None:
     headers = user["headers"]
     assert client.get("/api/equity", headers=headers).json() == {"days": [], "intraday": {"date": None, "points": []}}

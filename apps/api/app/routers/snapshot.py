@@ -18,12 +18,19 @@ from app.routers.auth import UserId
 router = APIRouter(prefix="/api", tags=["snapshot"])
 
 
+class Snapshot(Balance):
+    """그때 코스피·코스닥 전일 대비 % (2026-10-22: 아침 하락 뒤 반등하는지 계좌와 나란히 보려고 쌓는다)"""
+    kospi_pct: float | None = Field(default=None, ge=-30, le=30)
+    kosdaq_pct: float | None = Field(default=None, ge=-30, le=30)
+
+
 @router.post("/snapshot", status_code=204)
-def post_snapshot(body: Balance, conn: Conn, user_id: UserId) -> None:
+def post_snapshot(body: Snapshot, conn: Conn, user_id: UserId) -> None:
     holdings = body.model_dump(mode="json")["holdings"]
     conn.execute(
-        "INSERT INTO account_snapshots (user_id, cash_krw, holdings, fetched_at, total_krw) VALUES (%s, %s, %s, %s, %s)",
-        (user_id, body.cash_krw, Jsonb(holdings), body.fetched_at, body.total_krw),
+        "INSERT INTO account_snapshots (user_id, cash_krw, holdings, fetched_at, total_krw, kospi_pct, kosdaq_pct)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (user_id, body.cash_krw, Jsonb(holdings), body.fetched_at, body.total_krw, body.kospi_pct, body.kosdaq_pct),
     )
     conn.commit()
 

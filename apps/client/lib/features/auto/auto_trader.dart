@@ -491,19 +491,21 @@ class AutoTrader extends ChangeNotifier {
     final broker = currentBroker.value!;
     final balance = await broker.balance();
     final holdings = (balance['holdings'] as List).cast<Map<String, dynamic>>();
-    try { // 장중 총자산 기록 (자산 탭 그래프). 실패해도 매매는 계속
-      await api.post('/api/snapshot',
-          {...balance, if (equityTime(_now())) 'total_krw': equityOf(balance, broker.lastPrices)});
+    // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
+    List<Map<String, dynamic>>? market;
+    try {
+      market = await broker.market();
+    } catch (_) {
+      market = null;
+    }
+    double? pctOf(String index) => (market?.where((m) => m['index'] == index).firstOrNull?['change_pct'] as num?)?.toDouble();
+    final kospi = pctOf('KOSPI');
+    try { // 장중 총자산 기록 (자산 탭 그래프)과 그때 지수 % (아침 하락 뒤 반등하는지 쌓는다, 2026-10-22). 실패해도 매매는 계속
+      await api.post('/api/snapshot', {...balance, if (equityTime(_now())) ...{
+        'total_krw': equityOf(balance, broker.lastPrices), 'kospi_pct': kospi, 'kosdaq_pct': pctOf('KOSDAQ')}});
     } catch (_) {}
     await _restoreUnfilledSells(holdings);
     final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
-    // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
-    double? kospi;
-    try {
-      kospi = ((await broker.market())?.where((m) => m['index'] == 'KOSPI').firstOrNull?['change_pct'] as num?)?.toDouble();
-    } catch (_) {
-      kospi = null;
-    }
     final marketDrop = marketDropped(kospi, ((reviews['_market'] as Map?)?['pct'] as num?)?.toDouble(), _now());
     if (marketDrop) {
       reviews['_market'] = {'pct': kospi, 'at': _now().toIso8601String()};
