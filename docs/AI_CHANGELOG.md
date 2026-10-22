@@ -23,7 +23,8 @@
 | `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 3%p / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
 | `autoDeferMoreDropPct` | 1%p | 같은 파일 `deferSell` | 미룬 뒤 지수가 이만큼 더 빠지면 30분을 기다리지 않고 묻는다 (10/20 뒤) |
 | `autoStopRepeatPct` | 1.5%p | 같은 파일 `sellReason` | 손절선 질문 뒤 이만큼 더 빠지면 손절선 질문을 다시 (10/20 뒤) |
-| `autoBuyHoldMin` | 30분 | 같은 파일 `sellReason` | 산 뒤 이만큼은 매도 판단을 묻지 않는다 (강제 손절만, 10/21) |
+| 산 뒤 매도 대기 | 없음 | 같은 파일 `sellReason` | 10/21에 `autoBuyHoldMin` 30분을 넣었다가 10/23 사용자 결정으로 없앴다. 산 직후에도 바로 묻는다 (단기 신호만으로는 검증이 반려) |
+| `autoHardStopTries` | 3번 | 같은 파일 `hardStop` 호출부 | 강제 손절 주문이 막혀도 5분마다 이만큼은 다시 한다 (10/23) |
 | `buy_portion` (투자 AI) / `buyRoom(half:)` | 전부·절반 | `schemas.py`, `auto_trader.dart` | 절반이면 종목 몫(35%)의 절반만 먼저 산다 |
 | `MOVE_PCT` | ±2% | `apps/api/app/scorecard.py` | 관찰 판단 점수의 놓친 기회·피한 손실 기준. 매도 점수(판 가격 대비 종가)는 같은 파일 `sell_score`, 장 마감 요약에 전 거래일 점수가 붙는다 |
 | `autoMaxReviews` | 20 | 같은 파일 | 종목당 하루 매도 판단 횟수 |
@@ -42,6 +43,15 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/23 장 전 (11일차, 사용자 결정·점검)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 강제 손절(−10%·−15%)도 일반 매도와 같은 주문 길(투자 AI → 검증 AI)을 타는데 이유를 안 보내, 10/22 SK이노베이션처럼 "단기 신호만"으로 반려될 수 있음. 게다가 "강제 손절 함" 표시를 주문 전에 먼저 남겨 막히면 다음 단계(−15%)까지 안 팖 | 강제 손절에도 이유("강제 손절선 −10% 이탈…")를 보내고, 주문이 막히면 5분 뒤 최대 3번 다시 한다 (팔렸으면 그 단계 끝) | `auto_trader.dart` `sellBasis`·강제 손절 블록 | client_test `sellBasis` (재시도는 실제 실행에서 확인) |
+| 직접 산 종목 자동 점검(10/22)이 전량 매도가 체결 전일 때 5분 뒤 그 종목을 다시 "직접 산 종목"으로 맡아 중복 매도를 낼 수 있음 | 오늘 자동으로 판 종목은 그날 다시 맡지 않음 (`auto_sold:날짜`). 미체결은 다음 날 기존 되돌리기가 처리 | `auto_trader.dart` `adoptable`·`_markSold` | client_test `adoptable` |
+| 짧은 신호로는 이익이 나도 못 팖 (사용자 10/23: "이득을 볼 수 있다면 단기로도 바로 팔 수 있게") | 투자 AI·검증 AI 지시문에 예외: 지금 팔아 매입가보다 +0.5% 이상 이익(세금·수수료 0.2% 뺀 뒤에도 이익)이면 VWAP 아래·5분 저가 하락 같은 단기 신호만으로도 판다. 손실 중이면 "단기 신호만으로는 팔지 않기" 그대로. 점검 주기·바로 묻는 조건(+3% 등)은 그대로 | `llm.py` INVEST_PROMPT·VERIFY_PROMPT | `test_invest_context_shows_todays_sells_and_short_signal_rule` |
+| 산 직후 30분은 매도 판단을 묻지 않음 (사용자: "사도 바로 팔 수 있게") | 산 뒤 대기 `autoBuyHoldMin`과 산 시각 기록을 없앴다. 10/21 한화시스템 같은 일은 "단기 신호만으로는 팔지 않기"가 막는다 | `auto_trader.dart` `sellReason` | client_test `sellReason` |
 
 ## 10/22 장중 (10일차, 하락 출발, 데이터 쌓기)
 

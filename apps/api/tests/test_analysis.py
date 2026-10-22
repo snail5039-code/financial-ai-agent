@@ -687,3 +687,6 @@ def test_invest_context_shows_todays_sells_and_short_signal_rule() -> None:
     assert "[오늘 이 종목 매도]" in text and "70,800원에 팜" in text
     assert "[오늘 이 종목 매도]" not in analysis.invest_context({**state, "today_sells": []})
     assert "단기 신호" in llm.INVEST_PROMPT and "장중 단기 신호" in llm.VERIFY_PROMPT and "[오늘 이 종목 매도]가 있는데" in llm.VERIFY_PROMPT
+    # 2026-10-23 사용자 결정: 이익이 나는 매도(+0.5% 이상)는 단기 신호만으로도 판다. 손실 중이면 규칙 그대로
+    assert "+0.5% 이상" in llm.INVEST_PROMPT and "손실 중이면 위 규칙 그대로" in llm.INVEST_PROMPT
+    assert "+0.5% 이상 이익" in llm.VERIFY_PROMPT and "손실 중이면 위 규칙 그대로" in llm.VERIFY_PROMPT

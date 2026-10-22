@@ -566,9 +566,8 @@ void main() {
     // 2026-10-20 고영: 손절선 질문 뒤 1.5%p 더 빠지면 손절선 질문을 다시 한다
     expect(sellReason(-8.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), isNot('stop'));
     expect(sellReason(-9.5, {'stopped': true, 'stop_pct': -7.9, 'at': ago(15), 'pct': -7.9}, now), 'stop');
-    // 2026-10-21 한화시스템: 산 뒤 30분은 묻지 않는다 (18분 뒤 −3.1%에 팔았다). 강제 손절은 hardStop이 따로 본다
-    expect([sellReason(-3.2, {'bought_at': ago(18)}, now), sellReason(-7.5, {'bought_at': ago(29)}, now), sellReason(-3.2, {'bought_at': ago(31)}, now)],
-        [null, null, 'drop']);
+    // 2026-10-23 (사용자 결정): 산 뒤 30분 대기를 없앴다. 산 직후에도 바로 묻는다 (단기 신호만으로는 검증이 반려한다)
+    expect([sellReason(-3.2, {'bought_at': ago(18)}, now), sellReason(-7.5, {'bought_at': ago(5)}, now)], ['drop', 'stop']);
     // 강제 손절 (2026-10-15): −10%면 절반, −15%면 남은 것 전부. 한 번씩만
     expect([hardStop(-9.9, {}), hardStop(-10, {}), hardStop(-12, {'hard_half': true}), hardStop(-15.5, {'hard_half': true}),
         hardStop(-16, {'hard_half': true, 'hard_all': true})], [null, 'hard_half', null, 'hard_all', null]);
@@ -769,7 +768,11 @@ void main() {
     expect([for (final h in adoptable(held, taken, markets, real: false)) h['stock_name']], ['기아']);
     expect(adoptable(held, taken, markets, real: true), isEmpty); // 실전은 맡지 않는다
     expect(adoptable(held, taken, null, real: false), isEmpty); // 분석 대상 목록을 못 받으면 맡지 않는다
+    // 오늘 자동으로 판 종목은 그날 다시 맡지 않는다 (전량 매도가 체결 전이면 계좌에 남아 중복 매도가 나간다)
+    expect(adoptable(held, taken, markets, real: false, soldToday: {'000270'}), isEmpty);
     // 2단계 주문 AI에게 1단계 승인 이유를 알린다 (10/22 SK이노베이션 손절선 매도가 이유를 몰라 막혔다)
+    expect(sellBasis('hard_half'), contains('강제 손절선(−10%) 이탈'));
+    expect(sellBasis('hard_all'), contains('강제 손절선(−15%) 이탈'));
     expect(sellBasis('stop'), allOf(contains('손절선(−7%) 이탈'), isNot(contains('매입가 대비')), isNot(contains('이미 매도를 승인'))));
     for (final other in ['check', 'close', 'drop', 'giveback', 'market', 'rise']) {
       expect(sellBasis(other), isNull); // 10/22 "마감 전 점검 기준에 도달해서 매도" 같은 없는 기준을 근거로 쓰지 않게
