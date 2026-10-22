@@ -156,6 +156,16 @@ String sellQuestion(String name, int avg, String pct, {String reason = 'check', 
     '시장 전체 하락은 그것만으로 팔 이유가 아니야. 팔려면 시장보다 뚜렷하게 약하거나 추세가 꺾였거나 악재 공시 같은 종목만의 근거가 있어야 해. '
     '판다면 전부 팔지 절반만 덜지도 정해 줘';
 
+/// 2단계(주문 만들기) AI에게 알리는 1단계(매도 점검)의 승인 이유.
+/// 2026-10-22 SK이노베이션 −7.3%: 점검에서 손절선으로 매도가 승인됐는데 주문 AI는 이유를 몰라 "관찰"로 막았다
+String sellBasis(String reason, String pct) {
+  final text = {
+    'stop': '손절선(−$autoStopLossPct%) 이탈', 'drop': '매입가보다 급락', 'giveback': '오른 이익을 크게 돌려줌',
+    'market': '시장 급락 속 종목도 약함', 'rise': '급등 뒤 고점 우려', 'close': '마감 전 점검',
+  }[reason] ?? '정기 점검';
+  return '$text (매입가 대비 $pct%). 보유 종목 점검에서 투자 AI·검증 AI가 이미 매도를 승인했다';
+}
+
 const _why = {
   'stop': '매입가 대비 −$autoStopLossPct% 손절선에 닿았어. 손실을 더 키우지 않게 팔지, 반등 근거가 확실해서 들고 갈지 판단해 줘. ',
   'rise': '짧은 시간에 많이 올랐어. 지금이 고점이라 곧 밀릴 것 같으면 미리 팔아 이익을 지키고, 더 오를 근거가 크면 들고 있어. ',
@@ -601,7 +611,7 @@ class AutoTrader extends ChangeNotifier {
       final parts = splitQty(qty, price, await _maxOrder());
       if (parts.isEmpty) await _note('$name: 1주 값이 1회 한도보다 커서 팔 수 없어요. 직접 판단해 주세요');
       for (final part in parts) {
-        if (!on || plan == null || await _order(name, part, 'sell', why: reason == 'stop' ? 'AI 손절' : 'AI 매도') != true) break;
+        if (!on || plan == null || await _order(name, part, 'sell', why: reason == 'stop' ? 'AI 손절' : 'AI 매도', basis: sellBasis(reason, pct)) != true) break;
         await _addPosition(code, name, -part);
       }
     }
@@ -650,10 +660,10 @@ class AutoTrader extends ChangeNotifier {
 
   /// 한 번 주문 (사람이 채팅에 말한 것과 같은 흐름). 자동 승인해서 실행까지 갔으면 true,
   /// 처리안이 나왔지만 자동 승인하지 않았으면 false, 처리안까지 못 갔거나 실행이 실패했으면(오류) null
-  Future<bool?> _order(String name, int qty, String side, {String why = ''}) async {
+  Future<bool?> _order(String name, int qty, String side, {String why = '', String? basis}) async {
     _needsPerson = false;
     final tag = why.isEmpty ? '' : '[$why] ';
-    final conversation = Conversation(unlock: () async => on && plan != null, auto: true); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
+    final conversation = Conversation(unlock: () async => on && plan != null, auto: true, autoReason: basis); // 끄거나 계획을 거두면 실행 직전에도 멈춘다
     await conversation.send(side == 'buy' ? '$name $qty주 사줘' : '$name $qty주 팔아줘');
     final waiting = conversation.waiting;
     if (waiting?['kind'] != 'approval') {

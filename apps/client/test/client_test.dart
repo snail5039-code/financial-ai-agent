@@ -757,5 +757,8 @@ void main() {
         marketPct: -2.9, deferredMarketPct: -1.8), isFalse);
     expect(sellQuestion('솔브레인', 345500, '-6.4', reason: 'drop', market: '오늘 코스닥 -2.0%, 이 종목 오늘 -6.5%야.'),
         allOf(contains('오늘 코스닥 -2.0%'), contains('시장 전체 하락은 그것만으로 팔 이유가 아니야')));
+    // 2단계 주문 AI에게 1단계 승인 이유를 알린다 (10/22 SK이노베이션 손절선 매도가 이유를 몰라 막혔다)
+    expect(sellBasis('stop', '-7.3'), allOf(contains('손절선(−7%) 이탈'), contains('-7.3%'), contains('이미 매도를 승인')));
+    expect(sellBasis('check', '1.0'), contains('정기 점검'));
   });
 }

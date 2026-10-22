@@ -776,6 +776,10 @@ def invest_context(state: InvestState) -> str:
                      "매수인데 하락 중이거나 악재 보도가 있는 등 지금 사기 적절하지 않으면 행동을 watch(관찰)로 쓰고 이유를 근거에 쓴다. "
                      # 2026-10-21: 자동 매도 근거에 "사용자의 지시에 따라", "사용자의 1주 매도 요청에 맞춰"라고 썼다 (사실과 다름)
                      "근거에 '사용자의 지시·요청에 따라'라고 쓰지 않는다. 자동매매가 낸 주문이라고 쓰거나 이 행동의 근거만 쓴다.")
+        if state.get("auto_reason") and state["side"] == "sell":  # 2026-10-22 SK이노베이션: 손절선 매도가 2단계에서 "관찰"로 막힘
+            parts.append(f"[매도 점검 이유] 이 매도는 보유 종목 점검에서 이미 정해졌다: {state['auto_reason']}. "
+                         "이 이유가 [자료]의 현재가·매입가(snapshot)로 지금도 맞으면 행동을 sell로 쓰고 이 이유를 근거에 쓴다. "
+                         "가격이 회복되어 이유가 사라졌거나 [자료]와 다르면 watch로 쓰고 이유를 쓴다.")
     elif state.get("user_directed"):
         parts.append(f"[사용자 지시 주문] {directed_order_text(state)}. 사용자가 직접 지시한 주문이다. "
                      "행동은 지시대로 쓰고, 이 주문의 근거와 함께 반대 근거·위험을 경고 위주로 쓴다 (FR-21).")
@@ -805,7 +809,9 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
         f"[종목] {state['stock_name']}({state['stock_code']}), {grade_text(state)}",
         "[사용자]\n" + "\n".join(user_lines(state)),
         f"[제안] 행동: {proposal['action']}"
-        + (f" (자동매매가 낸 주문: {directed_order_text(state)}. 지금 이 행동이 적절한지 근거로 본다)" if state.get("auto_origin")
+        + (f" (자동매매가 낸 주문: {directed_order_text(state)}. 지금 이 행동이 적절한지 근거로 본다"
+           + (f". 보유 종목 점검의 매도 이유: {state['auto_reason']}. 손절선 이탈은 [원문]의 매입가(snapshot)·시세로 맞는지 확인한다" if state.get("auto_reason") else "")
+           + ")" if state.get("auto_origin")
            else f" (사용자가 직접 지시한 주문: {directed_order_text(state)}. 경고 위주로 본다)" if state.get("user_directed") else ""),
         "[근거]\n" + "\n".join(claims),
         "[반대 근거]\n" + "\n".join(f"- {x}" for x in proposal["counter_arguments"]),

@@ -992,3 +992,24 @@ def test_real_readiness_needs_quiz_and_mock_history(client, custom_user, ai) -> 
     ready = client.get("/api/real-readiness", headers=custom_user["headers"]).json()
     assert ready["ok"] is False and ready["checks"][0]["ok"] is True  # 퀴즈는 했고, 모의투자 기록이 아직 없다
     assert [c["ok"] for c in ready["checks"][1:]] == [False, False]
+
+
+def test_auto_sell_tells_ai_the_review_reason(client, custom_user, ai) -> None:
+    """2026-10-22 SK이노베이션 −7.3%: 점검에서 손절선으로 매도가 승인됐는데 주문 AI는 이유를 몰라 "관찰"로 막았다.
+    앱이 보낸 점검 이유를 투자 AI와 검증 AI에게 보여 주고, 사람이 직접 낸 주문에는 쓰지 않는다"""
+    held = [{"stock_code": CODE, "stock_name": NAME, "qty": 4, "avg_price": PRICE + 8000}]
+    reason = "손절선(−7%) 이탈 (매입가 대비 −7.3%). 보유 종목 점검에서 투자 AI·검증 AI가 이미 매도를 승인했다"
+    body = {"text": "주문전자 4주 팔아줘", "client": "app", "origin": "auto", "auto_reason": reason}
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=body))
+    events_of(answer(client, custom_user, events, balance(holdings=held)))
+    assert "[매도 점검 이유]" in ai["invest"][-1] and "손절선(−7%) 이탈" in ai["invest"][-1]
+    assert "보유 종목 점검의 매도 이유: 손절선(−7%) 이탈" in ai["verify"][-1]
+    from app.agents import llm
+    assert "보유 종목 점검의 매도 이유" in llm.VERIFY_PROMPT
+
+    user_body = {**body, "origin": "user"}  # 사람이 낸 주문에는 점검 이유를 쓰지 않는다
+    events = events_of(client.post("/api/chat", headers=custom_user["headers"], json=user_body))
+    events_of(answer(client, custom_user, events, balance(holdings=held)))
+    assert "[매도 점검 이유]" not in ai["invest"][-1] and "점검의 매도 이유" not in ai["verify"][-1]
+    too_long = {**body, "auto_reason": "가" * 301}
+    assert client.post("/api/chat", headers=custom_user["headers"], json=too_long).status_code == 422

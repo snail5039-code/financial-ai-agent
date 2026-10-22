@@ -48,6 +48,7 @@
 | 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
 |---|---|---|---|
 | "아침 하락 뒤 반등하나"를 계좌와 나란히 볼 기록이 없음 (서버에 지수 장중 기록이 없고, 5일치 글로만 남음) | 앱이 5분마다 계좌 기록을 올릴 때 그때 코스피·코스닥 전일 대비 %를 같이 올려 쌓는다 (`account_snapshots.kospi_pct`·`kosdaq_pct`, 마이그레이션 022). 장중 기록 시간에만 붙는다 | `routers/snapshot.py` `Snapshot`, `auto_trader.dart` `_review`, `migrations/022_snapshot_market.sql` | `test_snapshot_keeps_market_pct` |
+| SK이노베이션 −7.3% 손절선: 점검(1단계)에서 AI 매도·검증 승인, 주문 만들기(2단계)에서 AI가 이유를 몰라 "관찰", 검증이 "단기 신호만"으로 반려 → 주문 0건. 어제 넣은 단기 신호 규칙이 2단계에서 손절 매도를 막음 | 앱이 2단계 질문과 함께 1단계 승인 이유(`auto_reason`, 예: "손절선(−7%) 이탈 (매입가 대비 −7.3%). 보유 종목 점검에서 투자 AI·검증 AI가 이미 매도를 승인했다")를 보내고, 서버가 투자 AI(`[매도 점검 이유]`)와 검증 AI([제안] 줄)에게 보여 준다. 이유가 지금도 맞으면 sell, 가격이 회복돼 사라졌으면 watch. 검증 프롬프트: 이 이유가 [원문]의 매입가·시세로 맞으면 단기 신호뿐이라고 반려하지 않음. 사람이 낸 주문에는 쓰지 않음 | `routers/chat.py` `auto_reason`, `analysis.py` `invest_context`·`verify_context`, `llm.py` VERIFY_PROMPT, `auto_trader.dart` `sellBasis`, `conversation.dart` | `test_auto_sell_tells_ai_the_review_reason`, client_test `sellBasis` |
 
 지수 일봉 300거래일(2025-07-29~2026-10-22)로 먼저 본 것 (읽기 전용 조회, 일봉이라 최저가 몇 시였는지는 모름):
 코스피가 하락 출발(시초가 −0.3% 이하)한 99일 중 시초가보다 오른 채 마감한 날은 49%, 장중 −2% 넘게 빠진 84일 중에는 30%뿐이었다.

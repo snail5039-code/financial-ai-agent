@@ -5,7 +5,7 @@
 
 LLM이 돈을 다룰 때 생기는 문제(지어낸 숫자, 근거 없는 확신, 키 유출, 사용자가 모르는 주문)를 **구조로 막는 것**이 중심이다.
 
-`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API · Qwen2.5 LoRA` · 테스트 서버 334 / 앱 45
+`Python · FastAPI · LangGraph · Gemini · PostgreSQL/pgvector · Flutter · KIS 모의투자 API · KB증권 Open API · Qwen2.5 LoRA` · 테스트 서버 335 / 앱 45
 
 ## 지금 상태 (2026-10-21, 모의 자동매매 9일차)
 
