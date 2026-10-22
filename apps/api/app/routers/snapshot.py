@@ -59,7 +59,7 @@ def get_equity(conn: Conn, user_id: UserId, day: date | None = None) -> dict:
     폰이 계산해 올린 값만 쓴다."""
     rows = conn.execute(
         "SELECT (fetched_at AT TIME ZONE 'Asia/Seoul')::date AS day, to_char(fetched_at AT TIME ZONE 'Asia/Seoul', 'HH24:MI') AS time,"
-        " total_krw, cash_krw, holdings FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
+        " total_krw, cash_krw, holdings, kospi_pct FROM account_snapshots WHERE user_id = %s AND total_krw IS NOT NULL"
         " AND fetched_at >= now() - interval '120 days' ORDER BY fetched_at",
         (user_id,),
     ).fetchall()
@@ -69,7 +69,9 @@ def get_equity(conn: Conn, user_id: UserId, day: date | None = None) -> dict:
             for r in rows}  # 시간순이라 마지막 값이 남는다
     last = str(day) if day else str(rows[-1]["day"]) if rows else None
     return {"days": list(days.values()),
-            "intraday": {"date": last, "points": [{"time": r["time"], "total_krw": r["total_krw"]}
+            # kospi_pct: 그때 코스피 전일 대비 % (2026-10-22부터 쌓음, 없으면 null). 앱이 코스피 비교선을 그린다 (2026-10-23)
+            "intraday": {"date": last, "points": [{"time": r["time"], "total_krw": r["total_krw"],
+                                                   "kospi_pct": None if r["kospi_pct"] is None else float(r["kospi_pct"])}
                                                   for r in rows if str(r["day"]) == last]}}
 
 

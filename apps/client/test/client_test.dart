@@ -78,6 +78,12 @@ void main() {
     };
     expect(equitySeries(data, daily: true), [('10/16', 9428986), ('10/19', 9416713)]);
     expect(equitySeries(data, daily: false), [('09:54', 9322536)]);
+    // 코스피 비교선 (2026-10-23): 코스피 %가 처음 있는 점에서 내 자산과 같은 높이로 시작해 코스피 비율만큼 움직인다
+    expect(kospiCompare([1000, 990, 980], [null, -1.0, -2.0]), [null, closeTo(990, 1e-9), closeTo(980, 1e-9)]);
+    expect(kospiCompare([1000, 1000, 1000], [0.0, -1.0, null]), [closeTo(1000, 1e-9), closeTo(990, 1e-9), null]);
+    expect(kospiCompare([1000, 990], [null, null]), [null, null]);
+    expect(kospiPoints({'intraday': {'points': [{'time': '09:00', 'total_krw': 1, 'kospi_pct': -1.25}, {'time': '09:05', 'total_krw': 2}]}}), [-1.25, null]);
+    expect([pctText(-3.4), pctText(0.5), pctText(0)], ['−3.40%', '+0.50%', '0.00%']);
     // 자산 탭 '오늘' 줄: 전 거래일 마지막 총자산 (오늘 기록은 빼고)
     final days = [{'date': '2026-10-19', 'total_krw': 9424763}, {'date': '2026-10-20', 'total_krw': 9115405}, {'date': '2026-10-21', 'total_krw': 9149914}];
     expect([prevDayTotal(days, '20261021'), prevDayTotal(days, '20261020'), prevDayTotal(days, '20261019')], [9115405, 9424763, null]);

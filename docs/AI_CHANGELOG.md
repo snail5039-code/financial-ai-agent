@@ -52,6 +52,7 @@
 | 직접 산 종목 자동 점검(10/22)이 전량 매도가 체결 전일 때 5분 뒤 그 종목을 다시 "직접 산 종목"으로 맡아 중복 매도를 낼 수 있음 | 오늘 자동으로 판 종목은 그날 다시 맡지 않음 (`auto_sold:날짜`). 미체결은 다음 날 기존 되돌리기가 처리 | `auto_trader.dart` `adoptable`·`_markSold` | client_test `adoptable` |
 | 이익이 나도 30분 점검을 기다려야 해서 "바로 팔 수 있게"가 안 됨 (사용자 10/23). 점검이 늘어 분석 한도(200)도 빠듯해질 수 있음 | **이익이 +1% 넘으면 바로 AI에게 묻는다** (`autoProfitPct`, 지난번 질문보다 +0.5%p 더 올라야 다시 묻고 10분 간격). 하루 분석 한도 200 → **250**, 보유 몫 50 → **70** (사용자 결정, 최근 사흘 146~150번 사용) | `auto_trader.dart` `sellReason`·`_why`, `analysis.py` `MAX_ANALYSES_PER_DAY`·`HOLDING_RESERVE` | client_test `sellReason` |
 | 짧은 신호로는 이익이 나도 못 팖 (사용자 10/23: "이득을 볼 수 있다면 단기로도 바로 팔 수 있게") | 투자 AI·검증 AI 지시문에 예외: 지금 팔아 매입가보다 +0.5% 이상 이익(세금·수수료 0.2% 뺀 뒤에도 이익)이면 VWAP 아래·5분 저가 하락 같은 단기 신호만으로도 판다. 손실 중이면 "단기 신호만으로는 팔지 않기" 그대로. 점검 주기·바로 묻는 조건(+3% 등)은 그대로 | `llm.py` INVEST_PROMPT·VERIFY_PROMPT | `test_invest_context_shows_todays_sells_and_short_signal_rule` |
+| 자산 탭 장중 그래프에 내 자산만 있어 시장과 비교가 안 됨 (사용자 10/23 요청) | 서버가 장중 점마다 그때 코스피 %(`kospi_pct`)를 내려 주고, 앱이 **코스피 비교선**(주황)을 겹쳐 그린다. 코스피 %가 처음 기록된 점에서 내 자산과 같은 높이로 시작해 그 뒤 코스피 비율만큼 움직인다 ("내 자산이 코스피처럼 움직였다면"). 값이 없는 점은 건너뛰고 이어 그림. 누른 점에는 코스피 %도 표시. 코스피 %는 10/22 09:34부터 쌓였고 그 전 날들은 선이 없다 | `routers/snapshot.py` `get_equity`, `equity_chart.dart` `kospiCompare`·`_Line` | `test_equity_history_from_phone_totals`, client_test `kospiCompare` |
 | 산 직후 30분은 매도 판단을 묻지 않음 (사용자: "사도 바로 팔 수 있게") | 산 뒤 대기 `autoBuyHoldMin`과 산 시각 기록을 없앴다. 10/21 한화시스템 같은 일은 "단기 신호만으로는 팔지 않기"가 막는다 | `auto_trader.dart` `sellReason` | client_test `sellReason` |
 
 ## 10/22 장중 (10일차, 하락 출발, 데이터 쌓기)

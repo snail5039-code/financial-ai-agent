@@ -326,7 +326,7 @@ def test_equity_history_from_phone_totals(client, user) -> None:
     day = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0)  # 자정 근처에도 날짜가 갈리지 않게 시각을 정해 둔다
     for at, total in ((day - timedelta(days=2, hours=-15), 9_461_096), (day - timedelta(days=2, hours=-15, minutes=-30), 9_428_986),
                       (day - timedelta(days=1, hours=-10), 9_300_000), (day - timedelta(days=1, hours=-15), 9_416_713)):
-        snapshot = {**BALANCE, "fetched_at": at.isoformat(), "total_krw": total}
+        snapshot = {**BALANCE, "fetched_at": at.isoformat(), "total_krw": total, **({"kospi_pct": -1.25} if total == 9_300_000 else {})}
         assert client.post("/api/snapshot", headers=headers, json=snapshot).status_code == 204
     client.post("/api/snapshot", headers=headers, json={**BALANCE, "fetched_at": now_iso()})  # 총자산 없는 예전 앱: 그래프에 안 들어감
     found = client.get("/api/equity", headers=headers).json()
@@ -334,6 +334,7 @@ def test_equity_history_from_phone_totals(client, user) -> None:
     assert {k: found["days"][-1][k] for k in ("cash_krw", "cost_krw")} == {"cash_krw": 1_500_000, "cost_krw": 20 * 68_000}
     assert found["days"][-1]["time"] == "15:00"
     assert [p["total_krw"] for p in found["intraday"]["points"]] == [9_300_000, 9_416_713]
+    assert [p["kospi_pct"] for p in found["intraday"]["points"]] == [-1.25, None]  # 그때 코스피 %. 없는 점은 null (2026-10-23 코스피 비교선)
     picked = client.get(f"/api/equity?day={found['days'][0]['date']}", headers=headers).json()["intraday"]  # 달력에서 고른 날
     assert [p["total_krw"] for p in picked["points"]] == [9_461_096, 9_428_986] and picked["date"] == found["days"][0]["date"]
     assert client.get("/api/equity?day=2026-13-01", headers=headers).status_code == 422

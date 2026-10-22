@@ -20,6 +20,24 @@ List<(String, int)> equitySeries(Map<String, dynamic> data, {required bool daily
           (p['time'] as String, p['total_krw'] as int),
       ];
 
+/// 장중 점마다 그때 코스피 전일 대비 % (서버가 2026-10-22부터 쌓음, 없는 점은 null)
+List<double?> kospiPoints(Map<String, dynamic> data) => [
+      for (final p in ((data['intraday'] as Map)['points'] as List).cast<Map<String, dynamic>>()) (p['kospi_pct'] as num?)?.toDouble(),
+    ];
+
+/// 코스피 비교선: 코스피 %가 처음 기록된 점에서 내 총자산과 같은 높이로 시작해, 그 뒤 코스피가 오르내린 비율만큼 움직인다.
+/// "내 자산이 코스피처럼 움직였다면" 어디였을지를 보여 준다 (2026-10-23 사용자 요청). 코스피 %가 없는 점은 null
+List<double?> kospiCompare(List<int> totals, List<double?> pct) {
+  final j = pct.indexWhere((p) => p != null);
+  if (j < 0) return [for (final _ in totals) null];
+  final base = totals[j] / (1 + pct[j]! / 100);
+  return [for (var i = 0; i < totals.length; i++) pct[i] == null ? null : base * (1 + pct[i]! / 100)];
+}
+
+String pctText(double p) => '${p > 0 ? '+' : p < 0 ? '−' : ''}${p.abs().toStringAsFixed(2)}%';
+
+const kospiColor = Color(0xFFE08A00);
+
 /// 시작 금액은 폰에만 둔다 (증권사 잔고엔 처음 넣은 돈이 없다). 모의·실전을 따로
 String startKey() => 'start_krw:${realMode.value ? 'real' : 'mock'}';
 
@@ -181,7 +199,7 @@ class _EquityCardState extends State<EquityCard> {
                 else if (data == null)
                   const SizedBox(height: 140, child: Center(child: CircularProgressIndicator()))
                 else ...[
-                  _chart(equitySeries(data, daily: _daily)),
+                  _chart(equitySeries(data, daily: _daily), _daily ? null : kospiPoints(data)),
                   if (_daily) _table(data),
                 ],
               ]);
@@ -190,7 +208,7 @@ class _EquityCardState extends State<EquityCard> {
         ),
       );
 
-  Widget _chart(List<(String, int)> series) {
+  Widget _chart(List<(String, int)> series, List<double?>? kospi) {
     if (series.length < 2) {
       return const SizedBox(
         height: 80,
@@ -200,11 +218,15 @@ class _EquityCardState extends State<EquityCard> {
     final first = series.first.$2, last = series.last.$2;
     final color = changeColor(last - first) ?? brandBlue;
     final touched = _touched == null ? null : series[_touched!.clamp(0, series.length - 1)];
+    final compare = kospi == null ? null : kospiCompare([for (final (_, v) in series) v], kospi);
+    final hasCompare = compare != null && compare.whereType<double>().length >= 2;
+    final touchedKospi = hasCompare && _touched != null ? kospi![_touched!.clamp(0, series.length - 1)] : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
           touched == null
               ? '${series.first.$1} 대비 ${signedWon(last - first)} (${rateText(last - first, first)})'
-              : '${touched.$1} · ${won(touched.$2)} (${series.first.$1} 대비 ${rateText(touched.$2 - first, first)})',
+              : '${touched.$1} · ${won(touched.$2)} (${series.first.$1} 대비 ${rateText(touched.$2 - first, first)})'
+                  '${touchedKospi == null ? '' : ' · 코스피 ${pctText(touchedKospi)}'}',
           style: TextStyle(
               fontSize: 13, fontWeight: FontWeight.bold, color: touched == null ? color : changeColor(touched.$2 - first) ?? brandBlue)),
       const SizedBox(height: 8),
@@ -222,7 +244,7 @@ class _EquityCardState extends State<EquityCard> {
             child: SizedBox(
               height: 140,
               width: double.infinity,
-              child: CustomPaint(painter: _Line([for (final (_, v) in series) v], color, touched: _touched)),
+              child: CustomPaint(painter: _Line([for (final (_, v) in series) v], color, touched: _touched, compare: hasCompare ? compare : null)),
             ),
           ),
         );
@@ -233,24 +255,36 @@ class _EquityCardState extends State<EquityCard> {
         const Spacer(),
         Text('${series.last.$1} · ${won(last)}', style: const TextStyle(fontSize: 11, color: mutedText)),
       ]),
+      if (hasCompare)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text.rich(TextSpan(style: const TextStyle(fontSize: 11, color: mutedText), children: [
+            TextSpan(text: '━ ', style: TextStyle(color: color)),
+            const TextSpan(text: '내 자산    '),
+            const TextSpan(text: '━ ', style: TextStyle(color: kospiColor)),
+            TextSpan(text: '코스피 ${pctText(kospi!.whereType<double>().last)} (같은 출발점에서 비교)'),
+          ])),
+        ),
     ]);
   }
 }
 
-/// 선 그래프: 첫 값 높이에 점선(기준선), 마지막 값에 점. 위아래 끝에 최고·최저 금액
+/// 선 그래프: 첫 값 높이에 점선(기준선), 마지막 값에 점. 위아래 끝에 최고·최저 금액. compare가 있으면 코스피 비교선도 같이 그린다
 class _Line extends CustomPainter {
-  _Line(this.values, this.color, {this.touched});
+  _Line(this.values, this.color, {this.touched, this.compare});
   final List<int> values;
   final Color color;
   final int? touched; // 세로선과 점을 그릴 위치
+  final List<double?>? compare; // 코스피 비교선 (값이 없는 점은 null)
 
   @override
   void paint(Canvas canvas, Size size) {
-    final hi = values.reduce((a, b) => a > b ? a : b), lo = values.reduce((a, b) => a < b ? a : b);
-    final span = hi == lo ? 1 : hi - lo;
+    final all = [for (final v in values) v.toDouble(), ...?compare?.whereType<double>()];
+    final hi = all.reduce((a, b) => a > b ? a : b), lo = all.reduce((a, b) => a < b ? a : b);
+    final span = hi == lo ? 1.0 : hi - lo;
     const top = 14.0, bottom = 14.0;
-    Offset at(int i) => Offset(size.width * i / (values.length - 1),
-        top + (size.height - top - bottom) * (hi - values[i]) / span);
+    Offset pointAt(int i, double v) => Offset(size.width * i / (values.length - 1), top + (size.height - top - bottom) * (hi - v) / span);
+    Offset at(int i) => pointAt(i, values[i].toDouble());
 
     final base = at(0).dy;
     final dash = Paint()..color = mutedText.withValues(alpha: 0.4)..strokeWidth = 1;
@@ -267,13 +301,26 @@ class _Line extends CustomPainter {
       ..strokeWidth = 2
       ..strokeJoin = StrokeJoin.round);
     canvas.drawCircle(at(values.length - 1), 4, Paint()..color = color);
+    if (compare case final c?) {
+      final line = Path();
+      var started = false;
+      for (var i = 0; i < c.length; i++) { // 값이 없는 점은 건너뛰고 있는 점끼리 잇는다
+        final v = c[i];
+        if (v == null) continue;
+        final p = pointAt(i, v);
+        started ? line.lineTo(p.dx, p.dy) : line.moveTo(p.dx, p.dy);
+        started = true;
+      }
+      canvas.drawPath(line, Paint()..color = kospiColor..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round);
+    }
     if (touched case final i? when i >= 0 && i < values.length) {
       canvas.drawLine(Offset(at(i).dx, 0), Offset(at(i).dx, size.height), Paint()..color = mutedText.withValues(alpha: 0.6));
       canvas.drawCircle(at(i), 5, Paint()..color = color);
       canvas.drawCircle(at(i), 2.5, Paint()..color = Colors.white);
+      if (compare?[i] case final v?) canvas.drawCircle(pointAt(i, v), 3.5, Paint()..color = kospiColor);
     }
     for (final (value, y) in [(hi, 0.0), (lo, size.height - 12)]) {
-      (TextPainter(text: TextSpan(text: won(value), style: const TextStyle(fontSize: 10, color: mutedText)),
+      (TextPainter(text: TextSpan(text: won(value.round()), style: const TextStyle(fontSize: 10, color: mutedText)),
               textDirection: TextDirection.ltr)
             ..layout())
           .paint(canvas, Offset(0, y));
@@ -281,5 +328,5 @@ class _Line extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Line old) => old.values != values || old.color != color || old.touched != touched;
+  bool shouldRepaint(_Line old) => old.values != values || old.color != color || old.touched != touched || old.compare != compare;
 }
