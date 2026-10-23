@@ -1014,10 +1014,18 @@ def fix_source_id_list(sid: str) -> list[str]:
     return [fix_source_id(part) for part in sid.split("/") if part.strip()] or [fix_source_id(sid)]
 
 
+# 2026-10-20~23 위험 문장 "(출처: 사용자)" 반려가 하루 한 번쯤: 사용자 성향·한도는 [자료]가 아니라 출처 표시가 필요 없다
+USER_TAG_IDS = {"사용자", "user"}
+
+
 def fix_source_ids(draft: dict) -> dict:
-    """근거의 출처 ID와 반대 근거·위험의 (출처: …) 표시를 함께 바로잡는다"""
+    """근거의 출처 ID와 반대 근거·위험의 (출처: …) 표시를 함께 바로잡는다. "(출처: 사용자)"는 표시만 떼고 문장은 남긴다"""
+    def fix_tag(m: re.Match) -> str:
+        ids = [x for s in m[1].split(",") for x in fix_source_id_list(s) if x.strip() not in USER_TAG_IDS]
+        return f"(출처: {', '.join(ids)})" if ids else ""
+
     def fix_text(text: str) -> str:
-        return SOURCE_TAG.sub(lambda m: f"(출처: {', '.join(x for s in m[1].split(',') for x in fix_source_id_list(s))})", text)
+        return re.sub(r"\s{2,}", " ", SOURCE_TAG.sub(fix_tag, text)).strip()
     return {**draft, "claims": [{**c, "source_ids": [x for s in c["source_ids"] for x in fix_source_id_list(s)]} for c in draft["claims"]],
             "counter_arguments": [fix_text(t) for t in draft["counter_arguments"]], "risks": [fix_text(t) for t in draft["risks"]]}
 

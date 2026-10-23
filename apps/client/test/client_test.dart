@@ -72,6 +72,12 @@ void main() {
     // 정규장(KST 09:00~15:35, 평일)에만 기록한다
     expect([equityTime(DateTime.utc(2026, 10, 19, 0, 0)), equityTime(DateTime.utc(2026, 10, 19, 6, 35)),
         equityTime(DateTime.utc(2026, 10, 19, 6, 36)), equityTime(DateTime.utc(2026, 10, 18, 3))], [true, true, false, false]);
+    // 자동매매 마감 기록은 평일 KST 15:30~15:35에만 (15:28에 멈추는 장중 점검과 따로)
+    expect([closeEquityTime(DateTime.utc(2026, 10, 23, 6, 29)), closeEquityTime(DateTime.utc(2026, 10, 23, 6, 30)),
+        closeEquityTime(DateTime.utc(2026, 10, 23, 6, 35)), closeEquityTime(DateTime.utc(2026, 10, 23, 6, 36)),
+        closeEquityTime(DateTime.utc(2026, 10, 24, 6, 31))], [false, true, true, false, false]);
+    expect(indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSPI'), 0.3);
+    expect([indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSDAQ'), indexPct(null, 'KOSPI')], [null, null]);
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},

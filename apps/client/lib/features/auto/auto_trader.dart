@@ -126,6 +126,17 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   return last == null || now.difference(last) >= autoReviewGap ? 'check' : null;
 }
 
+/// 마감 총자산을 남길 시각: 평일 15:30~15:35 (정규장 종가가 나온 뒤, 자산 그래프 기록 시간 equityTime 안)
+bool closeEquityTime(DateTime now) {
+  final k = toKst(now);
+  final minutes = k.hour * 60 + k.minute;
+  return k.weekday <= 5 && minutes >= 15 * 60 + 30 && minutes <= 15 * 60 + 35;
+}
+
+/// 증권사 지수 목록에서 그 지수의 오늘 등락 %. 없으면 null
+double? indexPct(List<Map<String, dynamic>>? market, String index) =>
+    (market?.where((m) => m['index'] == index).firstOrNull?['change_pct'] as num?)?.toDouble();
+
 // 시장 탓 하락이면 매도 판단을 미룬다 (2026-10-20 사용자 결정: 10/13·10/19 코스피가 빠진 아침에 판 7종목이 모두 판 가격보다 높게 마감)
 const autoRelativeGapPct = 3.0; // 종목 오늘 등락이 시장 지수보다 이만큼(%p) 넘게 나쁘면 종목 탓으로 본다
 const autoDeferMin = 30; // 시장 탓이면 처음 미룬 뒤 이만큼 지나야 묻는다
@@ -342,6 +353,17 @@ class AutoTrader extends ChangeNotifier {
     if (!on || _busy || kIsWeb || !allowed(currentBroker.value)) return;
     final k = _kst;
     final minutes = k.hour * 60 + k.minute;
+    if (closeEquityTime(_now())) {
+      if (await _box.read('auto_close_equity:$_today') != null) return;
+      _busy = true;
+      try {
+        await _closeEquity();
+      } catch (_) { // 다음 1분 tick에 다시 (15:35까지)
+      } finally {
+        _busy = false;
+      }
+      return;
+    }
     if (k.weekday > 5 || minutes < 9 * 60 + 5 || minutes > 15 * 60 + 28) return; // 휴장일은 서버 정책 검사가 막는다
     if (plan == null) return; // 사용자가 오늘 계획을 승인하기 전에는 아무것도 하지 않는다
     _busy = true;
@@ -510,6 +532,19 @@ class AutoTrader extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 마감 총자산 기록. 자동매매는 15:28에 멈춰 15:30 종가 값은 사람이 자산 화면을 열 때만 남았다 (2026-10-23: 15:25가 마지막)
+  Future<void> _closeEquity() async {
+    final broker = currentBroker.value!;
+    final balance = await broker.balance();
+    List<Map<String, dynamic>>? market;
+    try {
+      market = await broker.market();
+    } catch (_) {} // 지수를 못 받아도 총자산은 남긴다
+    await api.post('/api/snapshot', {...balance, 'total_krw': equityOf(balance, broker.lastPrices),
+      'kospi_pct': indexPct(market, 'KOSPI'), 'kosdaq_pct': indexPct(market, 'KOSDAQ')});
+    await _box.write('auto_close_equity:$_today', 'done');
+  }
+
   /// 보유 종목 점검: 손절선 아래면 팔고, 급락했거나 점검 시각이면 AI에게 매도 판단을 묻고 팔자고 하면 판다
   Future<void> _review() async {
     if (_lastWatch != null && _now().difference(_lastWatch!) < _watchGap) return;
@@ -534,11 +569,10 @@ class AutoTrader extends ChangeNotifier {
     } catch (_) {
       market = null;
     }
-    double? pctOf(String index) => (market?.where((m) => m['index'] == index).firstOrNull?['change_pct'] as num?)?.toDouble();
-    final kospi = pctOf('KOSPI');
+    final kospi = indexPct(market, 'KOSPI');
     try { // 장중 총자산 기록 (자산 탭 그래프)과 그때 지수 % (아침 하락 뒤 반등하는지 쌓는다, 2026-10-22). 실패해도 매매는 계속
       await api.post('/api/snapshot', {...balance, if (equityTime(_now())) ...{
-        'total_krw': equityOf(balance, broker.lastPrices), 'kospi_pct': kospi, 'kosdaq_pct': pctOf('KOSDAQ')}});
+        'total_krw': equityOf(balance, broker.lastPrices), 'kospi_pct': kospi, 'kosdaq_pct': indexPct(market, 'KOSDAQ')}});
     } catch (_) {}
     await _restoreUnfilledSells(holdings);
     final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();

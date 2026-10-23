@@ -624,6 +624,17 @@ def test_fix_source_id_list_splits_joined_ids() -> None:
     assert fixed["counter_arguments"] == ["고평가 (출처: per, pbr, revenue_yoy)"] and fixed["risks"] == ["x (출처: pbr)"]
 
 
+def test_fix_source_ids_drops_user_tag() -> None:
+    """2026-10-23 HMM 반려: 위험 문장 "(출처: 사용자)". 표시만 떼고 문장은 남긴다. 다른 출처와 섞이면 그것만 남긴다"""
+    draft = {"claims": [{"text": "a", "type": "fact", "source_ids": ["dart:1"]}],
+             "counter_arguments": ["비중이 커진다 (출처: 사용자, snapshot:holdings)"],
+             "risks": ["성향보다 위험할 수 있다 (출처: 사용자)", "한도 (출처: user) 안에서만"]}
+    fixed = analysis.fix_source_ids(draft)
+    assert fixed["counter_arguments"] == ["비중이 커진다 (출처: snapshot)"]
+    assert fixed["risks"] == ["성향보다 위험할 수 있다", "한도 안에서만"]
+    assert analysis.tagged_ids(fixed["risks"]) == []
+
+
 def test_held_stock_watch_becomes_hold(monkeypatch) -> None:
     """2026-10-15: 보유 종목 판단이 '관찰'로 나오면 "'관찰' 대신 '관찰'로" 문장이 남았다. 보유 종목은 '보유'로"""
     draft = ProposalDraft(action="watch", claims=[{"text": "a", "type": "opinion", "source_ids": []}],
