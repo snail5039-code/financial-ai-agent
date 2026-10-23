@@ -781,6 +781,10 @@ void main() {
     expect([for (final h in adoptable(held, taken, markets, real: false)) h['stock_name']], ['기아']);
     expect(adoptable(held, taken, markets, real: true), isEmpty); // 실전은 맡지 않는다
     expect(adoptable(held, taken, null, real: false), isEmpty); // 분석 대상 목록을 못 받으면 맡지 않는다
+    // 계좌에 없는데 기록에만 남은 종목은 뺀다 (10/23 피에스케이홀딩스 7주)
+    expect(staleCodes({'011200': {'name': 'HMM', 'qty': 25}, '031980': {'name': '피에스케이홀딩스', 'qty': 7}}, held), ['031980']);
+    expect(staleCodes({'068270': {'name': '셀트리온', 'qty': 2}}, held), ['068270']); // 수량 0이면 없는 것으로 본다
+    expect(staleCodes({}, held), isEmpty);
     // 오늘 자동으로 판 종목은 그날 다시 맡지 않는다 (전량 매도가 체결 전이면 계좌에 남아 중복 매도가 나간다)
     expect(adoptable(held, taken, markets, real: false, soldToday: {'000270'}), isEmpty);
     // 2단계 주문 AI에게 1단계 승인 이유를 알린다 (10/22 SK이노베이션 손절선 매도가 이유를 몰라 막혔다)

@@ -612,6 +612,11 @@ def test_fix_source_id_list_splits_joined_ids() -> None:
     assert analysis.fix_source_id_list("quote:005930") == ["quote:005930"]
     assert analysis.fix_source_id_list("market:KOSPI / trend:005930") == ["market:KOSPI", "trend:005930"]
     assert analysis.fix_source_id_list("지표: volatility_60d") == ["volatility_60d"]
+    # 2026-10-23 기아: 앞에 지표·metric이 붙은 "ID:"
+    assert analysis.fix_source_id_list("지표 ID: op_income_yoy") == ["op_income_yoy"]
+    assert analysis.fix_source_id_list("지표: ID: volatility_60d") == ["volatility_60d"]
+    assert analysis.fix_source_id_list("metric ID: pbr") == ["pbr"]
+    assert analysis.fix_source_id_list("IDENTITY:per") == ["IDENTITY:per"]  # ID로 시작하는 다른 글자는 건드리지 않는다
     draft = {"claims": [{"text": "a", "type": "fact", "source_ids": ["ID: op_income_yoy", "dart:1"]}],
              "counter_arguments": ["고평가 (출처: per/pbr/revenue_yoy 지표)"], "risks": ["x (출처: ID: pbr)"]}
     fixed = analysis.fix_source_ids(draft)

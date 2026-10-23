@@ -1009,7 +1009,8 @@ def fix_source_id_list(sid: str) -> list[str]:
     """출처 ID 하나에 여러 개가 이어 붙거나 꾸밈이 붙은 것을 풀어 쓴다.
     2026-10-22 "ID: op_income_yoy" (앞머리 "ID:", SK이노베이션 반려), "per/pbr/revenue_yoy 지표" (슬래시로 잇고 뒤에 "지표", HMM 반려).
     모르는 ID는 그대로 두어 코드 검사가 반려한다 (AI가 없는 출처를 지어내는 것은 계속 막는다)"""
-    sid = re.sub(r"\s*지표$", "", re.sub(r"^ID\s*:\s*", "", sid.strip()))
+    # 2026-10-23 "지표 ID: op_income_yoy"·"지표: ID: volatility_60d"(기아 반려): 앞에 지표·metric이 붙어도 "ID:"를 뗀다
+    sid = re.sub(r"\s*지표$", "", re.sub(r"^(?:(?:지표|metric)\s*:?\s*)?ID\s*:\s*", "", sid.strip()))
     return [fix_source_id(part) for part in sid.split("/") if part.strip()] or [fix_source_id(sid)]
 
 

@@ -171,6 +171,13 @@ List<Map<String, dynamic>> adoptable(List<Map<String, dynamic>> holdings, Map<St
                   !soldToday.contains(h['stock_code'])) h
           ];
 
+/// 계좌에 없는데 자동매매 기록에만 남은 종목 (판 뒤 못 지운 옛 기록, 2026-10-23 피에스케이홀딩스 7주가 계획 화면에 보였다).
+/// 체결이 늦은 매수라서 잠깐 안 보인 것이면 다음 점검 때 adoptable이 다시 맡는다
+List<String> staleCodes(Map<String, dynamic> positions, List<Map<String, dynamic>> holdings) => [
+      for (final code in positions.keys)
+        if (!holdings.any((h) => h['stock_code'] == code && (h['qty'] as int? ?? 0) > 0)) code
+    ];
+
 /// 2단계(주문 만들기) AI에게 알리는 1단계(매도 점검)의 이유. 손절선·강제 손절선일 때만 보낸다.
 /// 2026-10-23: 강제 손절도 같은 주문 길(투자 AI → 검증 AI)을 타서 이유가 없으면 "단기 신호만"으로 반려될 수 있었다.
 /// 2026-10-22 SK이노베이션 −7.3%: 이유를 몰라 손절 매도가 반려됐다. 반대로 마감 전·정기 점검 이유와 매입가 대비 %를 보냈더니
@@ -513,6 +520,11 @@ class AutoTrader extends ChangeNotifier {
     for (final h in adoptable(holdings, positions, await _marketMap(), real: realMode.value, soldToday: await _soldToday())) {
       await _addPosition(h['stock_code'] as String, h['stock_name'] as String, h['qty'] as int);
       await _note('${h['stock_name']} ${h['qty']}주: 직접 산 종목도 자동매매가 함께 점검해요');
+    }
+    for (final code in staleCodes(positions, holdings)) {
+      final p = positions[code] as Map;
+      await _addPosition(code, p['name'] as String, -(p['qty'] as int));
+      await _note('${p['name']}: 계좌에 없어서 자동매매 보유 기록에서 뺐어요');
     }
     if (positions.isEmpty) return;
     // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
