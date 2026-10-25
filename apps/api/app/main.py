@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
         stop = threading.Event()
         for hour in app.state.auto_collect_hours:
             threading.Thread(target=collect.run_daily, args=(stop, hour), daemon=True).start()
+        if app.state.auto_collect_hours:
+            threading.Thread(target=collect.catch_up, args=(app.state.auto_collect_hours,), daemon=True).start()
         if app.state.morning_brief_time is not None:  # 사용자마다 Gemini 호출이 생기므로 .env에서 켤 때만
             threading.Thread(target=briefing.run_daily, args=(stop, app.state.morning_brief_time), daemon=True).start()
         if app.state.close_summary_time is not None:

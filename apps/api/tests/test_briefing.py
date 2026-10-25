@@ -108,7 +108,7 @@ def test_grade_1_stock_is_judged_by_ai_in_mock(client, user, ai, migrated) -> No
         # 2026-10-19 사용자 결정: 모의 자동매매는 1등급도 후보로 보고 AI가 판단한다. 1등급 근거와 "감수할 근거" 지시가 AI에게 간다
         content = briefing.build_briefing(migrated, user["id"], movers=[CODE])
         assert NAME in [c["stock_name"] for c in content["checked"]]
-        assert any("1등급 근거" in p and "감수할 만한 근거" in p for p in ai["invest_prompts"])
+        assert any("1등급 근거" in p and "1등급이라는 것만으로 관찰하지 않는다" in p for p in ai["invest_prompts"])
     finally:
         with psycopg.connect(migrated) as conn:
             conn.execute("UPDATE stocks SET risk_grade = 2, risk_rcept_no = NULL WHERE code = %s", (CODE,))

@@ -732,9 +732,12 @@ def directed_order_text(state: InvestState) -> str:
 
 
 def grade_text(state: InvestState) -> str:
+    """투자·검증 AI 둘 다 본다. 2026-10-26 사용자 결정: 1등급이라는 것만으로 관찰하지 않고 AI가 공시 내용을 따져 판단한다
+    (전에는 "감수할 근거가 없으면 관찰"이라 1등급 후보 — 삼천당제약·LG에너지솔루션 — 가 매일 관찰로 끝나 후보 자리만 차지했다)"""
     reason = state.get("risk_reason")
     return f"위험등급 {state['risk_grade']}등급" + (
-        f" (1등급 근거: {reason}). 매수라면 이 위험을 감수할 만한 근거가 근거·반대 근거·위험에 있어야 하고, 없으면 관찰이다" if reason else "")
+        f" (1등급 근거: {reason}). 1등급이라는 것만으로 관찰하지 않는다. 이 공시가 지금 회사 실적·주가에 실제로 어떤 영향을 주는지 "
+        "다른 자료와 함께 따져 매수·관찰을 똑같은 무게로 정하고, 이 위험은 반대 근거·위험에 쓴다" if reason else "")
 
 
 REJECTS_SHOWN = 3

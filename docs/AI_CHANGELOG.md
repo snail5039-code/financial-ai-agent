@@ -38,11 +38,20 @@
 | `AUTO_COLLECT_HOUR` / `MORNING_BRIEF_TIME` | 7,14 / 08:20 | `apps/api/app/config.py` (.env) | 공시·시세 수집(14시는 전 거래일 종가), 아침 브리핑 자동 시각 |
 | `moverMaxRisePct` | +10% | `apps/client/lib/broker/broker.dart` | 이만큼 이미 오른 급등 종목은 후보에서 뺀다 |
 | `HOT_RANK` / `HOT_MIN_RETURN` | 상위 10% / 5일 +10% | `apps/api/app/functions/orders.py` | 둘 다 맞아야 "급등 직후 매수" 경고 (급등주를 사는 성향·습관이면 확인 필요 → 자동 승인 안 됨) |
-| `RISK_TITLE_PATTERN` | 관리종목·상장폐지·상장적격성·투자유의·투자주의환기·횡령·배임·불성실공시 | `apps/api/app/functions/suitability.py` | 1년 안에 이 공시가 있으면 위험 1등급. 모의투자는 1등급도 AI가 매수 판단, 실전은 공격투자형만 |
+| `RISK_TITLE_PATTERN` | 관리종목·상장폐지·상장적격성·투자유의·투자주의환기·횡령·배임·불성실공시 | `apps/api/app/functions/suitability.py` | 1년 안에 이 공시가 있으면 위험 1등급. 모의투자는 1등급도 AI가 매수 판단(10/26부터 1등급만으로는 관찰하지 않음), 실전은 공격투자형만 |
 | 하락 중 매수 차단 | 5분 저가 3번 연속 하락 + VWAP 아래 | `apps/api/app/agents/analysis.py` `falling_now` | 자동매매 매수를 '관찰'만 허용 |
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/26 장 전 (12일차, 사용자 결정·점검)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 서버가 주말 내내 꺼져 있다가 08:16에 켜져 **07시 수집을 건너뜀**. 아침 브리핑은 놓치면 따라잡는데 수집은 안 했다 (오늘은 손으로 다시 받음) | 서버가 켜질 때 오늘 이미 지난 수집 시각(7·14시) 뒤로 전체 수집을 한 적이 없으면 바로 한 번 수집한다. 마지막 전체 수집 시각은 `apps/api/data/last_collect.txt` (저장소에 안 올림) | `collect.py` `missed_collect`·`catch_up`·`LAST_RUN`, `main.py` lifespan | `test_missed_collect_after_server_was_off` |
+| 자동매매 아침 후보 3개 중 2개가 위험 1등급(삼천당제약·LG에너지솔루션, 불성실공시)인데 지시문이 "감수할 근거가 없으면 관찰"이라 매일 관찰로 끝나 후보 자리만 차지 (사용자: "1등급이라도 AI가 알아서 판단하게") | 투자·검증 AI가 함께 보는 종목 줄을 "1등급이라는 것만으로 관찰하지 않는다. 공시가 실적·주가에 주는 영향을 따져 매수·관찰을 같은 무게로 정하고, 위험은 반대 근거·위험에 쓴다"로 바꿈. **모의투자만** (실전은 그대로 막음) | `analysis.py` `grade_text` | `test_briefing` 1등급 지시문 확인 |
+
+급등 경고(5일 +10% 넘게 오른 종목은 사람 확인)는 그대로 두었다.
 
 ## 10/23 마감 뒤 (11일차)
 

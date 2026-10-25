@@ -18,14 +18,17 @@
 # 서버 (DB는 5433)
 export DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | sed 's/:5432\//:5433\//')" PYTHONIOENCODING=utf-8
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-# 에뮬레이터 (PowerShell)
-Start-Process "$env:ANDROID_HOME\emulator\emulator.exe" -ArgumentList "-avd","invest_phone","-timezone","Asia/Seoul" -WindowStyle Hidden
+# 에뮬레이터 (PowerShell). -gpu host가 아니면 창이 검은색으로만 보였다 (10/26). 같이 뜨는 cmd(Windows Terminal) 창은 닫지 말고 숨긴다 (닫으면 에뮬레이터도 꺼짐)
+Start-Process "$env:ANDROID_HOME\emulator\emulator.exe" -ArgumentList "-avd","invest_phone","-timezone","Asia/Seoul","-gpu","host" -WindowStyle Minimized
+# 새로 부팅하면 잠금 PIN이 걸려 앱이 안 열린다 ("Activity class does not exist"). PIN은 사람이 푼다 (AI가 입력하지 않는다). 화면이 꺼져도 검게 보이니 켜 둔다
+adb -s emulator-5554 shell svc power stayon true
 # 앱 (apps/client). 키 파일 안의 값은 절대 출력하지 않는다. flutter_cmd.txt에 r(핫리로드)·R(핫리스타트)·q(종료)를 한 줄씩 덧붙여 조작
 tail -f flutter_cmd.txt | flutter.bat run -d emulator-5554 --no-enable-impeller --dart-define-from-file=dev_keys.env
 ```
 
 - **오늘 계획 승인**은 앱의 안전장치다 (더보기 → 자동매매 → "오늘 계획 승인"). 승인해야 사고판다. 10/23은 사용자 지시로 AI가 눌렀다. 지시 없이 누르지 않는다
 - 서버는 코드를 바꾸면 **다시 시작**해야 반영된다. 장중에는 `POST /api/chat`이 45~60초 멈춘 틈에 다시 시작한다 (AI 판단 중 끊지 않게)
+- 서버가 07·14시 수집 시각을 지나서 켜지면 켜질 때 한 번 바로 수집한다 (10/26, `apps/api/data/last_collect.txt`에 마지막 전체 수집 시각)
 - 하루 흐름: 07:00 서버 데이터 수집 → 08:20 아침 브리핑 → 09:00 장 → 09:30부터 보유 종목 점검(30분마다, 급락·이익 +1% 등은 바로) → 14:00 서버 종가 수집 → 14:30 마감 전 점검 → 15:30 마감 → 15:35 마감 값 기록
 - 점검·캡처·분석용 스크립트는 `docs/reports/tools/`에 복사해 뒀다 (`watch.py` 지난 1시간 주문·검증·오류 보고, `capture.py hourly|close|--watch` 에뮬레이터 화면 캡처, `kis_close_1023.py` 종가 읽기 전용 조회). 원래는 세션 임시 폴더에서 돌렸고, 안의 경로(`LOGS`, 키 파일, 저장 위치)는 쓰는 곳에 맞게 고쳐야 한다. 모두 읽기 전용이고 키를 출력하지 않는다
 - KIS 토큰은 1분에 한 번만 발급된다. 조회 스크립트가 "토큰 발급 실패"면 20초 뒤 다시 한다. 앱과 같은 키라 조회가 겹치면 앱 조회가 한두 번 실패할 수 있다
@@ -72,4 +75,4 @@ tail -f flutter_cmd.txt | flutter.bat run -d emulator-5554 --no-enable-impeller 
 - 커밋·푸시·삭제·외부 전송·비용이 생기는 설정(분석 한도 포함)은 **사용자가 하라고 할 때만** 한다
 - **README는 고칠 때마다 같이 갱신한다** (안 하면 사용자가 크게 화낸다). 수정 기록은 `docs/AI_CHANGELOG.md`에 문제 → 고친 것 → 위치 → 테스트 순
 - 모든 답변·문서·커밋 메시지는 한국어, 쉬운 말. 키 파일(`apps/client/dev_keys.env`, `apps/api/.env`) 값은 출력 금지
-- 테스트: 서버 `uv run pytest -q` (337), 앱 `flutter test` (45). 금액·주문 로직은 테스트를 남긴다
+- 테스트: 서버 `uv run pytest -q` (338), 앱 `flutter test` (45). 금액·주문 로직은 테스트를 남긴다

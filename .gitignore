@@ -43,3 +43,6 @@ tools/.kis_token_cache.json
 
 # 성향 신호 모델 학습 결과 (34MB, apps/finetune에서 train.py로 다시 만든다)
 apps/finetune/out/
+
+# 서버 마지막 수집 시각 (놓친 수집 따라잡기용)
+apps/api/data/last_collect.txt

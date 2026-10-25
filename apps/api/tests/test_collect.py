@@ -1,6 +1,6 @@
 """수집 명령 테스트. 공공데이터포털·OpenDART·임베딩은 가짜로 바꿔 끼운다."""
 
-from datetime import date
+from datetime import date, datetime
 
 import psycopg
 import pytest
@@ -188,6 +188,19 @@ def test_run_daily_stops_when_asked(monkeypatch) -> None:
     monkeypatch.setattr(collect, "run", fake_run)
     collect.run_daily(stop, 15)
     assert len(calls) == 2
+
+
+def test_missed_collect_after_server_was_off() -> None:
+    """2026-10-26: 서버가 08:16에 켜져 07시 수집을 건너뜀"""
+    from app.clock import KST
+    monday = datetime(2026, 10, 26, 8, 16, tzinfo=KST)
+    friday = datetime(2026, 10, 23, 14, 5, tzinfo=KST)
+    assert collect.missed_collect((7, 14), monday, friday)
+    assert collect.missed_collect((7, 14), monday, None)
+    assert not collect.missed_collect((7, 14), monday, monday.replace(hour=7, minute=3))  # 07시 수집을 했다
+    assert not collect.missed_collect((7, 14), monday.replace(hour=6), friday)  # 아직 07시 전
+    assert collect.missed_collect((7, 14), monday.replace(hour=15), monday.replace(hour=7, minute=3))  # 14시를 놓침
+    assert not collect.missed_collect((), monday, None)  # 자동 수집을 끈 서버
 
 
 def test_document_without_file_has_no_sections(monkeypatch) -> None:

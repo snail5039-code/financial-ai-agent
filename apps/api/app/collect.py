@@ -19,6 +19,7 @@ import argparse
 import logging
 import threading
 from datetime import datetime, time, timedelta
+from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
@@ -192,6 +193,7 @@ def run(codes: list[str] | None = None, skip_prices: bool = False, rechunk: bool
     if not config.OPENDART_API_KEY:
         raise SystemExit("OPENDART_API_KEY가 비어 있습니다 (apps/api/.env)")
     today = datetime.now(KST).date()
+    codes_given = bool(codes)
 
     with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
         corp_of = opendart.corp_codes(config.OPENDART_API_KEY)
@@ -226,9 +228,40 @@ def run(codes: list[str] | None = None, skip_prices: bool = False, rechunk: bool
             print(f"[재무·공시] {name['name']}({code}) 재무 {financial_rows}줄, {summary}" + (" · 위험등급 1등급" if grade == 1 else ""))
         if failed:
             print(f"[실패] {len(failed)}개 종목 ({', '.join(failed)}). 다시 실행하면 이어 받는다")
+    if not codes_given:
+        LAST_RUN.write_text(datetime.now(KST).isoformat(), encoding="utf-8")
 
 
 # ---------- 매일 자동 실행 ----------
+
+# 마지막으로 전체 수집을 끝낸 시각 (서버를 다시 켤 때 놓친 수집을 알려고). ponytail: 파일 하나, 서버가 여러 대면 DB로
+LAST_RUN = Path(__file__).resolve().parents[1] / "data" / "last_collect.txt"
+
+
+def last_run() -> datetime | None:
+    try:
+        return datetime.fromisoformat(LAST_RUN.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def missed_collect(hours: tuple[int, ...], now: datetime, last: datetime | None) -> bool:
+    """오늘 이미 지난 수집 시각 중 가장 늦은 것 뒤로 수집한 적이 없다.
+    2026-10-26: 서버가 주말 내내 꺼져 있다가 08:16에 켜져 07시 수집을 건너뛰었다 (아침 브리핑은 따라잡는데 수집은 안 했다)"""
+    passed = [h for h in hours if now.hour >= h]
+    if not passed:
+        return False
+    due = now.replace(hour=max(passed), minute=0, second=0, microsecond=0)
+    return last is None or last < due
+
+
+def catch_up(hours: tuple[int, ...]) -> None:
+    """서버가 켜질 때 한 번: 놓친 수집이 있으면 바로 한다"""
+    if missed_collect(hours, datetime.now(KST), last_run()):
+        try:
+            run()
+        except (Exception, SystemExit):
+            logging.getLogger(__name__).exception("놓친 수집 따라잡기 실패")
 
 def run_daily(stop: threading.Event, hour: int) -> None:
     """서버가 켜져 있는 동안 매일 hour시에 수집한다. stop이 켜지면 끝난다."""
