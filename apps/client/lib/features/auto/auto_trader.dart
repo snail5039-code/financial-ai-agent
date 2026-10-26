@@ -133,12 +133,23 @@ bool closeEquityTime(DateTime now) {
   return k.weekday <= 5 && minutes >= 15 * 60 + 30 && minutes <= 15 * 60 + 35;
 }
 
+// 하락하는 날 아침 매수를 쉰다 (2026-10-26 사용자 결정: 코스닥 −1.8%이던 09:06에 산 유한양행이 종가 −3.2%. 10/8·10/12도 하락일 아침 매수가 손실)
+const autoEarlyBuyEndMin = 10 * 60; // 이 시각 전까지
+const autoEarlyDownPct = -1.0; // 코스피나 코스닥이 이만큼 넘게 빠져 있으면
+
+/// 10시 전이고 코스피·코스닥 중 하나라도 autoEarlyDownPct보다 더 빠졌다. 지수를 못 받으면 평소대로 (막지 않음)
+bool earlyDownDay(DateTime now, double? kospiPct, double? kosdaqPct) {
+  final k = toKst(now);
+  return k.hour * 60 + k.minute < autoEarlyBuyEndMin &&
+      [kospiPct, kosdaqPct].any((pct) => pct != null && pct <= autoEarlyDownPct);
+}
+
 /// 증권사 지수 목록에서 그 지수의 오늘 등락 %. 없으면 null
 double? indexPct(List<Map<String, dynamic>>? market, String index) =>
     (market?.where((m) => m['index'] == index).firstOrNull?['change_pct'] as num?)?.toDouble();
 
 // 시장 탓 하락이면 매도 판단을 미룬다 (2026-10-20 사용자 결정: 10/13·10/19 코스피가 빠진 아침에 판 7종목이 모두 판 가격보다 높게 마감)
-const autoRelativeGapPct = 3.0; // 종목 오늘 등락이 시장 지수보다 이만큼(%p) 넘게 나쁘면 종목 탓으로 본다
+const autoRelativeGapPct = 1.5; // 종목 오늘 등락이 시장 지수보다 이만큼(%p) 넘게 나쁘면 종목 탓으로 본다 (2026-10-26 사용자 결정 3 → 1.5: 미룸 손해 4번, 10/26 HLB −4.3%·유한양행 −2.6%가 지수 −1.6%에 미뤄짐)
 const autoDeferMin = 30; // 시장 탓이면 처음 미룬 뒤 이만큼 지나야 묻는다
 const autoDeferMarketPct = 3.0; // 시장이 이만큼(%) 넘게 빠지면 미루지 않는다 (10/15 −7.57%처럼 계속 빠지는 날)
 const autoDeferMoreDropPct = 1.0; // 미룬 뒤 지수가 이만큼(%p) 더 빠지면 30분을 기다리지 않고 묻는다 (2026-10-20: −2.3%에서 미룬 뒤 −3.7%까지)
@@ -465,10 +476,19 @@ class AutoTrader extends ChangeNotifier {
       equity = null;
     }
     var bear = false;
+    List<Map<String, dynamic>>? market;
     try {
-      bear = bearMarket((await currentBroker.value!.market())?.where((m) => m['index'] == 'KOSPI').firstOrNull, kstYmd(_now()));
+      market = await currentBroker.value!.market();
+      bear = bearMarket(market?.where((m) => m['index'] == 'KOSPI').firstOrNull, kstYmd(_now()));
     } catch (_) {
       bear = false; // 지수를 못 받으면 평소대로
+    }
+    if (earlyDownDay(_now(), indexPct(market, 'KOSPI'), indexPct(market, 'KOSDAQ'))) {
+      if (await _box.read('auto_early_note:$_today') == null) {
+        await _box.write('auto_early_note:$_today', '1'); // 하루 한 번만 알린다
+        await _note('지수가 ${autoEarlyDownPct.abs()}% 넘게 빠진 아침이라 10시 전에는 새로 사지 않아요 (10시부터 다시 판단)');
+      }
+      return;
     }
     for (final pick in picks.where((p) => !skip(p))) {
       if (!on || plan == null) break;

@@ -20,7 +20,8 @@
 | `autoRiskPct` | 2% | 같은 파일 `buyRoom` | 변동성 기준 수량: 평소 하루 변동(최근 20일 표준편차, 서버 `daily_vol_pct`)의 2배 빠지면 총자산의 이만큼만 잃게 산다 |
 | `autoMaxExposurePct` | 70% | 같은 파일 `buyRoom` | 주식 평가액이 총자산의 이만큼을 넘게 사지 않는다 |
 | `autoOpeningWaitMin` | 30분 | 같은 파일 | 장 시작 뒤 이 시간까지는 매도 판단을 묻지 않는다 (강제 손절 −10%·−15%만 바로) |
-| `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 3%p / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 3%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
+| `autoRelativeGapPct` / `autoDeferMin` / `autoDeferMarketPct` | 1.5%p (10/26, 전 3%p) / 30분 / −3% | 같은 파일 `marketDriven`·`deferSell` | 시장 탓 하락(지수 −1.5%~−3%, 종목이 지수보다 1.5%p 넘게 나쁘지 않음)이면 손절선·급락·이익 돌려줌·시장 급락 매도 판단을 처음 한 번 30분 미룬다 |
+| `autoEarlyBuyEndMin` / `autoEarlyDownPct` | 10:00 / −1% | 같은 파일 `earlyDownDay`·`_buy` | 10시 전에 코스피나 코스닥이 −1%보다 더 빠져 있으면 새로 사지 않는다 (10/26) |
 | `autoDeferMoreDropPct` | 1%p | 같은 파일 `deferSell` | 미룬 뒤 지수가 이만큼 더 빠지면 30분을 기다리지 않고 묻는다 (10/20 뒤) |
 | `autoStopRepeatPct` | 1.5%p | 같은 파일 `sellReason` | 손절선 질문 뒤 이만큼 더 빠지면 손절선 질문을 다시 (10/20 뒤) |
 | 산 뒤 매도 대기 | 없음 | 같은 파일 `sellReason` | 10/21에 `autoBuyHoldMin` 30분을 넣었다가 10/23 사용자 결정으로 없앴다. 산 직후에도 바로 묻는다 (단기 신호만으로는 검증이 반려) |
@@ -43,6 +44,13 @@
 | 반등 중 표시 | 최근 5분 저가 > 오늘 저점, 현재가 ≥ VWAP | 같은 파일 `rebounding` | 장중 흐름에 "반등 중"을 붙여 투자 AI가 반등 매수를 따지게 |
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
+
+## 10/26 마감 뒤 (12일차, 사용자 결정)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 09:06 코스닥 −1.76%·코스피 −0.57%인 아침에 유한양행 10주를 84,400원에 샀는데 종가 81,700원(−3.20%, −27,000원). 오늘 손실의 가장 큰 원인. 10/8·10/12도 하락일 아침 매수가 손실 | **10시 전에 코스피나 코스닥이 −1%보다 더 빠져 있으면 새로 사지 않는다** (하루 한 번 알림, 10시부터 평소대로 AI 판단). 지수를 못 받으면 막지 않는다 | `auto_trader.dart` `earlyDownDay`·`_buy` | client_test `earlyDownDay` |
+| 시장 탓 매도 미룸이 손해 본 날 4번 (10/20 −5.95만, 10/22 −8.9만, 10/23 −1.9만, 10/26 −1.5만 원). 10/26 11:36 HLB(−4.33%, 코스닥 −2.61%)도 시장 탓으로 미뤄짐 | 종목이 지수보다 **1.5%p** 넘게 더 빠지면 종목 탓으로 보고 미루지 않는다 (전 3%p). 10/26 기준이면 HLB는 바로 물었고, 유한양행(−2.60% vs −1.57%, 1.03%p)은 여전히 미룬다 | `auto_trader.dart` `autoRelativeGapPct` | client_test 시장 탓 하락 |
 
 ## 10/26 장중 (12일차, 13:51 서버 다시 시작)
 

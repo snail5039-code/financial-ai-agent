@@ -78,6 +78,10 @@ void main() {
         closeEquityTime(DateTime.utc(2026, 10, 24, 6, 31))], [false, true, true, false, false]);
     expect(indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSPI'), 0.3);
     expect([indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSDAQ'), indexPct(null, 'KOSPI')], [null, null]);
+    // 2026-10-26 유한양행: 지수가 −1% 넘게 빠진 아침(KST 10시 전)엔 새로 사지 않는다
+    final nine = DateTime.utc(2026, 10, 26, 0, 6), ten = DateTime.utc(2026, 10, 26, 1, 0);
+    expect([earlyDownDay(nine, -0.57, -1.76), earlyDownDay(nine, -0.5, -0.9), earlyDownDay(ten, -1.5, -2.0),
+        earlyDownDay(nine, null, null), earlyDownDay(nine, -1.0, null)], [true, false, false, false, true]);
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},
@@ -761,6 +765,9 @@ void main() {
     expect(marketDriven(-1.0, -3.0), isFalse); // 시장이 −1.5%까지 안 빠졌으면 평소대로
     expect(marketDriven(-3.5, -3.6), isFalse); // 시장이 −3% 넘게 빠지면 미루지 않는다 (10/15 같은 날)
     expect(marketDriven(null, -3.0), isFalse); // 지수를 못 받으면 평소대로
+    // 2026-10-26: 지수보다 1.5%p 넘게 더 빠지면 종목 탓 (HLB −4.33% vs 코스닥 −2.61%는 이제 미루지 않는다)
+    expect(marketDriven(-2.61, -4.33), isFalse);
+    expect(marketDriven(-1.57, -2.60), isTrue); // 1.03%p 차이는 아직 시장 탓
     final now = DateTime.utc(2026, 10, 19, 1, 0);
     expect(deferSell('stop', true, null, now), isTrue);
     expect(deferSell('giveback', true, now.subtract(const Duration(minutes: 20)).toIso8601String(), now), isTrue);
