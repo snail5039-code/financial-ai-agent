@@ -97,6 +97,7 @@ flowchart LR
 
 장이 끝나면 그날 기록(주문, AI 판단, 검증 반려, 앱 화면)을 다시 보고 **무엇이 있었나 → 어떻게 바꿨나**를 남긴다.
 참고는 그날 리포트(근거·숫자)와 외부 기준이다. 바꾼 파일·함수·테스트는 [수정 기록](docs/AI_CHANGELOG.md)에 있다.
+날짜별 내용은 제목을 누르면 펼쳐진다 (가장 최근 날만 펼쳐 둔다).
 
 ![누적 수익률: 모의 계좌 −12.67%, 코스피 −19.61% (10/7~10/26)](docs/reports/img/cumulative.svg)
 
@@ -115,7 +116,9 @@ flowchart LR
 | 10/12 (2일차) | −3.65% | 보유 −4.03% | 매수 2 | [리포트](docs/reports/live-20261012.md) |
 | 10/8 (1일차) | −2.62% | 산 종목 −1.52% | 매수 4 | [원인 분석](docs/reports/2026-10-08-mock-auto-trading.html) |
 
-### 10/26 (12일차) 시장과 같이 −1.46%, 하락하는 아침에 산 것이 가장 큰 손실
+<details open>
+<summary><b>10/26 (12일차) 시장과 같이 −1.46%, 하락하는 아침에 산 것이 가장 큰 손실</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -131,7 +134,11 @@ flowchart LR
 |---|---|---|---|
 | <img src="docs/reports/img/live-20261026/0906_buy_000100_top.png" width="200"> | <img src="docs/reports/img/live-20261026/1019_sell_068270_top.png" width="200"> | <img src="docs/reports/img/live-20261026/1302_buy_352820_top.png" width="200"> | <img src="docs/reports/img/live-20261026/1537_close_top.png" width="200"> |
 
-### 10/23 (11일차) 코스피가 −4.11%에서 고가로 끝난 날, 계좌는 거의 그대로
+</details>
+
+<details>
+<summary><b>10/23 (11일차) 코스피가 −4.11%에서 고가로 끝난 날, 계좌는 거의 그대로</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -148,7 +155,11 @@ flowchart LR
 |---|---|---|---|
 | <img src="docs/reports/img/live-20261023/0929_hourly_top.png" width="200"> | <img src="docs/reports/img/live-20261023/1229_hourly_top.png" width="200"> | <img src="docs/reports/img/live-20261023/1435_buy_021240_top.png" width="200"> | <img src="docs/reports/img/live-20261023/1536_close_top.png" width="200"> |
 
-### 10/22 (10일차) 폭락일에 시장보다 0.97%p 덜 빠졌지만, 아침 미룸이 손해
+</details>
+
+<details>
+<summary><b>10/22 (10일차) 폭락일에 시장보다 0.97%p 덜 빠졌지만, 아침 미룸이 손해</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -166,7 +177,11 @@ flowchart LR
 |---|---|---|---|
 | <img src="docs/reports/img/live-20261022/1234_buy_011200_top.png" width="200"> | <img src="docs/reports/img/live-20261022/1337_sell_098460_top.png" width="200"> | <img src="docs/reports/img/live-20261022/1437_sell_096770_top.png" width="200"> | <img src="docs/reports/img/live-20261022/1535_close_top.png" width="200"> |
 
-### 10/21 (9일차) 반등일에 몇 분짜리 신호로 팔아 시장보다 3.4%p 뒤짐
+</details>
+
+<details>
+<summary><b>10/21 (9일차) 반등일에 몇 분짜리 신호로 팔아 시장보다 3.4%p 뒤짐</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -184,7 +199,11 @@ flowchart LR
 |---|---|---|
 | <img src="docs/reports/img/live-20261021/0957_sell_272210_top.png" width="200"> | <img src="docs/reports/img/live-20261021/1234_buy_272210_top.png" width="200"> | <img src="docs/reports/img/live-20261021/1541_close_top.png" width="200"> |
 
-### 10/20 (8일차) 급락장에서 시장보다 덜 빠졌지만, 미룬 매도는 손해
+</details>
+
+<details>
+<summary><b>10/20 (8일차) 급락장에서 시장보다 덜 빠졌지만, 미룬 매도는 손해</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -206,7 +225,11 @@ flowchart LR
 |---|---|---|
 | <img src="docs/reports/img/live-20261020/0941_sell_010950_top.png" width="200"> | <img src="docs/reports/img/live-20261020/1518_sell_096770_top.png" width="200"> | <img src="docs/reports/img/live-20261020/1536_close_top.png" width="200"> |
 
-### 10/19 (7일차) 아침 급락에 4종목을 팔았는데, 모두 다시 오름
+</details>
+
+<details>
+<summary><b>10/19 (7일차) 아침 급락에 4종목을 팔았는데, 모두 다시 오름</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -224,7 +247,11 @@ flowchart LR
 |---|---|---|---|
 | <img src="docs/reports/img/live-20261019/1039_sell_028300_top.png" width="200"> | <img src="docs/reports/img/live-20261019/1603_close_top.png" width="200"> | <img src="docs/reports/img/live-20261019/equity_daily.png" width="200"> | <img src="docs/reports/img/live-20261019/history_sell_filter.png" width="200"> |
 
-### 10/18 (주말) 수량 규칙을 1년 백테스트로 정함
+</details>
+
+<details>
+<summary><b>10/18 (주말) 수량 규칙을 1년 백테스트로 정함</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -241,7 +268,11 @@ flowchart LR
 | 하루 한도 50% | +6% | −49% | 2 |
 | **변동성 수량 + 비중 70% (적용)** | **+37%** | **−33%** | **0** |
 
-### 10/16 (6일차) 첫 반등장, 오른 만큼 돌려줌
+</details>
+
+<details>
+<summary><b>10/16 (6일차) 첫 반등장, 오른 만큼 돌려줌</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -256,7 +287,11 @@ flowchart LR
 |---|---|
 | <img src="docs/reports/img/live-20261016/1410_surge_028300_holdings.png" width="240"> | <img src="docs/reports/img/live-20261016/1531_close_top.png" width="240"> |
 
-### 10/15 (5일차) 폭락장, 사지 않고 버팀
+</details>
+
+<details>
+<summary><b>10/15 (5일차) 폭락장, 사지 않고 버팀</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -265,7 +300,11 @@ flowchart LR
 | 손절선(−7%) 아래(NH투자증권 −9.16%)에서도 AI가 계속 보유 | 강제 손절 −10% 절반·−15% 전부, 하락장엔 종목당 몫 절반 | 리포트 5장, Faber 추세 필터 |
 | 흑자 전환을 "+105.79% 증가"로 계산해 반려 4번 | 전년 적자면 "흑자 전환"·"적자 지속"으로 | 리포트 5장 |
 
-### 10/14 (4일차) 공개 매매 기준과 비교한 점검
+</details>
+
+<details>
+<summary><b>10/14 (4일차) 공개 매매 기준과 비교한 점검</b></summary>
+
 
 | 무엇이 있었나 | 어떻게 바꿨나 | 참고 |
 |---|---|---|
@@ -274,8 +313,10 @@ flowchart LR
 | 검사 코드 버그로 셀트리온 판단 9번 반려 | 공시 표 숫자를 원문 값으로 읽게 수정 | 리포트 3장 |
 | AI가 너무 조심스러운지 볼 숫자가 없음 | 관찰 판단 점수 (아래) | 리포트 4장 |
 
+</details>
+
 <details>
-<summary>10/8 ~ 10/13 (1~3일차)</summary>
+<summary><b>10/8 ~ 10/13 (1~3일차)</b></summary>
 
 #### 10/13 (3일차) 시초가에 판 종목이 모두 다시 오름
 
