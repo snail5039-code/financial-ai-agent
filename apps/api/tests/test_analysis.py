@@ -557,6 +557,9 @@ def test_calc_from_code_computed_sources_needs_no_metric_id() -> None:
     assert analysis.claim_check("claim:0", trend, sources, set())["result"] == "pass"
     news = {**trend, "source_ids": ["news:1"]}
     assert analysis.claim_check("claim:0", news, sources, set())["result"] == "fail"
+    # 2026-10-26 셀트리온: 종목 코드 없이 쓴 "intraday"도 코드가 계산한 자료
+    bare = {**trend, "source_ids": ["intraday"]}
+    assert analysis.claim_check("claim:0", bare, {"intraday": {}}, set())["result"] == "pass"
     proposal = {"action": "watch", "claims": [trend], "counter_arguments": ["변동성이 크다 (출처: volatility_60d)"],
                 "risks": ["모르는 값 (출처: nope)"]}
     metric = [{"metric_id": "volatility_60d", "value": 30}]
@@ -706,3 +709,14 @@ def test_invest_context_shows_todays_sells_and_short_signal_rule() -> None:
     # 2026-10-23 사용자 결정: 이익이 나는 매도(+0.5% 이상)는 단기 신호만으로도 판다. 손실 중이면 규칙 그대로
     assert "+0.5% 이상" in llm.INVEST_PROMPT and "손실 중이면 위 규칙 그대로" in llm.INVEST_PROMPT
     assert "+0.5% 이상 이익" in llm.VERIFY_PROMPT and "손실 중이면 위 규칙 그대로" in llm.VERIFY_PROMPT
+
+
+def test_snapshot_source_lists_todays_sells_for_amount_check() -> None:
+    """2026-10-26 셀트리온: 오늘 판 가격을 계좌 출처로 달자 현금 4,725,670원과 25배 다르다고 반려됐다"""
+    state = {"stock_code": "068270", "user_id": "u", "today_sells": ["10:19 2주 189,300원에 팜 (판 근거: 이익 확정)"],
+             "snapshot": {"source": "app", "cash_krw": 4_725_670, "fetched_at": "2026-10-26T11:00:00+09:00", "holdings": []}}
+    source = analysis.load_source(None, "snapshot", state)
+    assert "오늘 판 기록: 10:19 2주 189,300원에 팜" in source["content"] and "판 근거" not in source["content"]
+    claim = {"text": "오늘 10:19에 189,300원에 팔았다", "type": "fact", "source_ids": ["snapshot"], "metric_ids": []}
+    assert analysis.amount_check("claim:0", claim, {"snapshot": source}) is None
+    assert "오늘 판 기록" not in analysis.load_source(None, "snapshot", {**state, "today_sells": []})["content"]

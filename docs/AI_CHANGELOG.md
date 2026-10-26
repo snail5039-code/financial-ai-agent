@@ -44,6 +44,13 @@
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
 
+## 10/26 장중 (12일차, 13:51 서버 다시 시작)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 10:19 셀트리온 매도: 장중 흐름 출처를 종목 코드 없이 `intraday`로 써서 "계산 근거인데 지표 ID가 없음"으로 반려 (최근 10일 1건) | 코드가 계산해 준 자료로 보는 출처에 종목 코드 없는 `intraday`·`trend`도 넣음 | `analysis.py` `CODE_COMPUTED` | `test_calc_from_code_computed_sources_needs_no_metric_id` |
+| 11:01 셀트리온 재매수 판단: "10:19에 189,300원에 팔았다"에 계좌 출처를 달자 금액 검사가 현금(4,725,670원)과 비교해 "25배 다름" → 반려 | 오늘 판 기록이 있으면 계좌 출처 내용에 "오늘 판 기록: 시각 수량 가격"을 붙인다 (검증 때 다시 읽는 원문에 들어감) | `analysis.py` `load_source` snapshot | `test_snapshot_source_lists_todays_sells_for_amount_check` |
+
 ## 10/26 장 전 (12일차, 사용자 결정·점검)
 
 | 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |

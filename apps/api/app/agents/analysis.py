@@ -172,6 +172,8 @@ def load_source(conn, source_id: str, state: InvestState) -> dict | None:
             if market:
                 holding += ", " + net_sell_text(held[0]["qty"], held[0]["avg_price"], state["prices"][0]["price"],
                                                 market["market"], policy and policy["fee_rate_pct"])
+        if state.get("today_sells"):  # 2026-10-26 셀트리온: 판 가격(189,300원)을 계좌 출처로 달자 현금과 25배 다르다고 반려
+            holding += ". 오늘 판 기록: " + "; ".join(s.split(" (판 근거")[0] for s in state["today_sells"])
         return {"kind": "snapshot", "title": f"내 계좌 ({SOURCE_LABELS[snapshot['source']]})", "url": None,
                 "as_of": snapshot["fetched_at"], "content": f"현금 {won(snapshot['cash_krw'])}, {holding}"}
     return None
@@ -657,7 +659,8 @@ def code_checks(proposal: dict, known_sources: dict, gathered_metrics: list[dict
 
 
 TODAY_SOURCES = ("quote:", "intraday:", "market:")
-CODE_COMPUTED = ("trend:", "intraday:", "market:", "snapshot")  # 코드가 계산한 값이 담긴 출처
+# 코드가 계산한 값이 담긴 출처. 종목 코드 없이 쓴 "intraday"·"trend"도 같다 (2026-10-26 셀트리온 매도가 "intraday"로 반려)
+CODE_COMPUTED = ("trend", "intraday", "market:", "snapshot")
 
 
 def weekdays_between(start, end) -> int:
