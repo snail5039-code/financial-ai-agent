@@ -720,3 +720,14 @@ def test_snapshot_source_lists_todays_sells_for_amount_check() -> None:
     claim = {"text": "오늘 10:19에 189,300원에 팔았다", "type": "fact", "source_ids": ["snapshot"], "metric_ids": []}
     assert analysis.amount_check("claim:0", claim, {"snapshot": source}) is None
     assert "오늘 판 기록" not in analysis.load_source(None, "snapshot", {**state, "today_sells": []})["content"]
+
+
+def test_strong_market_text_only_on_big_up_day_with_buy_allowed() -> None:
+    """2026-10-27: 코스피 +4.4%인 날 "20일 최고가 근처"만으로 관찰해 반등장에서 아무것도 사지 않았다"""
+    up = {"index": "KOSPI", "change_pct": 4.43}
+    state = {"market": [up, {"index": "KOSDAQ", "change_pct": 1.2}], "allowed_actions": ["buy", "watch"]}
+    text = analysis.strong_market_text(state)
+    assert "코스피 +4.43%" in text and "코스닥" not in text and "20일 최고가 근처라는 것만으로는 관찰하지 않는다" in text
+    assert analysis.strong_market_text({**state, "allowed_actions": ["hold", "sell"]}) is None  # 매수를 못 고르면 없음
+    assert analysis.strong_market_text({**state, "market": [{"index": "KOSPI", "change_pct": 1.9}]}) is None
+    assert analysis.strong_market_text({**state, "market": None}) is None

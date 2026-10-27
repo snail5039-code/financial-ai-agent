@@ -45,6 +45,12 @@
 | `autoDipPct` | −3% | `auto_trader.dart` `dipBuy` | 오늘 이만큼 넘게 빠진 종목을 사면 절반만 |
 | `MAX_CANDIDATES` / 후보 순서 | 3 / 급등·거래대금 → 관심 → 상승 추세·20일 등락률 강한 순 | `apps/api/app/briefing.py` `pick_candidates`, `trend_ranks` | 2시간 안에 관찰한 종목은 뺀다. 상승 추세인데 관찰이면 `rechecks`로 앱이 실시간 재판단 |
 
+## 10/27 장중 (13일차, 사용자 결정, 11:46 서버 다시 시작)
+
+| 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |
+|---|---|---|---|
+| 코스피 +4.4%인 반등장에 계좌 +0.1%. 매수 후보를 오르는 종목은 "20일 최고가 근처라 되돌림 위험"(삼성E&A·삼성바이오로직스), 덜 오른 종목은 "평균선 아래"(삼성SDI)로 모두 관찰 | 코스피나 코스닥이 **+2% 넘게 오른 날**, 매수를 고를 수 있으면 투자·검증 AI에게 "[강한 상승장] 20일 최고가 근처라는 것만으로는 관찰하지 않는다. 관찰에도 비용이 있으니 같은 무게로 비교하고, 관찰하려면 종목만의 근거를 쓴다"를 준다. 장중 하락 중 매수 차단(코드)은 그대로 | `analysis.py` `strong_market_text`·`STRONG_MARKET_PCT`, `invest_context`·`verify_context` | `test_strong_market_text_only_on_big_up_day_with_buy_allowed` |
+
 ## 10/26 마감 뒤 (12일차, 사용자 결정)
 
 | 드러난 문제 (근거) | 고친 것 | 위치 | 테스트 |

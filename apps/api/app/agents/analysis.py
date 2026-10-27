@@ -767,6 +767,22 @@ def today_sell_rejects(conn, user_id: str, code: str) -> list[str]:
         " ORDER BY v.created_at DESC LIMIT %s", (user_id, code, REJECTS_SHOWN))]
 
 
+STRONG_MARKET_PCT = 2.0  # 지수가 이만큼(%) 넘게 오른 날은 "고점 근처"만으로 관찰하지 않는다
+
+
+def strong_market_text(state: InvestState) -> str | None:
+    """강한 상승장의 매수 판단 지시 (투자·검증 AI 공통, 매수를 고를 수 있을 때만).
+    2026-10-27 사용자 결정: 코스피 +4.4%인 날 삼성E&A·삼성바이오로직스를 "20일 최고가 근처라 되돌림 위험"만으로 관찰,
+    덜 오른 종목은 "평균선 아래"로 관찰해 반등장에서 아무것도 사지 않았다 (계좌 +0.1%)"""
+    up = [f"{MARKET_NAMES[m['index']]} {m['change_pct']:+.2f}%" for m in state.get("market") or []
+          if m.get("index") in MARKET_NAMES and (m.get("change_pct") or 0) >= STRONG_MARKET_PCT]
+    if not up or "buy" not in (state.get("allowed_actions") or []):
+        return None
+    return (f"[강한 상승장] 오늘 {', '.join(up)}. 20일 최고가 근처라는 것만으로는 관찰하지 않는다. 시장 전체가 오르는 날은 "
+            "관찰에도 비용(놓치는 상승)이 있으니 매수와 관찰을 같은 무게로 비교한다. 관찰하려면 고점 근처 말고 종목만의 근거"
+            "(장중 하락이 이어짐, 공식 악재, 실적 악화)를 쓴다")
+
+
 def invest_context(state: InvestState) -> str:
     parts = [
         f"[요청] {state['query']}",
@@ -795,6 +811,8 @@ def invest_context(state: InvestState) -> str:
         if signal in signals.WARNINGS:  # 투자 AI에게만 준다. 검증 AI는 원문으로 따로 본다
             parts.append(f"[대화 신호] {signals.WARNINGS[signal]} 이 위험을 위험(risks)에 쓰고, "
                          "매수를 고르려 했다면 관찰(watch)이 더 맞는지 따져 근거에 쓴다.")
+    if strong := strong_market_text(state):
+        parts.append(strong)
     if sold := state.get("today_sells"):
         parts.append("[오늘 이 종목 매도] 오늘 이미 이 종목을 팔았다. 다시 사려면 판 이유가 사라졌다는 새 근거를 쓰고, "
                      "판 가격보다 비싸게 사는 것이면 그래도 사는 이유를 쓴다\n" + "\n".join(f"- {x}" for x in sold))
@@ -826,6 +844,7 @@ def verify_context(state: InvestState, proposal: dict, reloaded: dict, recompute
         "[위험]\n" + "\n".join(f"- {x}" for x in proposal["risks"]),
         "[판단이 틀리는 조건]\n" + "\n".join(f"- {x}" for x in proposal["invalid_if"]),
         *(["[오늘 이 종목 매도]\n" + "\n".join(f"- {x}" for x in state["today_sells"])] if state.get("today_sells") else []),
+        *([strong] if (strong := strong_market_text(state)) else []),
         "[원문] (출처 ID로 다시 읽은 것)\n" + "\n".join(source_lines(reloaded)),
         "[다시 계산한 지표]\n" + "\n".join(metric_line(m) for m in recomputed),
         "[코드 검사]\n" + "\n".join(f"- {c['target']}: {c['result']} ({c['detail']})" for c in checks),

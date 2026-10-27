@@ -66,4 +66,4 @@ tail -f flutter_cmd.txt | flutter.bat run -d emulator-5554 --no-enable-impeller 
 - 커밋·푸시·삭제·외부 전송·비용이 생기는 설정(분석 한도 포함)은 **사용자가 하라고 할 때만** 한다
 - **README는 고칠 때마다 같이 갱신한다** (안 하면 사용자가 크게 화낸다). 수정 기록은 `docs/AI_CHANGELOG.md`에 문제 → 고친 것 → 위치 → 테스트 순
 - 모든 답변·문서·커밋 메시지는 한국어, 쉬운 말. 키 파일(`apps/client/dev_keys.env`, `apps/api/.env`) 값은 출력 금지
-- 테스트: 서버 `uv run pytest -q` (339), 앱 `flutter test` (45). 금액·주문 로직은 테스트를 남긴다
+- 테스트: 서버 `uv run pytest -q` (340), 앱 `flutter test` (45). 금액·주문 로직은 테스트를 남긴다
