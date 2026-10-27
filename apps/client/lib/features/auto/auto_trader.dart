@@ -126,11 +126,12 @@ String? sellReason(double dropPct, Map<String, dynamic> seen, DateTime now, {boo
   return last == null || now.difference(last) >= autoReviewGap ? 'check' : null;
 }
 
-/// 마감 총자산을 남길 시각: 평일 15:30~15:35 (정규장 종가가 나온 뒤, 자산 그래프 기록 시간 equityTime 안)
+/// 마감 총자산을 남길 시각: 평일 15:32~15:35 (자산 그래프 기록 시간 equityTime 안).
+/// 2026-10-27: 15:30:08에 남긴 값이 종가 계산보다 9,350원 낮았다 (동시호가 체결가가 다 반영되기 전). 2분 기다린다
 bool closeEquityTime(DateTime now) {
   final k = toKst(now);
   final minutes = k.hour * 60 + k.minute;
-  return k.weekday <= 5 && minutes >= 15 * 60 + 30 && minutes <= 15 * 60 + 35;
+  return k.weekday <= 5 && minutes >= 15 * 60 + 32 && minutes <= 15 * 60 + 35;
 }
 
 // 하락하는 날 아침 매수를 쉰다 (2026-10-26 사용자 결정: 코스닥 −1.8%이던 09:06에 산 유한양행이 종가 −3.2%. 10/8·10/12도 하락일 아침 매수가 손실)
@@ -243,6 +244,9 @@ int buyRoom({required int budget, required int spentToday, required int spentOnS
   }
   return room > 0 ? room : 0;
 }
+
+/// 살 수 있는 몫이 남았는데 1주 값보다 적다 (2026-10-27 삼성바이오로직스: 남은 몫 약 66만 원 < 1주 146만 원, 기록 없이 0주)
+bool belowOneShare(int room, int price) => room > 0 && price > 0 && room < price;
 
 /// 오늘 이만큼(%) 넘게 빠진 종목을 사면 절반만 (급락일 반등 매수, 2026-10-15 사용자 요청). 다시 빠질 수 있어서 수량을 줄인다
 const autoDipPct = 3;
@@ -513,6 +517,10 @@ class AutoTrader extends ChangeNotifier {
       if (bear && await _box.read('auto_bear_note:$_today') == null) {
         await _box.write('auto_bear_note:$_today', '1'); // 하루 한 번만 알린다 (2026-10-19: 매수 판단 때마다 3번씩 찍혔다)
         await _note('코스피가 20일 평균 아래(하락장)라 종목당 몫의 절반만 사요');
+      }
+      if (belowOneShare(left, close) && await _box.read('auto_share_note:$_today:$code') == null) {
+        await _box.write('auto_share_note:$_today:$code', '1'); // 종목마다 하루 한 번만 알린다
+        await _note('$name: 살 수 있는 몫(${won(left)})이 1주 값(${won(close)})보다 적어 사지 않아요');
       }
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;

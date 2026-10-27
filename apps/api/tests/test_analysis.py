@@ -709,6 +709,8 @@ def test_invest_context_shows_todays_sells_and_short_signal_rule() -> None:
     # 2026-10-23 사용자 결정: 이익이 나는 매도(+0.5% 이상)는 단기 신호만으로도 판다. 손실 중이면 규칙 그대로
     assert "+0.5% 이상" in llm.INVEST_PROMPT and "손실 중이면 위 규칙 그대로" in llm.INVEST_PROMPT
     assert "+0.5% 이상 이익" in llm.VERIFY_PROMPT and "손실 중이면 위 규칙 그대로" in llm.VERIFY_PROMPT
+    # 2026-10-27 하이브: 시장보다 뚜렷하게 약함·평균선 아래·실적 악화는 단기 신호가 아니다
+    assert "단기 신호가 아니라 더 긴 근거다" in llm.VERIFY_PROMPT and "지수 +3%인데 종목 −3%" in llm.VERIFY_PROMPT
 
 
 def test_snapshot_source_lists_todays_sells_for_amount_check() -> None:

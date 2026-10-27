@@ -72,11 +72,14 @@ void main() {
     // 정규장(KST 09:00~15:35, 평일)에만 기록한다
     expect([equityTime(DateTime.utc(2026, 10, 19, 0, 0)), equityTime(DateTime.utc(2026, 10, 19, 6, 35)),
         equityTime(DateTime.utc(2026, 10, 19, 6, 36)), equityTime(DateTime.utc(2026, 10, 18, 3))], [true, true, false, false]);
-    // 자동매매 마감 기록은 평일 KST 15:30~15:35에만 (15:28에 멈추는 장중 점검과 따로)
-    expect([closeEquityTime(DateTime.utc(2026, 10, 23, 6, 29)), closeEquityTime(DateTime.utc(2026, 10, 23, 6, 30)),
+    // 자동매매 마감 기록은 평일 KST 15:32~15:35에만 (15:28에 멈추는 장중 점검과 따로)
+    expect([closeEquityTime(DateTime.utc(2026, 10, 23, 6, 31)), closeEquityTime(DateTime.utc(2026, 10, 23, 6, 32)),
         closeEquityTime(DateTime.utc(2026, 10, 23, 6, 35)), closeEquityTime(DateTime.utc(2026, 10, 23, 6, 36)),
         closeEquityTime(DateTime.utc(2026, 10, 24, 6, 31))], [false, true, true, false, false]);
     expect(indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSPI'), 0.3);
+    // 2026-10-27 삼성바이오로직스: 남은 몫이 1주 값보다 적으면 기록을 남긴다
+    expect([belowOneShare(660000, 1460000), belowOneShare(0, 1460000), belowOneShare(2000000, 1460000), belowOneShare(660000, 0)],
+        [true, false, false, false]);
     expect([indexPct([{'index': 'KOSPI', 'change_pct': 0.3}], 'KOSDAQ'), indexPct(null, 'KOSPI')], [null, null]);
     // 2026-10-26 유한양행: 지수가 −1% 넘게 빠진 아침(KST 10시 전)엔 새로 사지 않는다
     final nine = DateTime.utc(2026, 10, 26, 0, 6), ten = DateTime.utc(2026, 10, 26, 1, 0);
