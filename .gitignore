@@ -46,3 +46,6 @@ apps/finetune/out/
 
 # 서버 마지막 수집 시각 (놓친 수집 따라잡기용)
 apps/api/data/last_collect.txt
+
+# 백테스트용 과거 시세 (tools/kis_history.py가 받음, 다시 받을 수 있음)
+tools/data/

@@ -85,6 +85,11 @@ void main() {
     final nine = DateTime.utc(2026, 10, 26, 0, 6), ten = DateTime.utc(2026, 10, 26, 1, 0);
     expect([earlyDownDay(nine, -0.57, -1.76), earlyDownDay(nine, -0.5, -0.9), earlyDownDay(ten, -1.5, -2.0),
         earlyDownDay(nine, null, null), earlyDownDay(nine, -1.0, null)], [true, false, false, false, true]);
+    // 2026-10-27 1년 시뮬레이션: 하락장이면 하루 종일, 지수 급락 아침이면 10시 전에 새로 사지 않는다
+    final afternoon = DateTime.utc(2026, 10, 27, 5, 0);
+    expect([newBuyBlock(true, afternoon, 0.5, 0.5), newBuyBlock(true, nine, -2.0, -2.0), newBuyBlock(false, nine, -1.5, null),
+        newBuyBlock(false, nine, -0.5, -0.5), newBuyBlock(false, ten, -1.5, -2.0), newBuyBlock(false, afternoon, null, null)],
+        ['bear', 'bear', 'early', null, null, null]);
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},

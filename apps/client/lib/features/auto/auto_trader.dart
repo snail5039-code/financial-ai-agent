@@ -145,6 +145,12 @@ bool earlyDownDay(DateTime now, double? kospiPct, double? kosdaqPct) {
       [kospiPct, kosdaqPct].any((pct) => pct != null && pct <= autoEarlyDownPct);
 }
 
+/// 오늘 새로 사지 않는 이유 (없으면 null): 'bear' 하락장(코스피가 20일 평균 아래)이면 하루 종일, 'early' 10시 전 지수 급락.
+/// 2026-10-27 1년 규칙 시뮬레이션: 하락장에 새로 안 사면 1년 −2.2% → +39.4%, 뒤 4개월 −35.4% → −14.3%
+/// (매수 10%를 무작위로 빼고 20번 돌려도 분포가 겹치지 않았다). 전엔 하락장이면 종목당 몫의 절반만 샀다 (2026-10-15)
+String? newBuyBlock(bool bear, DateTime now, double? kospiPct, double? kosdaqPct) =>
+    bear ? 'bear' : earlyDownDay(now, kospiPct, kosdaqPct) ? 'early' : null;
+
 /// 증권사 지수 목록에서 그 지수의 오늘 등락 %. 없으면 null
 double? indexPct(List<Map<String, dynamic>>? market, String index) =>
     (market?.where((m) => m['index'] == index).firstOrNull?['change_pct'] as num?)?.toDouble();
@@ -252,7 +258,7 @@ bool belowOneShare(int room, int price) => room > 0 && price > 0 && room < price
 const autoDipPct = 3;
 bool dipBuy(double? todayPct) => todayPct != null && todayPct <= -autoDipPct;
 
-/// 하락장: 코스피가 지난 20거래일 종가 평균 아래면 종목당 사는 몫을 절반으로 (2026-10-15 사용자 결정, Faber 추세 필터).
+/// 하락장: 코스피가 지난 20거래일 종가 평균 아래 (2026-10-15 사용자 결정, Faber 추세 필터. 처음엔 몫을 절반으로, 2026-10-27부터 새로 안 삼 = newBuyBlock).
 /// daily는 [YYYYMMDD, 종가] 최신부터. 오늘 것은 빼고 본다 (KIS 모의 일별 지수가 늦게 와도 지난 값만 쓴다)
 bool bearMarket(Map<String, dynamic>? kospi, String todayYmd) {
   final value = (kospi?['value'] as num?)?.toDouble();
@@ -487,10 +493,13 @@ class AutoTrader extends ChangeNotifier {
     } catch (_) {
       bear = false; // 지수를 못 받으면 평소대로
     }
-    if (earlyDownDay(_now(), indexPct(market, 'KOSPI'), indexPct(market, 'KOSDAQ'))) {
-      if (await _box.read('auto_early_note:$_today') == null) {
-        await _box.write('auto_early_note:$_today', '1'); // 하루 한 번만 알린다
-        await _note('지수가 ${autoEarlyDownPct.abs()}% 넘게 빠진 아침이라 10시 전에는 새로 사지 않아요 (10시부터 다시 판단)');
+    final blocked = newBuyBlock(bear, _now(), indexPct(market, 'KOSPI'), indexPct(market, 'KOSDAQ'));
+    if (blocked != null) {
+      if (await _box.read('auto_block_note:$_today:$blocked') == null) {
+        await _box.write('auto_block_note:$_today:$blocked', '1'); // 이유마다 하루 한 번만 알린다
+        await _note(blocked == 'bear'
+            ? '코스피가 20일 평균 아래(하락장)라 새로 사지 않아요 (보유 종목 점검은 계속해요)'
+            : '지수가 ${autoEarlyDownPct.abs()}% 넘게 빠진 아침이라 10시 전에는 새로 사지 않아요 (10시부터 다시 판단)');
       }
       return;
     }
@@ -507,16 +516,12 @@ class AutoTrader extends ChangeNotifier {
       }
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
       var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close,
-          half: pick['portion'] == 'half' || dipBuy(todayPct) || bear,
+          half: pick['portion'] == 'half' || dipBuy(todayPct),
           equity: equity, invested: invested, dailyVolPct: (pick['daily_vol_pct'] as num?)?.toDouble());
       if (left == 0 && equity != null && invested >= equity * autoMaxExposurePct ~/ 100 &&
           await _box.read('auto_exposure_note:$_today') == null) {
         await _box.write('auto_exposure_note:$_today', '1'); // 하루 한 번만 알린다
         await _note('주식 비중이 총자산의 $autoMaxExposurePct%에 닿아 더 사지 않아요 (팔아서 비중이 내려가면 다시 삼)');
-      }
-      if (bear && await _box.read('auto_bear_note:$_today') == null) {
-        await _box.write('auto_bear_note:$_today', '1'); // 하루 한 번만 알린다 (2026-10-19: 매수 판단 때마다 3번씩 찍혔다)
-        await _note('코스피가 20일 평균 아래(하락장)라 종목당 몫의 절반만 사요');
       }
       if (belowOneShare(left, close) && await _box.read('auto_share_note:$_today:$code') == null) {
         await _box.write('auto_share_note:$_today:$code', '1'); // 종목마다 하루 한 번만 알린다
