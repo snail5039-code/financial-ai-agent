@@ -85,3 +85,17 @@ def test_sell_books_profit_after_costs() -> None:
     sim._sell(book, DAYS[1], "A", 6, 900.0)
     assert "A" not in book.pos
     assert book.trades[-1][5] < 0  # 손실 매도
+
+
+def test_fin_bad(monkeypatch):
+    """접수일 전에는 보이지 않고, 적자·영업이익 반토막만 거른다. 재무가 없으면 거르지 않는다"""
+    from datetime import date
+
+    from app import sim
+    sim.op_income_reports.cache_clear()
+    monkeypatch.setattr(sim, "op_income_reports", lambda: {"A": [(date(2026, 3, 1), -5, 10)], "B": [(date(2026, 3, 1), 4, 10)], "C": [(date(2026, 3, 1), 6, 10)]})
+    assert not sim.fin_bad("A", date(2026, 3, 1), "deficit")  # 접수일 당일 아침에는 아직 모른다
+    assert sim.fin_bad("A", date(2026, 3, 2), "deficit") and sim.fin_bad("A", date(2026, 3, 2), "half")
+    assert not sim.fin_bad("B", date(2026, 3, 2), "deficit") and sim.fin_bad("B", date(2026, 3, 2), "half")
+    assert not sim.fin_bad("C", date(2026, 3, 2), "half") and not sim.fin_bad("Z", date(2026, 3, 2), "half")
+    assert not sim.fin_bad("A", date(2026, 3, 2), "")

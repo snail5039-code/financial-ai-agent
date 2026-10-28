@@ -13,6 +13,8 @@ import argparse
 import json
 import random
 import statistics
+from bisect import bisect_left
+from functools import cache
 from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
@@ -94,6 +96,32 @@ def candidates(h: History, t: date, held: set[str], count: int = PICKS) -> list[
     return [code for *_, code in sorted(scored)[:count]]
 
 
+@cache
+def op_income_reports() -> dict[str, list]:
+    """종목 → [(접수일, 영업이익, 전년 같은 기간)] 접수일 오름차순. 연결 기준, 사업보고서는 연간 값, 그 밖은 올해 누적 (analysis.financial_basis와 같은 식)"""
+    out: dict[str, list] = {}
+    with connect(config.DATABASE_URL, row_factory=dict_row) as conn:
+        for r in conn.execute("SELECT stock_code, reprt_code, rcept_no, amount, prev_amount, add_amount, prev_add_amount FROM financials "
+                              "WHERE fs_div = 'CFS' AND account LIKE '영업이익%' ORDER BY rcept_no"):
+            annual = r["reprt_code"] == "11011"
+            now, before = (r["amount"], r["prev_amount"]) if annual else (
+                r["add_amount"] if r["add_amount"] is not None else r["amount"],
+                r["prev_add_amount"] if r["prev_add_amount"] is not None else r["prev_amount"])
+            if now is not None:
+                out.setdefault(r["stock_code"], []).append((date(int(r["rcept_no"][:4]), int(r["rcept_no"][4:6]), int(r["rcept_no"][6:8])), now, before))
+    return out
+
+
+def fin_bad(code: str, d: date, mode: str) -> bool:
+    """d일 아침까지 접수된 가장 최근 정기보고서 기준 재무 악화. 재무가 없으면(미확인) 거르지 않는다"""
+    rows = op_income_reports().get(code, [])
+    i = bisect_left([x[0] for x in rows], d)  # d일 이전 접수만
+    if not mode or i == 0:
+        return False
+    _, now, before = rows[i - 1]
+    return now < 0 or (mode == "half" and before is not None and before > 0 and now < before / 2)
+
+
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
@@ -117,6 +145,7 @@ class Strategy:
     bear_buy: str = "half"  # 코스피 20일 평균 아래면 half: 절반만 / none: 안 삼 / full: 평소대로
     skip: float = 0.0  # 소음 점검용: 이 비율만큼 매수를 무작위로 건너뛴다 (seed로 고정)
     seed: int = 0
+    fin_filter: str = ""  # 재무 악화 종목은 안 삼 — deficit: 영업적자 / half: 영업적자이거나 전년 같은 기간 영업이익이 반 이하
 
 
 @dataclass
@@ -163,7 +192,7 @@ def run(h: History, s: Strategy, days: list[date]) -> Book:
         else:
             ix_prev = ix[-1] if ix else None
             ix_min = minute_bars(INDEX, d) or []
-            picks = [c for c in candidates(h, prev, set(), PICK_BUFFER) if c not in book.pos][:PICKS]
+            picks = [c for c in candidates(h, prev, set(), PICK_BUFFER) if c not in book.pos and not fin_bad(c, d, s.fin_filter)][:PICKS]
             for code in picks:
                 if s.skip and rng.random() < s.skip:
                     continue

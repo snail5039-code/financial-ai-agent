@@ -30,6 +30,7 @@ from app.backtest import load_history
 KST = ZoneInfo("Asia/Seoul")
 OUT = sim.DATA / "ai_sim"
 ASK_AT = "100500"
+RULE = sim.Strategy("규칙만 (10:30 한 번, 하락장엔 안 삼)", entry="once", bear_buy="none")
 IN_PER_M, OUT_PER_M = 1.5, 7.5  # gemini-3.6-flash 표준가 (달러/100만 토큰). 절반가 설은 미확인이라 비싼 쪽으로 센다
 
 SELL_QUESTION = (  # 앱 sellQuestion(reason: check)을 그대로 옮김
@@ -144,6 +145,7 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
         full = load_history(conn)
         profile = {"mode": "custom", **conn.execute("SELECT user_id, risk_level, flags FROM investor_profiles LIMIT 1").fetchone()}
         names = {r["code"]: r["name"] for r in conn.execute("SELECT code, name FROM stocks WHERE is_target")}
+        all_names = {r["code"]: r["name"] for r in conn.execute("SELECT code, name FROM stocks")}  # 규칙 후보는 목표 종목 밖도 있다
     days = [x for x in sim.trading_days(full) if x <= end]
     days = days[max(0, days.index(next(x for x in days if x >= start)) - 1):]
     book, index = sim.Book(cash=10_000_000), sim.daily_bars(sim.INDEX)
@@ -172,7 +174,7 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
         url = asof_url(base, f"{d}")
         for code, p in list(book.pos.items()):  # 강제 손절은 규칙대로
             b = sim.daily_bars(code).get(k)
-            for level, part in ((sim.HARD, "half"), (sim.HARD_ALL, "all")):
+            for level, part in (([(sim.STOP, "all")] if rule_buy else []) + [(sim.HARD, "half"), (sim.HARD_ALL, "all")]):
                 if b and code in book.pos and b["l"] <= p["avg"] * level and not (part == "half" and p["half_done"]):
                     qty = p["qty"] if part == "all" or p["qty"] < 2 else p["qty"] // 2
                     sim._sell(book, d, code, qty, min(b["o"], p["avg"] * level), "강제 손절")
@@ -195,11 +197,20 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
             day, mins, price, pc = view(code)
             if not (day and price and pc):
                 continue
-            q = SELL_QUESTION.format(name=names[code], avg=int(p["avg"]), pct=(price / p["avg"] - 1) * 100)
-            r = ask(url, d, code, "sell", make_state(profile, code, names[code], q, d, mins, day, pc, book, ix_daily, ix_now, False, price))
+            q = SELL_QUESTION.format(name=all_names.get(code, code), avg=int(p["avg"]), pct=(price / p["avg"] - 1) * 100)
+            r = ask(url, d, code, "sell", make_state(profile, code, all_names.get(code, code), q, d, mins, day, pc, book, ix_daily, ix_now, False, price))
             if r["action"] == "sell" and r["verdict"] in ("approve", "conditional"):
                 sim._sell(book, d, code, p["qty"] if r["portion"] != "half" or p["qty"] < 2 else p["qty"] // 2, price, "AI 매도")
-        if not bear:  # 하락장엔 새로 안 삼 (앱 규칙)
+        if rule_buy:  # 규칙만(sim.run)과 같은 나머지 규칙: 종가가 20일 평균 아래면 매도, 매수는 10:30 한 번
+            for code, p in list(book.pos.items()):
+                b, c = sim.daily_bars(code).get(k), sim.closes_until(full, code, d, 20)
+                if b and len(c) == 20 and b["c"] < sum(c) / 20:
+                    sim._sell(book, d, code, p["qty"], b["c"], "20일 평균 이탈")
+            if not bear:
+                ix_min_all = sim.minute_bars(sim.INDEX, d) or []
+                for code in [c for c in sim.candidates(full, prev, set(), sim.PICK_BUFFER) if c not in book.pos][:sim.PICKS]:
+                    sim._try_buy(book, full, RULE, d, code, prev, half=False, ix_prev=ix[-1] if ix else None, ix_min=ix_min_all)
+        elif not bear:  # 하락장엔 새로 안 삼 (앱 규칙)
             for code in [c for c in sim.candidates(full, prev, set(), 30) if c in names and c not in book.pos][:sim.PICKS]:
                 day, mins, price, pc = view(code)
                 if not (day and price and pc):
@@ -209,7 +220,7 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
                 qty = int(room // (price * (1 + sim.BUY_FEE)))
                 if qty < 1:
                     continue
-                r = {"action": "buy", "verdict": "approve", "portion": None} if rule_buy else ask(url, d, code, "buy", make_state(profile, code, names[code], f"{names[code]} {qty}주 사줘", d, mins, day, pc, book,
+                r = ask(url, d, code, "buy", make_state(profile, code, names[code], f"{names[code]} {qty}주 사줘", d, mins, day, pc, book,
                                                         ix_daily, ix_now, True, price) | {"qty": qty})
                 if r["action"] == "buy" and r["verdict"] in ("approve", "conditional"):
                     qty = qty // 2 if r["portion"] == "half" and qty >= 2 else qty
@@ -218,13 +229,14 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
                     book.trades.append((d, code, "buy", qty, price, 0.0))
         held = sum(p["qty"] * (sim.daily_bars(c).get(k) or {"c": p["avg"]})["c"] for c, p in book.pos.items())
         book.days.append((d, book.cash + held, held / (book.cash + held)))
-    rule = sim.run(full, sim.Strategy("규칙만 (10:30 한 번, 하락장엔 안 삼)", entry="once", bear_buy="none"), days)
+    rule = sim.run(full, RULE, days)
     if count:
         print(f"[{key}] 새로 물어야 할 매도 판단 {missing}건")
         return
     print(f"[{key}] {days[1]}~{days[-1]}  비용 ${meter.cost():.2f}  토큰 {meter.tokens()}")
     for label, b in (("AI 판단", book), ("규칙만", rule)):
         print(label, sim.summary(b, days, days[1], days[-1]))
+    return book, days
 
 
 if __name__ == "__main__":
