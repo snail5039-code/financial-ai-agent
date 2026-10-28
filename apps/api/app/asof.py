@@ -30,12 +30,14 @@ CREATE OR REPLACE VIEW simasof.news AS SELECT * FROM (SELECT * FROM public.news 
 
 
 # 시험 구간 (지수만 보고 미리 정함, 2026-10-27): 20거래일씩. 뉴스는 구간 시작 7일 전부터 받는다
-WINDOWS = {"up": ("2026-05-04", "2026-06-02"), "crash": ("2026-07-01", "2026-07-29"), "flat": ("2025-11-27", "2025-12-24")}
+WINDOWS = {"up": ("2026-05-04", "2026-06-02"), "crash": ("2026-07-01", "2026-07-29"), "flat": ("2025-11-27", "2025-12-24"),
+           # 규칙 따르기 프롬프트 시험용 새 구간 (지수만 보고 고름: 보통 오름 +17.7%, 보통 내림 -15.8%)
+           "up2": ("2026-01-19", "2026-02-19"), "down2": ("2026-09-14", "2026-10-16")}
 
 
 def asof_url(base: str, day: str) -> str:
     """분석 코드가 쓸 접속 주소. 시험용 보기가 실제 표보다, simasof.now()가 now()보다 먼저 잡힌다"""
-    options = quote(f"-c search_path=simasof,pg_catalog,public -c simasof.day={day}", safe="")
+    options = quote(f"-c search_path=simasof,pg_catalog,public -c simasof.day={day} -c TimeZone=Asia/Seoul", safe="")
     return f"{base}{'&' if '?' in base else '?'}options={options}"
 
 
