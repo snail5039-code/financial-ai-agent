@@ -231,3 +231,22 @@ def test_daily_vol_pct_from_last_twenty_returns() -> None:
         closes.append(round(closes[-1] * (1.02 if k % 2 == 0 else 0.98)))
     assert abs(briefing.daily_vol_pct(closes) - 2.0) < 0.05
     assert briefing.daily_vol_pct(closes[:20]) is None  # 21일치가 안 되면 모른다
+
+
+def test_operating_deficit_is_not_a_candidate(migrated) -> None:
+    """2026-10-28: 영업적자 종목은 자동매매 후보에서 뺀다 (1년 시뮬레이션 +56.2% → +61.0%). 최신 보고서 기준, 재무가 없으면 거르지 않는다"""
+    def fin(conn, code, year, reprt, account, amount, add, rcept):
+        conn.execute("INSERT INTO financials (stock_code, bsns_year, reprt_code, fs_div, account, amount, add_amount, rcept_no)"
+                     " VALUES (%s, %s, %s, 'CFS', %s, %s, %s, %s)", (code, year, reprt, account, amount, add, rcept))
+    with psycopg.connect(migrated) as conn:
+        for code in ("777701", "777702", "777703", "777704"):
+            conn.execute("INSERT INTO stocks VALUES (%s, %s, 'KOSPI', true) ON CONFLICT DO NOTHING", (code, f"재무{code}"))
+        fin(conn, "777701", 2026, "11012", "영업이익", 50, -100, "20260814000001")      # 반기: 분기 값은 흑자여도 올해 누적이 적자
+        fin(conn, "777702", 2025, "11011", "영업이익", -50, None, "20260310000001")    # 지난해는 적자였지만
+        fin(conn, "777702", 2026, "11012", "영업이익", 10, 30, "20260814000002")       # 최신 보고서는 흑자
+        fin(conn, "777703", 2025, "11011", "영업이익(손실)", -5, None, "20260310000003")  # 계정 이름이 "영업이익(손실)"
+    with psycopg.connect(migrated, row_factory=psycopg.rows.dict_row) as conn:
+        assert [briefing.op_deficit(conn, c) for c in ("777701", "777702", "777703", "777704")] == [True, False, True, False]
+        profile = {"mode": "custom", "risk_level": 5, "flags": []}
+        picks = {c["code"] for c in briefing.pick_candidates(conn, profile, set())}
+        assert picks.isdisjoint({"777701", "777703"})

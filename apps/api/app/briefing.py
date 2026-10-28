@@ -57,6 +57,18 @@ def trend_ranks(conn) -> dict[str, tuple[bool, float]]:
     return ranks
 
 
+def op_deficit(conn, code: str) -> bool:
+    """가장 최근 정기보고서(연결)의 영업이익이 적자인가. 사업보고서는 연간, 그 밖은 올해 누적. 재무가 없으면 False(미확인은 거르지 않는다).
+    2026-10-28: 1년 시뮬레이션에서 영업적자 종목을 후보에서 빼면 +56.2% → +61.0% (sim.fin_bad와 같은 기준)"""
+    row = conn.execute(
+        "SELECT reprt_code, amount, add_amount FROM financials WHERE stock_code = %s AND fs_div = 'CFS' AND account LIKE '영업이익%%'"
+        " ORDER BY rcept_no DESC LIMIT 1", (code,)).fetchone()
+    if not row:
+        return False
+    op = row["amount"] if row["reprt_code"] == "11011" or row["add_amount"] is None else row["add_amount"]
+    return op is not None and op < 0
+
+
 def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (), movers: list[str] = (),
                     skip: set[str] = frozenset()) -> list[dict]:
     """아직 갖고 있지 않고 내 성향 규칙상 매수를 제안할 수 있는 분석 대상. 장중 급등·거래대금 상위(movers, 폰이 증권사 순위에서 받음)를
@@ -73,7 +85,7 @@ def pick_candidates(conn, profile: dict, held: set[str], watching: list[str] = (
     rows = sorted(conn.execute("SELECT code, name FROM stocks WHERE is_target").fetchall(), key=order)
     picks, ranks = [], volatility_ranks(conn)
     for row in rows:
-        if row["code"] in held or row["code"] in skip:
+        if row["code"] in held or row["code"] in skip or op_deficit(conn, row["code"]):
             continue
         # mock: 아침 브리핑 후보는 모의 자동매매가 쓴다. 실전 주문은 주문 때 분석에서 등급으로 다시 막는다
         reason = buy_block_reason(profile["mode"], profile.get("risk_level"), profile.get("flags") or [],
