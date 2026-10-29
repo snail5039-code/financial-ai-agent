@@ -53,3 +53,11 @@ def test_block_reason_explains_volatility_rank() -> None:
     reason = buy_block_reason("custom", 3, [], 2, 0.9)
     assert reason == "60일 변동성이 분석 대상 중 높은 편이라 (낮은 쪽부터 90% 위치) 위험중립형 기준(낮은 쪽 33% 이내)을 넘음"
     assert buy_block_reason("custom", 5, [], 2, 1.0) is None
+
+
+def test_mock_ignores_volatility_cap_but_real_keeps_it() -> None:
+    """모의투자는 변동성 상한을 적용하지 않는다 (2026-10-29). 실전은 그대로 막고, 성향 답변 규칙은 모의에서도 막는다"""
+    assert buy_block_reason("custom", 4, [], 2, 0.95, mock=True) is None
+    assert buy_block_reason("custom", 4, [], 2, 0.95, mock=False) is not None
+    assert "buy" in allowed_actions("custom", 3, [], 2, holds_stock=False, volatility_rank=0.95, mock=True)
+    assert buy_block_reason("custom", 4, ["no_buy_proposals"], 2, 0.5, mock=True) is not None

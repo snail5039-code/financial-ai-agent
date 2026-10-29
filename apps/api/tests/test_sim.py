@@ -73,6 +73,16 @@ def test_hot_five_day_surge_is_not_a_candidate() -> None:
     assert "A" not in sim.candidates(h, DAYS[39], set())
 
 
+def test_vol_cap_drops_high_volatility_and_backfills(monkeypatch) -> None:
+    """변동성 순위가 상한보다 높은 종목은 후보에서 빠지고, 그 자리는 다음 순위가 채운다. 상한이 없으면 그대로"""
+    prices = {"A": list(range(100, 140)), "B": list(range(100, 135)) + [135] * 5, "C": [100 + (i % 3) for i in range(40)]}
+    h = market(prices, {"A": 3, "B": 2, "C": 1}).until(DAYS[39])
+    monkeypatch.setattr(sim, "vol_ranks", lambda *_: {"A": 0.95, "B": 0.5, "C": 0.1})
+    assert sim.candidates(h, DAYS[39], set(), 2)[0] == "A"
+    assert "A" not in sim.candidates(h, DAYS[39], set(), 2, cap=0.8)
+    assert sim.candidates(h, DAYS[39], set(), 2, cap=0.8)[0] == "B"
+
+
 def test_held_stock_is_skipped() -> None:
     h = market({"A": list(range(100, 140)), "B": list(range(100, 130))}, {"A": 2, "B": 1}).until(DAYS[29])
     assert sim.candidates(h, DAYS[29], {"A"}) == ["B"]

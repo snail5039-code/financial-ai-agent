@@ -53,7 +53,7 @@ def stock_risk_grade(conn, stock_code: str) -> int:
 def buy_block_reason(mode: str, risk_level: int | None, flags: list[str], grade: int,
                      volatility_rank: float | None, mock: bool = False) -> str | None:
     """매수를 제안하면 안 되는 이유. 괜찮으면 None.
-    mock: 모의투자. 1등급도 2등급처럼 보고 매수 여부를 AI가 판단한다 (2026-10-19 사용자 결정: 악재 공시 종목도 AI가 스스로
+    mock: 모의투자. 변동성 상한을 적용하지 않고, 1등급도 2등급처럼 보고 매수 여부를 AI가 판단한다 (2026-10-19 사용자 결정: 악재 공시 종목도 AI가 스스로
     잘 판단하는지 확인하려고). 1등급 근거 공시는 그대로 AI·검증 AI에게 간다 (analysis.grade_text). 실전은 그대로 막는다"""
     if mode != "custom":
         return "일반 모드(성향 퀴즈 안 함)라 판단하지 않음"
@@ -64,7 +64,8 @@ def buy_block_reason(mode: str, risk_level: int | None, flags: list[str], grade:
     if risk_level < MIN_LEVEL_FOR_GRADE.get(grade, 1):
         return f"{grade}등급 종목은 {LABELS[MIN_LEVEL_FOR_GRADE[grade]]} 이상만 매수 제안"
     limit = MAX_VOLATILITY_RANK_FOR_BUY.get(risk_level)
-    if limit is not None and volatility_rank is not None and volatility_rank > limit:
+    # 모의투자는 변동성 상한을 적용하지 않는다 (2026-10-29 사용자 결정: 1년 시뮬에서 상한 80%는 +61.0% → +6.9%로 수익을 깎고 낙폭은 같았다. 실전은 그대로 막는다)
+    if not mock and limit is not None and volatility_rank is not None and volatility_rank > limit:
         return (f"60일 변동성이 분석 대상 중 높은 편이라 (낮은 쪽부터 {volatility_rank:.0%} 위치) "
                 f"{LABELS[risk_level]} 기준(낮은 쪽 {limit:.0%} 이내)을 넘음")
     return None

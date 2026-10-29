@@ -24,6 +24,7 @@ from psycopg.rows import dict_row
 from app import config
 from app.backtest import History, load_history, universe_on
 from app.db import connect
+from app.functions.metrics import volatility
 
 ROOT = Path(__file__).resolve().parents[3]
 DATA = ROOT / "tools" / "data"
@@ -85,12 +86,29 @@ def closes_until(h: History, code: str, t: date, n: int = 26) -> list[int]:
     return out[-n:]
 
 
-def candidates(h: History, t: date, held: set[str], count: int = PICKS) -> list[str]:
-    """t일 장 마감까지의 종가로 다음 날 아침 후보 (상승 추세 먼저, 20일 등락률 강한 순). 5일 +10% 급등은 뺀다"""
-    scored = []
+_RANKS: dict = {}
+
+
+def vol_ranks(h: History, t: date) -> dict[str, float]:
+    """t일까지 60일 변동성의 같은 시장 안 순위 0~1 (analysis.volatility_ranks와 같은 식. 대상은 그날 시총 상위 코스피 100·코스닥 50)"""
+    if t not in _RANKS:
+        by_market: dict[str, dict[str, float]] = {}
+        for code in universe_on(h, t):
+            if (v := volatility(closes_until(h, code, t, 61), 60, [])["value"]) is not None:
+                by_market.setdefault(h.market[code], {})[code] = v
+        _RANKS[t] = {c: sum(1 for x in vs.values() if x <= v) / len(vs) for vs in by_market.values() for c, v in vs.items()}
+    return _RANKS[t]
+
+
+def candidates(h: History, t: date, held: set[str], count: int = PICKS, cap: float | None = None) -> list[str]:
+    """t일 장 마감까지의 종가로 다음 날 아침 후보 (상승 추세 먼저, 20일 등락률 강한 순). 5일 +10% 급등은 뺀다.
+    cap: 60일 변동성 순위가 이보다 높으면 뺀다 (앱은 0.8, suitability.MAX_VOLATILITY_RANK_FOR_BUY). 빼고 나서 count개를 채운다"""
+    scored, ranks = [], vol_ranks(h, t) if cap else {}
     for code in universe_on(h, t):
         c = closes_until(h, code, t)
         if code in held or not (tr := trend(c)) or len(c) < 6 or c[-1] / c[-6] - 1 > HOT_5D:
+            continue
+        if cap and ranks.get(code, 0) > cap:
             continue
         scored.append((not tr[0], -tr[1], code))
     return [code for *_, code in sorted(scored)[:count]]
@@ -145,6 +163,7 @@ class Strategy:
     bear_buy: str = "half"  # 코스피 20일 평균 아래면 half: 절반만 / none: 안 삼 / full: 평소대로
     skip: float = 0.0  # 소음 점검용: 이 비율만큼 매수를 무작위로 건너뛴다 (seed로 고정)
     seed: int = 0
+    vol_cap: float | None = None  # 60일 변동성 순위 상한 (앱 0.8). None이면 상한 없음 (지금까지 시뮬)
     fin_filter: str = ""  # 재무 악화 종목은 안 삼 — deficit: 영업적자 / half: 영업적자이거나 전년 같은 기간 영업이익이 반 이하
 
 
@@ -192,7 +211,7 @@ def run(h: History, s: Strategy, days: list[date]) -> Book:
         else:
             ix_prev = ix[-1] if ix else None
             ix_min = minute_bars(INDEX, d) or []
-            picks = [c for c in candidates(h, prev, set(), PICK_BUFFER) if c not in book.pos and not fin_bad(c, d, s.fin_filter)][:PICKS]
+            picks = [c for c in candidates(h, prev, set(), PICK_BUFFER, s.vol_cap) if c not in book.pos and not fin_bad(c, d, s.fin_filter)][:PICKS]
             for code in picks:
                 if s.skip and rng.random() < s.skip:
                     continue
