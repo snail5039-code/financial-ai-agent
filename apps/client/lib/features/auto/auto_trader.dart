@@ -207,6 +207,24 @@ List<String> staleCodes(Map<String, dynamic> positions, List<Map<String, dynamic
         if (!holdings.any((h) => h['stock_code'] == code && (h['qty'] as int? ?? 0) > 0)) code
     ];
 
+/// 낸 지 이만큼(분) 지나도 체결 안 된 자동 매도는 취소하고 그 종목을 다시 맡는다.
+/// 2026-10-30 기아: 14:00에 104,400→99,800원으로 급락하는 중 100,500원 지정가 매도가 시세보다 높아 체결되지 않았는데,
+/// "접수"를 판 것으로 보고 점검에서 빼서 −13.8%까지 강제 손절(−10%·−15%)이 작동하지 못했다
+const autoSellStuckMin = 5;
+
+/// 취소할 매도 주문: 체결이 덜 됐고 autoSellStuckMin분이 지났고 아직 취소하지 않은 것 (time은 증권사 "HHmmss", 한국 시각)
+List<BrokerOrder> stuckSells(List<BrokerOrder> orders, DateTime now, Set<String> cancelled) {
+  final k = toKst(now);
+  final nowSec = k.hour * 3600 + k.minute * 60 + k.second;
+  return [
+    for (final o in orders)
+      if (o.side == 'sell' && o.filledQty < o.qty && !cancelled.contains(o.orderNo) && o.time.length == 6 &&
+          nowSec - (int.parse(o.time.substring(0, 2)) * 3600 + int.parse(o.time.substring(2, 4)) * 60 + int.parse(o.time.substring(4))) >=
+              autoSellStuckMin * 60)
+        o
+  ];
+}
+
 /// 2단계(주문 만들기) AI에게 알리는 1단계(매도 점검)의 이유. 손절선·강제 손절선일 때만 보낸다.
 /// 2026-10-23: 강제 손절도 같은 주문 길(투자 AI → 검증 AI)을 타서 이유가 없으면 "단기 신호만"으로 반려될 수 있었다.
 /// 2026-10-22 SK이노베이션 −7.3%: 이유를 몰라 손절 매도가 반려됐다. 반대로 마감 전·정기 점검 이유와 매입가 대비 %를 보냈더니
@@ -594,6 +612,7 @@ class AutoTrader extends ChangeNotifier {
       await _addPosition(code, p['name'] as String, -(p['qty'] as int));
       await _note('${p['name']}: 계좌에 없어서 자동매매 보유 기록에서 뺐어요');
     }
+    await _cancelStuckSells(broker, holdings);
     if (positions.isEmpty) return;
     // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
     List<Map<String, dynamic>>? market;
@@ -739,6 +758,42 @@ class AutoTrader extends ChangeNotifier {
         await _note('${u['stock_name']} $qty주: 지난 매도 주문이 체결되지 않아 다시 자동매매가 맡아요');
       }
     } catch (_) {} // 못 받아도 매매는 계속
+  }
+
+  /// 오늘 판다고 낸 종목 중 체결이 안 되는 주문은 취소하고 다시 맡는다. 다시 맡으면 손절·강제 손절이 지금 시세로 새 주문을 낸다.
+  /// 취소는 주문이 아니라 위험을 줄이는 일이라 검증 AI를 거치지 않는다. 취소 실패는 다음 점검 때 다시 한다
+  /// ponytail: 부분 체결 뒤 남은 수량만 되돌린다. 같은 날 이미 체결된 매도가 있으면 강제 손절 절반 단계는 다시 열지 않는다
+  Future<void> _cancelStuckSells(Broker broker, List<Map<String, dynamic>> holdings) async {
+    final cancelled = (jsonDecode(await _box.read('auto_cancelled:$_today') ?? '[]') as List).cast<String>().toSet();
+    for (final code in await _soldToday()) {
+      final held = holdings.where((h) => h['stock_code'] == code && (h['qty'] as int? ?? 0) > 0).firstOrNull;
+      if (held == null) continue; // 다 팔렸다
+      final name = held['stock_name'] as String;
+      try {
+        final orders = await broker.todayOrders(code);
+        final stuck = stuckSells(orders, _now(), cancelled);
+        if (stuck.isEmpty) continue;
+        for (final o in stuck) {
+          await broker.revise(o.orderNo, code, null);
+          cancelled.add(o.orderNo);
+        }
+        await _box.write('auto_cancelled:$_today', jsonEncode(cancelled.toList()));
+        final sold = (await _soldToday())..remove(code);
+        await _box.write('auto_sold:$_today', jsonEncode(sold.toList()));
+        await _addPosition(code, name, (held['qty'] as int) - ((positions[code] as Map?)?['qty'] as int? ?? 0));
+        final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
+        final seen = ((reviews[code] as Map?) ?? {}).cast<String, dynamic>();
+        final filledBefore = orders.any((o) => o.side == 'sell' && o.filledQty > 0);
+        reviews[code] = {
+          for (final e in seen.entries)
+            if (!{'stopped', 'stop_pct', 'hard_all', 'hard_all_tries', 'hard_half_tries'}.contains(e.key) && !(e.key == 'hard_half' && !filledBefore)) e.key: e.value
+        };
+        await _box.write('auto_reviews:$_today', jsonEncode(reviews));
+        await _note('$name: 매도 주문이 $autoSellStuckMin분 넘게 체결되지 않아 취소했어요. 다시 자동매매가 맡아 지금 시세로 다시 판단해요');
+      } catch (error) {
+        await _note('$name: 체결 안 된 매도 주문을 취소하지 못했어요 ($error). 다음 점검 때 다시 해요');
+      }
+    }
   }
 
   Future<Set<String>> _soldToday() async => (jsonDecode(await _box.read('auto_sold:$_today') ?? '[]') as List).cast<String>().toSet();

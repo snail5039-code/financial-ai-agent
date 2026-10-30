@@ -802,6 +802,18 @@ void main() {
     expect([for (final h in adoptable(held, taken, markets, real: false)) h['stock_name']], ['기아']);
     expect(adoptable(held, taken, markets, real: true), isEmpty); // 실전은 맡지 않는다
     expect(adoptable(held, taken, null, real: false), isEmpty); // 분석 대상 목록을 못 받으면 맡지 않는다
+    // 체결 안 되는 매도 주문은 5분 뒤 취소 대상 (10/30 기아: 급락 중 시세보다 높은 지정가)
+    BrokerOrder order(String no, String side, int qty, int filled, String time) =>
+        (orderNo: no, stockCode: '000270', stockName: '기아', side: side, qty: qty, price: 100500, filledQty: filled, filledPrice: null, time: time);
+    final at1410 = DateTime.utc(2026, 10, 30, 5, 10); // 한국 14:10
+    expect([for (final o in stuckSells([
+          order('1', 'sell', 2, 0, '140100'), // 9분 지났고 체결 0 → 대상
+          order('2', 'sell', 2, 0, '140800'), // 2분 → 아직
+          order('3', 'sell', 2, 2, '140100'), // 전부 체결 → 아님
+          order('4', 'buy', 2, 0, '140100'), // 매수 → 아님
+          order('5', 'sell', 4, 1, '140000'), // 부분 체결 → 대상
+          order('6', 'sell', 2, 0, '140100'), // 이미 취소함 → 아님
+        ], at1410, {'6'})) o.orderNo], ['1', '5']);
     // 계좌에 없는데 기록에만 남은 종목은 뺀다 (10/23 피에스케이홀딩스 7주)
     expect(staleCodes({'011200': {'name': 'HMM', 'qty': 25}, '031980': {'name': '피에스케이홀딩스', 'qty': 7}}, held), ['031980']);
     expect(staleCodes({'068270': {'name': '셀트리온', 'qty': 2}}, held), ['068270']); // 수량 0이면 없는 것으로 본다

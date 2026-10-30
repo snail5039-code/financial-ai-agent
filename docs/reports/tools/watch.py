@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,7 +16,9 @@ from psycopg.rows import dict_row  # noqa: E402
 
 MIN = int(sys.argv[1]) if len(sys.argv) > 1 else 60
 SCRATCH = Path(__file__).parent
-LOGS = {}  # 10/20: 자동 시작 서버가 06:2x에 꺼져서 다시 scratchpad/api.log로 직접 띄움
+# 서버·앱 로그 위치. 기본은 임시 폴더의 api.log·flutter.log (10/30부터 이렇게 띄움). 다르면 환경변수 WATCH_API_LOG·WATCH_APP_LOG
+LOGS = {"api.log": Path(os.environ.get("WATCH_API_LOG", Path(tempfile.gettempdir()) / "api.log")),
+        "flutter.log": Path(os.environ.get("WATCH_APP_LOG", Path(tempfile.gettempdir()) / "flutter.log"))}
 TODAY = "(x.created_at AT TIME ZONE 'Asia/Seoul')::date = (now() AT TIME ZONE 'Asia/Seoul')::date"
 
 
