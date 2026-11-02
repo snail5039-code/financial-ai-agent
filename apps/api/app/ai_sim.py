@@ -4,6 +4,8 @@
     uv run python -m app.ai_sim dry  up        # AI를 가짜로 바꿔 배관만 확인 (무료)
     uv run python -m app.ai_sim rbcount up     # 매수는 규칙대로·매도만 AI: 새로 물어야 할 판단 수만 센다 (무료). rb up 6 이면 진짜 호출
     uv run python -m app.ai_sim run  up 12     # 진짜 호출. 구간(up/crash/flat), 비용 상한(달러)
+    uv run python -m app.ai_sim vetocount up   # 거부권 시험: 매수·매도는 규칙대로, 규칙이 고른 매수만 AI에게 묻고 "사지 마"면 뺀다. 판단 수만 센다 (무료)
+    uv run python -m app.ai_sim veto up 3      # 진짜 호출 (구간, 비용 상한). 규칙만(영업적자 거름 포함)과 비교하고 뺀 매수의 5일 뒤 성과를 본다
 판단마다 토큰·비용을 tools/data/ai_sim/<구간>.jsonl에 남긴다. 이어서 돌리면 이미 묻은 (날, 종목, 종류)는 다시 안 묻는다.
 앞선 규칙: 새 매수는 하락장(KODEX 200이 20일 평균 아래)이면 안 한다, 강제 손절(-10%·-15%)은 규칙대로, 그 밖의 매도는 AI가 정한다.
 서버 실행 때와 같게 NEWS_FETCH=off LIVE_DISCLOSURES=off 로 돌린다 (외부에서 지금 뉴스·공시를 받지 않게).
@@ -12,6 +14,7 @@
 import json
 import os
 import sys
+from dataclasses import replace
 from datetime import date, datetime
 from functools import cache
 from types import SimpleNamespace
@@ -128,14 +131,16 @@ def make_state(profile: dict, code: str, name: str, query: str, d: date, mins: l
     return state
 
 
-def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count: bool = False) -> None:
+def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count: bool = False, veto: bool = False) -> None:
     """rule_buy: 매수는 규칙대로(AI에게 안 묻고), 매도만 AI. count: 새로 물어야 할 판단 수만 센다(호출 안 함)"""
     base = os.environ["DATABASE_URL"]
     start, end = (date.fromisoformat(x) for x in WINDOWS[key])
     meter = install_fake() if dry or count else install_meter()
     missing = 0
     OUT.mkdir(parents=True, exist_ok=True)
-    log_path = OUT / f"{key}.jsonl"
+    log_path = OUT / f"{key}{'_veto' if veto else ''}.jsonl"
+    rs = replace(RULE, fin_filter="deficit") if veto else RULE  # 거부권 시험은 앱처럼 영업적자 종목을 먼저 거른 규칙과 비교한다
+    vetoed = []
     done = {}
     if log_path.exists() and not dry:
         for line in log_path.read_text(encoding="utf-8").splitlines():
@@ -156,7 +161,7 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
         if count:
             nonlocal missing
             missing += 1
-            return {"action": "hold", "verdict": "approve", "portion": None}
+            return {"action": "buy" if kind == "veto" else "hold", "verdict": "approve", "portion": None}
         if not dry and meter.cost() >= budget:
             raise SystemExit(f"비용 상한 ${budget} 도달. 여기서 멈춤 ({d}, 지금까지 ${meter.cost():.2f})")
         before = meter.tokens()
@@ -193,7 +198,7 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
             pc = (sim.daily_bars(code).get(f"{prev:%Y%m%d}") or {}).get("c")
             return day, mins, (seen[-1]["c"] if seen else (day or {}).get("o")), pc
 
-        for code, p in list(book.pos.items()):  # 보유 종목: AI가 팔지 정한다
+        for code, p in ([] if veto else list(book.pos.items())):  # 보유 종목: AI가 팔지 정한다 (거부권 시험은 매도도 규칙)
             day, mins, price, pc = view(code)
             if not (day and price and pc):
                 continue
@@ -208,8 +213,23 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
                     sim._sell(book, d, code, p["qty"], b["c"], "20일 평균 이탈")
             if not bear:
                 ix_min_all = sim.minute_bars(sim.INDEX, d) or []
-                for code in [c for c in sim.candidates(full, prev, set(), sim.PICK_BUFFER) if c not in book.pos][:sim.PICKS]:
-                    sim._try_buy(book, full, RULE, d, code, prev, half=False, ix_prev=ix[-1] if ix else None, ix_min=ix_min_all)
+                for code in [c for c in sim.candidates(full, prev, set(), sim.PICK_BUFFER) if c not in book.pos and not sim.fin_bad(c, d, rs.fin_filter)][:sim.PICKS]:
+                    cash0, n0 = book.cash, len(book.trades)
+                    sim._try_buy(book, full, rs, d, code, prev, half=False, ix_prev=ix[-1] if ix else None, ix_min=ix_min_all)
+                    if not veto or len(book.trades) == n0:
+                        continue
+                    trade, entry = book.trades.pop(), book.pos.pop(code)  # 규칙이 산 것을 일단 물렀다가 AI가 사라고 하면 다시 산다
+                    book.cash = cash0
+                    day, mins, price, pc = view(code)
+                    nm = all_names.get(code, code)
+                    r = ask(url, d, code, "veto", make_state(profile, code, nm, f"{nm} {trade[3]}주 사줘", d, mins, day or {"o": trade[4]}, pc or int(trade[4]), book,
+                                                             ix_daily, ix_now, True, int(price or trade[4])) | {"qty": trade[3]})
+                    if r["action"] == "buy" and r["verdict"] in ("approve", "conditional"):
+                        book.cash -= trade[3] * trade[4] * (1 + sim.BUY_FEE)
+                        book.pos[code] = entry
+                        book.trades.append(trade)
+                    else:
+                        vetoed.append((d, code, trade[4], r.get("text", "")))
         elif not bear:  # 하락장엔 새로 안 삼 (앱 규칙)
             for code in [c for c in sim.candidates(full, prev, set(), 30) if c in names and c not in book.pos][:sim.PICKS]:
                 day, mins, price, pc = view(code)
@@ -229,18 +249,24 @@ def run_window(key: str, budget: float, dry: bool, rule_buy: bool = False, count
                     book.trades.append((d, code, "buy", qty, price, 0.0))
         held = sum(p["qty"] * (sim.daily_bars(c).get(k) or {"c": p["avg"]})["c"] for c, p in book.pos.items())
         book.days.append((d, book.cash + held, held / (book.cash + held)))
-    rule = sim.run(full, RULE, days)
+    rule = sim.run(full, rs, days)
     if count:
         print(f"[{key}] 새로 물어야 할 매도 판단 {missing}건")
         return
     print(f"[{key}] {days[1]}~{days[-1]}  비용 ${meter.cost():.2f}  토큰 {meter.tokens()}")
     for label, b in (("AI 판단", book), ("규칙만", rule)):
         print(label, sim.summary(b, days, days[1], days[-1]))
+    index_close = {x: index[x]["c"] for x in index}
+    for d, code, price, text in vetoed:  # 뺀 매수를 샀다면 5거래일 뒤 성과 (지수 대비)
+        after = [x for x in days if x > d][4:5]
+        c5, i0, i5 = (sim.daily_bars(code).get(f"{after[0]:%Y%m%d}") or {}).get("c") if after else None, index_close.get(f"{d:%Y%m%d}"), index_close.get(f"{after[0]:%Y%m%d}") if after else None
+        print(f"뺀 매수 {d} {code} 5일 뒤 " + (f"{c5 / price - 1:+.1%} 지수 {i5 / i0 - 1:+.1%}" if c5 and i0 and i5 else "미확인") + f" | {text[:90]}")
     return book, days
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3 or sys.argv[1] not in ("dry", "run", "rbcount", "rb") or sys.argv[2] not in WINDOWS:
+    if len(sys.argv) < 3 or sys.argv[1] not in ("dry", "run", "rbcount", "rb", "vetocount", "veto") or sys.argv[2] not in WINDOWS:
         sys.exit(__doc__)
     run_window(sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else 0.0, sys.argv[1] == "dry",
-               rule_buy=sys.argv[1] in ("rb", "rbcount"), count=sys.argv[1] == "rbcount")
+               rule_buy=sys.argv[1] in ("rb", "rbcount", "veto", "vetocount"), count=sys.argv[1] in ("rbcount", "vetocount"),
+               veto=sys.argv[1] in ("veto", "vetocount"))
