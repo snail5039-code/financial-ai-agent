@@ -12,6 +12,7 @@ import httpx
 # 2026년부터 V2 주소 (예전 /service/GetStockSecuritiesInfoService 주소는 새 키를 "등록되지 않은 서비스키"로 거부)
 URL = "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2"
 TIMEOUT_SECONDS = 30
+RETRIES = 3
 
 
 class MarketDataError(Exception):
@@ -49,7 +50,13 @@ def daily_prices(api_key: str, begin: date, end: date, stock_code: str | None = 
 
 
 def _page(api_key: str, params: dict) -> dict:
-    response = httpx.get(URL, params={"serviceKey": api_key, "resultType": "json", **params}, timeout=TIMEOUT_SECONDS)
+    for attempt in range(RETRIES):  # 11/3 서버 시작 때 응답이 늦어 수집이 통째로 실패해서, 시간 초과는 몇 번 더 해 본다
+        try:
+            response = httpx.get(URL, params={"serviceKey": api_key, "resultType": "json", **params}, timeout=TIMEOUT_SECONDS)
+            break
+        except httpx.TimeoutException:
+            if attempt == RETRIES - 1:
+                raise
     try:
         body = response.json()["response"]
     except (ValueError, KeyError) as error:  # 키 오류는 JSON 대신 다른 형식으로 온다
