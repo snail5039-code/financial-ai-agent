@@ -49,6 +49,8 @@ void main() {
     expect(finalResult({'order_status': 'filled', 'approval_status': 'approved'}), '체결');
     expect(finalResult({'approval_status': 'rejected'}), '거절');
     expect(finalResult({'policy_ok': false}), '정책 차단');
+    expect(finalResult({'blocked_reason': 'bear'}), '규칙에 막힘 · 하락장');
+    expect(finalResult({'blocked_reason': 'bear', 'order_status': 'filled'}), '체결'); // 주문이 나갔으면 막힘이 아니다
     expect(finalResult({'policy_ok': null}), '분석');
     // 매수·매도 필터와 색
     bool only(String label, Map<String, dynamic> item) => filters.firstWhere((f) => f.$1 == label).$2(item);
@@ -59,7 +61,8 @@ void main() {
     expect(filters.first.$1, '매수·매도'); // 처음 보이는 필터 (보유 판단에 묻히지 않게)
     expect(historyQuery('매수·매도', day: '2026-10-19'), '?action=trade&day=2026-10-19'); // 달력에서 고른 날
     expect(historyQuery('전체', day: '2026-10-19'), '?day=2026-10-19');
-    expect(daySummary([{'action': 'buy'}, {'action': 'sell'}, {'action': 'buy'}, {'action': 'hold'}, {'action': 'watch'}]), '매수 2 · 매도 1 · 판단 2');
+    expect(daySummary([{'action': 'buy'}, {'action': 'sell'}, {'action': 'buy'}, {'action': 'hold'}, {'action': 'watch'}]), '매수 제안 2 · 매도 제안 1 · 판단 2');
+    expect(daySummary([{'action': 'buy', 'order_status': 'filled'}, {'action': 'buy'}]), '매수 제안 2 · 체결 1');
     expect(daySummary([]), '');
   });
 

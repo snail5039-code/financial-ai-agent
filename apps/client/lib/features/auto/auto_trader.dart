@@ -519,6 +519,7 @@ class AutoTrader extends ChangeNotifier {
             ? '코스피가 20일 평균 아래(하락장)라 새로 사지 않아요 (보유 종목 점검은 계속해요)'
             : '지수가 ${autoEarlyDownPct.abs()}% 넘게 빠진 아침이라 10시 전에는 새로 사지 않아요 (10시부터 다시 판단)');
       }
+      await _reportBlocked(picks.where((p) => !skip(p)), blocked);
       return;
     }
     for (final pick in picks.where((p) => !skip(p))) {
@@ -536,15 +537,17 @@ class AutoTrader extends ChangeNotifier {
       var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close,
           half: pick['portion'] == 'half' || dipBuy(todayPct),
           equity: equity, invested: invested, dailyVolPct: (pick['daily_vol_pct'] as num?)?.toDouble());
-      if (left == 0 && equity != null && invested >= equity * autoMaxExposurePct ~/ 100 &&
-          await _box.read('auto_exposure_note:$_today') == null) {
+      final exposureFull = left == 0 && equity != null && invested >= equity * autoMaxExposurePct ~/ 100;
+      if (exposureFull && await _box.read('auto_exposure_note:$_today') == null) {
         await _box.write('auto_exposure_note:$_today', '1'); // 하루 한 번만 알린다
         await _note('주식 비중이 총자산의 $autoMaxExposurePct%에 닿아 더 사지 않아요 (팔아서 비중이 내려가면 다시 삼)');
       }
+      if (exposureFull) await _reportBlocked([pick], 'exposure');
       if (belowOneShare(left, close) && await _box.read('auto_share_note:$_today:$code') == null) {
         await _box.write('auto_share_note:$_today:$code', '1'); // 종목마다 하루 한 번만 알린다
         await _note('$name: 살 수 있는 몫(${won(left)})이 1주 값(${won(close)})보다 적어 사지 않아요');
       }
+      if (belowOneShare(left, close) && !exposureFull) await _reportBlocked([pick], 'small');
       while (on && plan != null) {
         final qty = close > 0 ? (left < maxOrder ? left : maxOrder) ~/ close : 0;
         if (qty < 1) break;
@@ -569,6 +572,20 @@ class AutoTrader extends ChangeNotifier {
         done[code] = _now().toIso8601String();
         await _box.write('auto_settled2:$_today', jsonEncode(done));
       }
+    }
+  }
+
+  /// 규칙에 막혀 못 산 제안을 서버에 알린다 (기록 화면의 "규칙에 막힘"). 하루에 제안마다 한 번만 보낸다
+  /// 이유 reason: bear 하락장, early 10시 전 급락, exposure 비중 한도, small 살 몫이 1주보다 적음
+  Future<void> _reportBlocked(Iterable<Map<String, dynamic>> picks, String reason) async {
+    final sent = ((jsonDecode(await _box.read('auto_blocked_sent:$_today') ?? '[]') as List)).cast<String>();
+    final ids = [for (final p in picks) if (p['proposal_id'] is String && !sent.contains(p['proposal_id'])) p['proposal_id'] as String];
+    if (ids.isEmpty) return;
+    try {
+      await api.post('/api/auto/blocked', {'proposal_ids': ids, 'reason': reason});
+      await _box.write('auto_blocked_sent:$_today', jsonEncode([...sent, ...ids]));
+    } catch (_) {
+      // 알리지 못해도 매매에는 영향 없다. 다음 점검 때 다시 보낸다
     }
   }
 

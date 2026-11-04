@@ -5,6 +5,7 @@
 
 from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -50,6 +51,22 @@ def post_deferral(body: Deferral, conn: Conn, user_id: UserId) -> None:
         raise HTTPException(404, "분석 대상 종목이 아니에요")
     conn.execute("INSERT INTO sell_deferrals (user_id, stock_code, reason, price, market_pct, stock_pct) VALUES (%s, %s, %s, %s, %s, %s)",
                  (user_id, body.stock_code, body.reason, body.price, body.market_pct, body.stock_pct))
+    conn.commit()
+
+
+class Blocked(BaseModel):
+    """폰의 매매 규칙이 새 매수를 막은 제안 (auto_trader.dart). bear 하락장, early 10시 전 급락, exposure 비중 한도, small 살 몫이 1주보다 적음"""
+    proposal_ids: list[UUID] = Field(min_length=1, max_length=50)
+    reason: Literal["bear", "early", "exposure", "small"]
+
+
+@router.post("/auto/blocked", status_code=204)
+def post_blocked(body: Blocked, conn: Conn, user_id: UserId) -> None:
+    # 본인 제안서만, 이미 주문이 나간 것은 건드리지 않고, 먼저 적힌 이유를 지키며 처음 한 번만 적는다
+    conn.execute(
+        "UPDATE proposals p SET blocked_reason = %s WHERE p.id = ANY(%s) AND p.user_id = %s AND p.blocked_reason IS NULL"
+        " AND NOT EXISTS (SELECT 1 FROM approvals a WHERE a.proposal_id = p.id)",
+        (body.reason, body.proposal_ids, user_id))
     conn.commit()
 
 

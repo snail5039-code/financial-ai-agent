@@ -9,10 +9,13 @@ import '../approvals/approval_detail_page.dart';
 
 const approvalLabels = {'pending': '승인 대기', 'approved': '승인 · 실행 전', 'rejected': '거절', 'expired': '만료'};
 
-/// 한 건의 최종 결과: 주문 결과 > 승인 상태 > 정책 차단 > 분석만
+const blockedLabels = {'bear': '하락장', 'early': '아침 급락', 'exposure': '비중 한도', 'small': '살 몫 부족'};
+
+/// 한 건의 최종 결과: 주문 결과 > 승인 상태 > 규칙에 막힘 > 정책 차단 > 분석만
 String finalResult(Map<String, dynamic> item) {
   if (item['order_status'] != null) return orderLabels[item['order_status']] ?? '${item['order_status']}';
   if (item['approval_status'] != null) return approvalLabels[item['approval_status']] ?? '${item['approval_status']}';
+  if (item['blocked_reason'] != null) return '규칙에 막힘 · ${blockedLabels[item['blocked_reason']] ?? item['blocked_reason']}';
   if (item['policy_ok'] == false) return '정책 차단';
   return '분석';
 }
@@ -56,12 +59,13 @@ String historyQuery(String filter, {String? day}) {
   return params.isEmpty ? '' : '?${params.join('&')}';
 }
 
-/// 날짜 머리글 요약 "매수 2 · 매도 1 · 판단 72"
+/// 날짜 머리글 요약 "매수 제안 2 · 매도 제안 1 · 체결 1 · 판단 72" (제안 수와 실제 체결 수를 나눠 보인다)
 String daySummary(List<Map<String, dynamic>> items) {
   int count(bool Function(Map<String, dynamic>) test) => items.where(test).length;
   final buys = count((i) => i['action'] == 'buy'), sells = count((i) => i['action'] == 'sell');
   final checks = count((i) => i['action'] == 'hold' || i['action'] == 'watch');
-  return [if (buys > 0) '매수 $buys', if (sells > 0) '매도 $sells', if (checks > 0) '판단 $checks'].join(' · ');
+  final filled = count(_filled);
+  return [if (buys > 0) '매수 제안 $buys', if (sells > 0) '매도 제안 $sells', if (filled > 0) '체결 $filled', if (checks > 0) '판단 $checks'].join(' · ');
 }
 
 /// 매수는 빨강, 매도는 파랑 (국내 증권사 관례). 보유·관찰은 회색

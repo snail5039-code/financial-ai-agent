@@ -23,7 +23,7 @@ def list_history(conn: Conn, user_id: UserId, action: Literal["buy", "sell", "ho
     return conn.execute(
         """
         SELECT p.id AS proposal_id, p.created_at, p.stock_code, s.name AS stock_name, p.action, p.qty, p.limit_price,
-               p.user_directed,
+               p.user_directed, p.blocked_reason,
                (SELECT verdict FROM verifications v WHERE v.proposal_id = p.id ORDER BY round DESC LIMIT 1) AS verdict,
                (SELECT ok FROM policy_checks pc WHERE pc.proposal_id = p.id) AS policy_ok,
                CASE WHEN a.status = 'pending' AND a.expires_at <= now() THEN 'expired' ELSE a.status END AS approval_status,

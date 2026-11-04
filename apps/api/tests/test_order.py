@@ -1013,3 +1013,26 @@ def test_auto_sell_tells_ai_the_review_reason(client, custom_user, ai) -> None:
     assert "[매도 점검 이유]" not in ai["invest"][-1] and "점검의 매도 이유" not in ai["verify"][-1]
     too_long = {**body, "auto_reason": "가" * 301}
     assert client.post("/api/chat", headers=custom_user["headers"], json=too_long).status_code == 422
+
+
+def test_blocked_buy_reason_is_saved_once_and_shown_in_history(client, custom_user, ai, migrated) -> None:
+    """폰이 규칙에 막힌 제안을 올리면 기록에 이유가 나온다. 이미 주문이 나간 제안·다른 사람 제안은 건드리지 않고, 먼저 적힌 이유를 지킨다 (2026-11-04)"""
+    headers = custom_user["headers"]
+    with psycopg.connect(migrated) as conn:
+        thread = conn.execute("INSERT INTO threads (user_id) VALUES (%s) RETURNING id", (custom_user["id"],)).fetchone()[0]
+        [first, second] = [str(conn.execute(
+            "INSERT INTO proposals (user_id, thread_id, stock_code, action) VALUES (%s, %s, %s, 'buy') RETURNING id",
+            (custom_user["id"], thread, CODE)).fetchone()[0]) for _ in range(2)]
+    body = {"proposal_ids": [first, second], "reason": "bear"}
+    assert client.post("/api/auto/blocked", headers=headers, json=body).status_code == 204
+    assert client.post("/api/auto/blocked", headers=headers, json={**body, "reason": "early"}).status_code == 204  # 이유는 처음 것이 남는다
+    assert client.post("/api/auto/blocked", headers=headers, json={**body, "reason": "rise"}).status_code == 422
+    assert client.post("/api/auto/blocked", headers=headers, json={**body, "proposal_ids": []}).status_code == 422
+    assert {h["proposal_id"]: h["blocked_reason"] for h in client.get("/api/history", headers=headers).json()} == {first: "bear", second: "bear"}
+
+    # 주문까지 간 제안은 막힘이 아니다
+    place_filled_order(client, custom_user)
+    [filled_item] = [h for h in client.get("/api/history", headers=headers).json() if h["order_status"] == "filled"]
+    assert client.post("/api/auto/blocked", headers=headers, json={"proposal_ids": [filled_item["proposal_id"]], "reason": "bear"}).status_code == 204
+    [filled_item] = [h for h in client.get("/api/history", headers=headers).json() if h["order_status"] == "filled"]
+    assert filled_item["blocked_reason"] is None
