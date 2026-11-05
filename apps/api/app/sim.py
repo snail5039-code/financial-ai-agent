@@ -56,12 +56,12 @@ def vol_pct(closes: list[int]) -> float | None:
     return statistics.pstdev(b / a - 1 for a, b in zip(r, r[1:])) * 100 if len(r) == 21 else None
 
 
-def buy_room(cash: int, equity: int, invested: int, vol: float | None, half: bool) -> int:
+def buy_room(cash: int, equity: int, invested: int, vol: float | None, half: bool, max_exp: float = MAX_EXPOSURE) -> int:
     """auto_trader.dart buyRoom: 종목당 살 총액의 35%, 변동성 몫(총자산 2% / 하루 변동 2배), 주식 비중 70%까지"""
     cap = int((cash + 0) * MAX_STOCK)  # 살 총액 = 주문 가능 금액 전부 (오늘 쓴 돈은 cash에서 이미 빠졌다)
     if vol:
         cap = min(cap, int(equity * RISK / (2 * vol / 100)))
-    room = min(cap // 2 if half else cap, cash, int(equity * MAX_EXPOSURE) - invested)
+    room = min(cap // 2 if half else cap, cash, int(equity * max_exp) - invested)
     return max(room, 0)
 
 
@@ -164,6 +164,7 @@ class Strategy:
     skip: float = 0.0  # 소음 점검용: 이 비율만큼 매수를 무작위로 건너뛴다 (seed로 고정)
     seed: int = 0
     vol_cap: float | None = None  # 60일 변동성 순위 상한 (앱 0.8). None이면 상한 없음 (지금까지 시뮬)
+    bear_cap: float | None = None  # 하락장일 때 주식 비중 상한 (예: 0.3). None이면 평소 70%
     fin_filter: str = ""  # 재무 악화 종목은 안 삼 — deficit: 영업적자 / half: 영업적자이거나 전년 같은 기간 영업이익이 반 이하
 
 
@@ -215,7 +216,7 @@ def run(h: History, s: Strategy, days: list[date]) -> Book:
             for code in picks:
                 if s.skip and rng.random() < s.skip:
                     continue
-                _try_buy(book, h, s, d, code, prev, half=bear and s.bear_buy == "half", ix_prev=ix_prev, ix_min=ix_min)
+                _try_buy(book, h, s, d, code, prev, half=bear and s.bear_buy == "half", max_exp=s.bear_cap if bear and s.bear_cap else MAX_EXPOSURE, ix_prev=ix_prev, ix_min=ix_min)
         # 3) 마감 값
         held = sum(p["qty"] * (daily_bars(c).get(key) or {"c": p["avg"]})["c"] for c, p in book.pos.items())
         equity = book.cash + held
@@ -229,7 +230,7 @@ def _equity(book: Book, d: date) -> tuple[float, float]:
     return book.cash + held, held
 
 
-def _try_buy(book: Book, h: History, s: Strategy, d: date, code: str, prev: date, half: bool, ix_prev, ix_min) -> None:
+def _try_buy(book: Book, h: History, s: Strategy, d: date, code: str, prev: date, half: bool, max_exp: float, ix_prev, ix_min) -> None:
     day = daily_bars(code).get(f"{d:%Y%m%d}")
     if not day:
         return
@@ -255,7 +256,7 @@ def _try_buy(book: Book, h: History, s: Strategy, d: date, code: str, prev: date
     if not price:
         return
     equity, invested = _equity(book, d)
-    room = buy_room(int(book.cash), int(equity), int(invested), vol_pct(closes_until(h, code, prev, 21)), half)
+    room = buy_room(int(book.cash), int(equity), int(invested), vol_pct(closes_until(h, code, prev, 21)), half, max_exp)
     qty = int(room // (price * (1 + BUY_FEE)))
     if qty < 1:
         return

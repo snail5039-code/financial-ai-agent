@@ -93,6 +93,10 @@ void main() {
     expect([newBuyBlock(true, afternoon, 0.5, 0.5), newBuyBlock(true, nine, -2.0, -2.0), newBuyBlock(false, nine, -1.5, null),
         newBuyBlock(false, nine, -0.5, -0.5), newBuyBlock(false, ten, -1.5, -2.0), newBuyBlock(false, afternoon, null, null)],
         ['bear', 'bear', 'early', null, null, null]);
+    // 모의투자 하락장 시험 (2026-11-05): 하락장이라고 막지 않되 10시 전 급락은 그대로 막고, 비중 상한만 20%로 낮춘다
+    expect([newBuyBlock(true, afternoon, 0.5, 0.5, bearLimit: true), newBuyBlock(true, nine, -2.0, -2.0, bearLimit: true)], [null, 'early']);
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 1500000, maxExposurePct: autoBearExposurePct), 500000);
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 2000000, maxExposurePct: autoBearExposurePct), 0);
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},
