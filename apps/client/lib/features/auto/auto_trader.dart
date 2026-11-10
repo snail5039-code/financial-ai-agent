@@ -148,7 +148,7 @@ bool earlyDownDay(DateTime now, double? kospiPct, double? kosdaqPct) {
 /// 오늘 새로 사지 않는 이유 (없으면 null): 'bear' 하락장(코스피가 20일 평균 아래)이면 하루 종일, 'early' 10시 전 지수 급락.
 /// 2026-10-27 1년 규칙 시뮬레이션: 하락장에 새로 안 사면 1년 −2.2% → +39.4%, 뒤 4개월 −35.4% → −14.3%
 /// (매수 10%를 무작위로 빼고 20번 돌려도 분포가 겹치지 않았다). 전엔 하락장이면 종목당 몫의 절반만 샀다 (2026-10-15)
-/// bearLimit: 하락장에도 안 막고 주식 비중 상한(autoBearExposurePct)만 낮춘다 (2026-11-05 사용자 결정, 모의투자 시험)
+/// bearLimit: 얕은 하락장이라 안 막고 비중·종목당 상한만 낮춘다 (2026-11-05 20% 시험 → 2026-11-10 B 규칙, 모의투자). 깊은 하락장은 bearLimit이 false라 막는다
 String? newBuyBlock(bool bear, DateTime now, double? kospiPct, double? kosdaqPct, {bool bearLimit = false}) =>
     bear && !bearLimit ? 'bear' : earlyDownDay(now, kospiPct, kosdaqPct) ? 'early' : null;
 
@@ -249,20 +249,33 @@ const _why = {
 // 변동성 기준 수량과 전체 주식 비중 상한 (2026-10-18 사용자 결정, 1년 백테스트: 최대 낙폭 −51% → −33%, 6개 조건 모두 이익)
 const autoRiskPct = 2; // 평소 하루 변동의 2배만큼 빠지면 계좌(총자산)의 이만큼(%)만 잃게 산다
 const autoMaxExposurePct = 70; // 주식 평가액이 총자산의 이만큼(%)을 넘게 사지 않는다
-/// 모의투자에서 하락장에도 AI가 판단해 사되, 주식 비중을 이만큼(%)까지만 (2026-11-05 사용자 결정, 2주 지켜본다).
-/// 과거 1년 규칙 시험: 하락장 20%만 사도 뒤 4개월 −27% (안 사면 −14%). AI가 이걸 줄이는지는 이 시험으로 본다
-const autoBearExposurePct = 20;
+/// 모의투자 얕은 하락장 매수 "B 규칙" (2026-11-10 사용자 결정, 11/19쯤 하락장 매수 손익을 보고 판단한다).
+/// 코스피가 20일 평균보다 autoBearShallowPct% 이내로만 아래면 사되, 주식 비중은 총자산의 autoBearExposurePct%까지,
+/// 한 종목은 총자산의 autoBearStockPct%까지, 첫 매수는 그 1/3(autoBearTranches)만. 더 깊게 빠지면 새로 안 산다.
+/// 과거 1년 규칙 시험(AI 0원): 얕은 하락(−5%)만 50%로 사면 1년 +59.7%·뒤 4개월 −6.9%·낙폭 −20%, 첫 1/3만이면 +57.4%·−7.0%·−21%.
+/// 안 사는 것(+61.9%·−9.7%·−28%)과 매수 10%를 무작위로 빼는 소음 안에서 구분되지 않는다. 이득이 확인된 게 아니라 시험이다.
+/// 2·3일째 추가 매수는 서버가 이미 가진 종목을 후보에서 빼서 아직 없다
+const autoBearExposurePct = 50;
+const autoBearStockPct = 15;
+const autoBearTranches = 3;
+const autoBearShallowPct = 5;
 
 /// 이 종목에 지금 더 쓸 수 있는 금액: 종목당 몫에서 이미 산 만큼 빼고, 하루 남은 총액과 전체 주식 비중 상한을 넘지 않게.
 /// 종목당 몫 = 총액의 autoMaxStockPct%와 변동성 몫(총자산 × autoRiskPct% ÷ (2 × 하루 변동폭 %)) 중 작은 것.
 /// half: 투자 AI가 절반 매수를 골랐다 (추세는 좋지만 위험도 클 때 나눠 사기, 2026-10-14). 다음 판단이 '전부'면 나머지를 산다.
 /// equity(총자산)·invested(지금 주식 평가액)·dailyVolPct(최근 20일 하루 변동폭 %)를 모르면 그 제한은 건너뛴다
+/// bear: 얕은 하락장 매수 (B 규칙) — 종목 몫을 총자산의 autoBearStockPct%로 줄이고 그중 첫 1/3만
 int buyRoom({required int budget, required int spentToday, required int spentOnStock, bool half = false,
-    int? equity, int invested = 0, double? dailyVolPct, int maxExposurePct = autoMaxExposurePct}) {
+    int? equity, int invested = 0, double? dailyVolPct, int maxExposurePct = autoMaxExposurePct, bool bear = false}) {
   var stockCap = budget * autoMaxStockPct ~/ 100;
   if (equity != null && dailyVolPct != null && dailyVolPct > 0) {
     final volCap = (equity * autoRiskPct / (2 * dailyVolPct)).floor();
     if (volCap < stockCap) stockCap = volCap;
+  }
+  if (bear && equity != null) {
+    final bearCap = equity * autoBearStockPct ~/ 100;
+    if (bearCap < stockCap) stockCap = bearCap;
+    stockCap ~/= autoBearTranches;
   }
   final perStock = (half ? stockCap ~/ 2 : stockCap) - spentOnStock;
   var room = perStock < budget - spentToday ? perStock : budget - spentToday;
@@ -282,12 +295,19 @@ bool dipBuy(double? todayPct) => todayPct != null && todayPct <= -autoDipPct;
 
 /// 하락장: 코스피가 지난 20거래일 종가 평균 아래 (2026-10-15 사용자 결정, Faber 추세 필터. 처음엔 몫을 절반으로, 2026-10-27부터 새로 안 삼 = newBuyBlock).
 /// daily는 [YYYYMMDD, 종가] 최신부터. 오늘 것은 빼고 본다 (KIS 모의 일별 지수가 늦게 와도 지난 값만 쓴다)
-bool bearMarket(Map<String, dynamic>? kospi, String todayYmd) {
+bool bearMarket(Map<String, dynamic>? kospi, String todayYmd) => (bearDepth(kospi, todayYmd) ?? 0) < 0;
+
+/// 코스피가 지난 20거래일 종가 평균보다 얼마나 위·아래인가 (−0.03 = 3% 아래). 값이 없거나 20일이 안 되면 null
+double? bearDepth(Map<String, dynamic>? kospi, String todayYmd) {
   final value = (kospi?['value'] as num?)?.toDouble();
   final past = [for (final d in (kospi?['daily'] as List? ?? [])) if ('${d[0]}'.compareTo(todayYmd) < 0) (d[1] as num).toDouble()];
-  if (value == null || past.length < 20) return false;
-  return value < past.take(20).reduce((a, b) => a + b) / 20;
+  if (value == null || past.length < 20) return null;
+  final avg = past.take(20).reduce((a, b) => a + b) / 20;
+  return (value - avg) / avg;
 }
+
+/// 얕은 하락장: 20일 평균 아래이면서 autoBearShallowPct% 이내 (딱 그만큼 빠진 것은 깊은 쪽)
+bool shallowBear(double? depth) => depth != null && depth < 0 && depth > -autoBearShallowPct / 100;
 
 /// 강제 손절 (2026-10-15 사용자 결정): 매입가 대비 −autoHardStopPct%면 AI에게 팔지 묻지 않고 절반, −autoHardStopAllPct%면 남은 것 전부.
 /// 10/15 NH투자증권 −9.16%에서 AI가 매번 "공포 매도 피하기"로 보유해 −7% 손절선이 걸리지 않았다. 주문은 그래도 검증 AI를 거친다
@@ -497,40 +517,48 @@ class AutoTrader extends ChangeNotifier {
     // 총자산과 지금 주식 평가액 (변동성 몫·비중 상한용). 잔고를 못 받으면 예전처럼 종목당 몫만 본다
     int? equity;
     var invested = 0;
+    final heldValue = <String, int>{}; // 종목별 지금 평가액 (하락장 종목당 상한용)
     try {
       final broker = currentBroker.value!;
       final balance = await broker.balance();
       for (final h in (balance['holdings'] as List).cast<Map<String, dynamic>>()) {
-        invested += (h['qty'] as int) * (broker.lastPrices[h['stock_code']] ?? h['avg_price'] as int);
+        final value = (h['qty'] as int) * (broker.lastPrices[h['stock_code']] ?? h['avg_price'] as int);
+        heldValue['${h['stock_code']}'] = value;
+        invested += value;
       }
       equity = (balance['cash_krw'] as int) + invested;
     } catch (_) {
       equity = null;
     }
     var bear = false;
+    double? depth; // 코스피가 20일 평균보다 얼마나 아래인가 (−0.03 = 3%)
     List<Map<String, dynamic>>? market;
     try {
       market = await currentBroker.value!.market();
-      bear = bearMarket(market?.where((m) => m['index'] == 'KOSPI').firstOrNull, kstYmd(_now()));
+      depth = bearDepth(market?.where((m) => m['index'] == 'KOSPI').firstOrNull, kstYmd(_now()));
+      bear = (depth ?? 0) < 0;
     } catch (_) {
       bear = false; // 지수를 못 받으면 평소대로
     }
-    final bearLimit = bear && !realMode.value; // 모의투자만: 하락장에도 사되 비중 상한을 낮춘다. 실전은 그대로 막는다
+    final depthText = depth == null ? '' : ', 평균 대비 ${(depth * 100).toStringAsFixed(1)}%';
+    // 모의투자만, 총자산을 알 때만, 얕은 하락장(B 규칙)이면 사되 비중·종목당 상한을 낮춘다. 깊은 하락장·실전은 그대로 막는다
+    final bearLimit = bear && !realMode.value && equity != null && shallowBear(depth);
     final exposurePct = bearLimit ? autoBearExposurePct : autoMaxExposurePct;
     final blocked = newBuyBlock(bear, _now(), indexPct(market, 'KOSPI'), indexPct(market, 'KOSDAQ'), bearLimit: bearLimit);
     if (blocked != null) {
       if (await _box.read('auto_block_note:$_today:$blocked') == null) {
         await _box.write('auto_block_note:$_today:$blocked', '1'); // 이유마다 하루 한 번만 알린다
         await _note(blocked == 'bear'
-            ? '코스피가 20일 평균 아래(하락장)라 새로 사지 않아요 (보유 종목 점검은 계속해요)'
+            ? '코스피가 20일 평균 아래(하락장$depthText)라 새로 사지 않아요 (보유 종목 점검은 계속해요)'
             : '지수가 ${autoEarlyDownPct.abs()}% 넘게 빠진 아침이라 10시 전에는 새로 사지 않아요 (10시부터 다시 판단)');
       }
       await _reportBlocked(picks.where((p) => !skip(p)), blocked);
       return;
     }
-    if (bearLimit && await _box.read('auto_bear_note:$_today') == null) {
-      await _box.write('auto_bear_note:$_today', '1'); // 하루 한 번만 알린다
-      await _note('코스피가 20일 평균 아래(하락장)라 주식 비중을 총자산의 $autoBearExposurePct%까지만 새로 사요 (모의투자 시험)');
+    if (bearLimit && await _box.read('auto_bear_note2:$_today') == null) {
+      await _box.write('auto_bear_note2:$_today', '1'); // 하루 한 번만 알린다
+      await _note('코스피가 20일 평균 아래(얕은 하락장$depthText)라 주식 비중을 총자산의 $autoBearExposurePct%까지만, '
+          '한 종목은 $autoBearStockPct%(첫 매수는 그 1/$autoBearTranches)까지만 새로 사요 (모의투자 시험)');
     }
     for (final pick in picks.where((p) => !skip(p))) {
       if (!on || plan == null) break;
@@ -544,9 +572,12 @@ class AutoTrader extends ChangeNotifier {
         todayPct = null;
       }
       // 종목당 몫에서 오늘 이미 산 만큼 빼고, 하루 남은 총액을 넘지 않게 (다시 시도할 때 두 번 사지 않게)
-      var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: ((bought[code] as Map?)?['qty'] as int? ?? 0) * close,
+      final boughtToday = ((bought[code] as Map?)?['qty'] as int? ?? 0) * close;
+      final held = heldValue[code] ?? 0; // 하락장엔 예전에 산 것도 종목당 상한에 넣는다
+      var left = buyRoom(budget: budget, spentToday: spent, spentOnStock: bearLimit && held > boughtToday ? held : boughtToday,
           half: pick['portion'] == 'half' || dipBuy(todayPct),
-          equity: equity, invested: invested, dailyVolPct: (pick['daily_vol_pct'] as num?)?.toDouble(), maxExposurePct: exposurePct);
+          equity: equity, invested: invested, dailyVolPct: (pick['daily_vol_pct'] as num?)?.toDouble(), maxExposurePct: exposurePct,
+          bear: bearLimit);
       final exposureFull = left == 0 && equity != null && invested >= equity * exposurePct ~/ 100;
       if (exposureFull && await _box.read('auto_exposure_note:$_today') == null) {
         await _box.write('auto_exposure_note:$_today', '1'); // 하루 한 번만 알린다

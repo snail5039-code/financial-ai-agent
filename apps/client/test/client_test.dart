@@ -93,10 +93,19 @@ void main() {
     expect([newBuyBlock(true, afternoon, 0.5, 0.5), newBuyBlock(true, nine, -2.0, -2.0), newBuyBlock(false, nine, -1.5, null),
         newBuyBlock(false, nine, -0.5, -0.5), newBuyBlock(false, ten, -1.5, -2.0), newBuyBlock(false, afternoon, null, null)],
         ['bear', 'bear', 'early', null, null, null]);
-    // 모의투자 하락장 시험 (2026-11-05): 하락장이라고 막지 않되 10시 전 급락은 그대로 막고, 비중 상한만 20%로 낮춘다
+    // 모의투자 얕은 하락장 B 규칙 (2026-11-10): 막지 않되 10시 전 급락은 그대로 막고, 비중 상한 50%·종목당 총자산 15%의 1/3
     expect([newBuyBlock(true, afternoon, 0.5, 0.5, bearLimit: true), newBuyBlock(true, nine, -2.0, -2.0, bearLimit: true)], [null, 'early']);
-    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 1500000, maxExposurePct: autoBearExposurePct), 500000);
-    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 2000000, maxExposurePct: autoBearExposurePct), 0);
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 1500000, maxExposurePct: autoBearExposurePct, bear: true), 500000); // 총자산 5%
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 4800000, maxExposurePct: autoBearExposurePct, bear: true), 200000); // 비중 50%까지 20만
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, invested: 5000000, maxExposurePct: autoBearExposurePct, bear: true), 0);
+    expect(buyRoom(budget: 5000000, spentToday: 500000, spentOnStock: 500000, equity: 10000000, maxExposurePct: autoBearExposurePct, bear: true), 0); // 첫 1/3을 이미 샀다
+    expect(buyRoom(budget: 5000000, spentToday: 0, spentOnStock: 0, equity: 10000000, maxExposurePct: autoBearExposurePct), 1750000); // 하락장 아니면 종목 몫 그대로
+    // 11/10 실제 값: 총자산 8,597,899 → 한 번에 429,894원까지라 1주 151만 원짜리(삼성바이오로직스)는 못 산다
+    expect(buyRoom(budget: 7829899, spentToday: 0, spentOnStock: 0, equity: 8597899, invested: 766800, maxExposurePct: autoBearExposurePct, bear: true), 429894);
+    expect(belowOneShare(429894, 1510000), true);
+    // 깊이: 20일 평균 아래 5% 이내만 얕은 하락장 (딱 5%·평균 위·값 없음은 아니다)
+    expect([shallowBear(-0.03), shallowBear(-0.049), shallowBear(-0.05), shallowBear(-0.08), shallowBear(0.01), shallowBear(null)],
+        [true, true, false, false, false, false]);
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},
@@ -607,6 +616,10 @@ void main() {
     expect(bearMarket({'value': 99.0, 'daily': daily}, '20261015'), true);
     expect(bearMarket({'value': 101.0, 'daily': daily}, '20261015'), false);
     expect(bearMarket({'value': 99.0, 'daily': daily.take(10).toList()}, '20261015'), false);
+    // 평균(100) 대비 깊이. 오늘 값(1.0)은 빼고, 20일이 안 되거나 값이 없으면 null
+    expect(bearDepth({'value': 97.0, 'daily': daily}, '20261015'), closeTo(-0.03, 1e-9));
+    expect(bearDepth({'value': 101.0, 'daily': daily}, '20261015'), closeTo(0.01, 1e-9));
+    expect([bearDepth({'value': 99.0, 'daily': daily.take(10).toList()}, '20261015'), bearDepth(null, '20261015')], [null, null]);
     expect(sellReason(-3.2, {'at': ago(15)}, now), 'drop'); // 급락이면 30분을 기다리지 않는다
     expect(sellReason(-3.2, {'at': ago(5)}, now), isNull); // 그래도 10분 안에 또 묻지는 않는다
     expect(sellReason(-3.5, {'at': ago(15), 'pct': -3.2}, now), isNull); // 급락이 이어지기만 하면 30분 점검까지 기다린다
