@@ -16,7 +16,8 @@ $app = 'com.investagent.invest_client'
 if (-not ((& $adb devices) -match 'emulator-5554\s+device')) {
     Note '에뮬레이터 켜기'
     # -gpu host가 아니면 창이 검게만 보였다 (10/26). 창을 최소화하지 않는다 (11/10 화면이 안 보였다)
-    Start-Process (Join-Path $sdk 'emulator\emulator.exe') -ArgumentList '-avd', 'invest_phone', '-timezone', 'Asia/Seoul', '-gpu', 'host'
+    # -no-snapshot-load: 빠른 부팅 스냅샷을 불러오면 화면이 멈춰 터치가 안 먹었다 (11/12). 항상 새로 부팅한다
+    Start-Process (Join-Path $sdk 'emulator\emulator.exe') -ArgumentList '-avd', 'invest_phone', '-timezone', 'Asia/Seoul', '-gpu', 'host', '-no-snapshot-load'
     & $adb wait-for-device
     for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed) -match '1') { break }; Start-Sleep 3 }
 }

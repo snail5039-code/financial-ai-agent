@@ -22,8 +22,9 @@
 export DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | sed 's/:5432\//:5433\//')" PYTHONIOENCODING=utf-8
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 # 에뮬레이터 (PowerShell). -gpu host가 아니면 창이 검은색으로만 보였다 (10/26). 같이 뜨는 cmd(Windows Terminal) 창은 닫지 말고 숨긴다 (닫으면 에뮬레이터도 꺼짐)
-Start-Process "$env:ANDROID_HOME\emulator\emulator.exe" -ArgumentList "-avd","invest_phone","-timezone","Asia/Seoul","-gpu","host" -WindowStyle Minimized
-# 새로 부팅하면 잠금 PIN이 걸려 앱이 안 열린다 ("Activity class does not exist"). PIN은 사람이 푼다 (AI가 입력하지 않는다). 화면이 꺼져도 검게 보이니 켜 둔다
+Start-Process "$env:ANDROID_HOME\emulator\emulator.exe" -ArgumentList "-avd","invest_phone","-timezone","Asia/Seoul","-gpu","host","-no-snapshot-load"
+# 11/12: 빠른 부팅 스냅샷에서 깨어나면 화면이 멈춰 터치가 안 먹었다. AVD 설정(config.ini)도 fastboot.forceColdBoot=yes로 바꿔 항상 새로 부팅한다. 창은 최소화하지 않는다
+# 화면 잠금은 사용자가 11/10에 "없음"으로 바꿨다 (PIN 없이 부팅). 다시 잠금이 생기면 PIN은 사람이 푼다 (AI가 입력하지 않는다). 화면이 꺼져도 검게 보이니 켜 둔다
 adb -s emulator-5554 shell svc power stayon true
 # 앱 (apps/client). 키 파일 안의 값은 절대 출력하지 않는다. flutter_cmd.txt에 r(핫리로드)·R(핫리스타트)·q(종료)를 한 줄씩 덧붙여 조작
 tail -f flutter_cmd.txt | flutter.bat run -d emulator-5554 --no-enable-impeller --dart-define-from-file=dev_keys.env
