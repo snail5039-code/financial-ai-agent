@@ -340,6 +340,7 @@ class AutoTrader extends ChangeNotifier {
   bool _busy = false;
   Timer? _timer;
   DateTime? _lastWatch;
+  String? _loadedDay; // load()가 읽은 날. 앱을 끄지 않고 날이 바뀌면 그날 계획·기록을 다시 읽는다 (11/13: 어제 계획이 남아 있었다)
 
   /// 모의투자이거나, 실전 모드를 켰고 실전 주문 준비가 된 증권사일 때 켤 수 있다 (4-3)
   static bool allowed(Broker? broker) =>
@@ -354,7 +355,8 @@ class AutoTrader extends ChangeNotifier {
   bool get needsPlan => on && plan == null && _kst.weekday <= 5;
 
   Future<void> load() async {
-    on = await _box.read('auto_on') == 'true';
+    _loadedDay = _today;
+    on =await _box.read('auto_on') == 'true';
     budgetKrw = int.tryParse(await _box.read('auto_budget_krw') ?? '') ?? budgetKrw;
     log = ((jsonDecode(await _box.read('auto_log:$_today') ?? '[]') as List)).cast<String>();
     final saved = await _box.read('auto_plan:$_today');
@@ -413,6 +415,7 @@ class AutoTrader extends ChangeNotifier {
   /// 장중(09:05~15:28, 평일)이고 오늘 계획을 승인했으면: 정규장 연속 매매가 끝나는 15:20 전까지 사고, AI 매도를 허용했으면 보유 종목을 점검한다
 /// (2026-10-13 사용자 결정: 15:00에 멈추지 않고 장 끝까지 사고판다. 15:20~15:30 동시호가에는 사지 않는다)
   Future<void> tick() async {
+    if (_loadedDay != null && _loadedDay != _today && !_busy) await load(); // 어제 계획으로 사고팔지 않게
     if (!on || _busy || kIsWeb || !allowed(currentBroker.value)) return;
     final k = _kst;
     final minutes = k.hour * 60 + k.minute;

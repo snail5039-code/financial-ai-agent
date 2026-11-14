@@ -750,6 +750,22 @@ void main() {
     expect(trader.needsPlan, isTrue);
   });
 
+  test('앱을 끄지 않고 날이 바뀌면 어제 계획을 버리고 오늘 계획을 다시 묻는다', () async {
+    final box = SecureBox.memory();
+    await box.write('auto_on', 'true');
+    var now = DateTime.utc(2026, 11, 12, 0, 30); // 목 09:30 KST
+    final trader = AutoTrader(box: box, now: () => now);
+    await trader.load();
+    await trader.approvePlan(1000000);
+    expect(trader.plan, isNotNull);
+    now = DateTime.utc(2026, 11, 13, 0, 30); // 다음 날 금 09:30 KST
+    await trader.tick();
+    expect(trader.plan, isNull); // 어제 계획으로 사지 않는다
+    expect(trader.needsPlan, isTrue);
+    expect(trader.log, isEmpty); // 기록도 오늘 것만
+    expect(await box.read('auto_plan:2026-11-12'), isNotNull); // 어제 기록은 지우지 않는다
+  });
+
   test('배지는 방을 마지막으로 연 뒤에 온 것만 센다', () {
     const items = ['2026-10-20T08:20:00+09:00', '2026-10-20T09:10:00+09:00'];
     expect(unseenCount(items, null), 2); // 한 번도 안 열었으면 전부
