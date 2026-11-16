@@ -55,6 +55,7 @@ MIN_HANGUL_SHARE = 0.3      # 한글이 이보다 적은 조각은 깨진 표 �
 RECENT_DISCLOSURES = 5
 # 뉴스 (12-todo-by-stage.md 2-2): 종목마다 최근 NEWS_DAYS일 기사 NEWS_RESULTS개. 같은 종목은 NEWS_REFRESH 안에 다시 받지 않는다
 NEWS_DAYS, NEWS_RESULTS, NEWS_REFRESH = 3, 5, timedelta(minutes=30)
+NEWS_URL_MAX = 2000  # 바이트. news(stock_code, url) 색인 한 줄 한도(2704바이트)보다 넉넉히 작게 (11/16 3,440바이트 주소)
 # 장중 공시 (2026-10-20 사용자 요청): 공시는 07·14시에만 수집해서 10시에 나온 악재를 14시까지 몰랐다.
 # 분석할 때 그 종목의 오늘 공시를 DISCLOSURE_REFRESH마다 DART에서 다시 받는다 (제목·링크만, 본문 조각은 07·14시 수집이 만든다)
 DISCLOSURE_REFRESH = timedelta(minutes=30)
@@ -939,14 +940,19 @@ def recent_news(conn, code: str, name: str) -> list[str]:
     last = conn.execute("SELECT max(fetched_at) AS at FROM news WHERE stock_code = %s", (code,)).fetchone()["at"]
     if config.NEWS_FETCH and (last is None or datetime.now(KST) - last > NEWS_REFRESH):
         try:
-            longer = tuple(r["name"] for r in conn.execute(  # 이름에 이 종목 이름이 들어간 다른 종목 (뉴스 거르기)
-                "SELECT name FROM stocks WHERE name LIKE %s AND name <> %s", (f"%{name}%", name)))
-            for item in google_news.search(name, NEWS_DAYS, longer):
-                conn.execute(
-                    "INSERT INTO news (stock_code, title, press, url, published_at) VALUES (%s, %s, %s, %s, %s)"
-                    " ON CONFLICT (stock_code, url) DO UPDATE SET fetched_at = now()",
-                    (code, item["title"], item["press"], item["url"], item["published_at"]))
-            conn.execute("UPDATE news SET fetched_at = now() WHERE stock_code = %s", (code,))  # 기사가 없어도 30분은 다시 안 받는다
+            # 저장점 안에서 받는다: 저장이 실패해도 이 부분만 되돌리고 연결은 계속 쓴다
+            # (11/16: 긴 뉴스 주소 저장 실패가 트랜잭션을 깨뜨려 다음 조회까지 실패, 브리핑 전체가 500)
+            with conn.transaction():
+                longer = tuple(r["name"] for r in conn.execute(  # 이름에 이 종목 이름이 들어간 다른 종목 (뉴스 거르기)
+                    "SELECT name FROM stocks WHERE name LIKE %s AND name <> %s", (f"%{name}%", name)))
+                for item in google_news.search(name, NEWS_DAYS, longer):
+                    if len(item["url"].encode()) > NEWS_URL_MAX:  # 주소 색인 한도(2704바이트)를 넘으면 저장할 수 없다
+                        continue
+                    conn.execute(
+                        "INSERT INTO news (stock_code, title, press, url, published_at) VALUES (%s, %s, %s, %s, %s)"
+                        " ON CONFLICT (stock_code, url) DO UPDATE SET fetched_at = now()",
+                        (code, item["title"], item["press"], item["url"], item["published_at"]))
+                conn.execute("UPDATE news SET fetched_at = now() WHERE stock_code = %s", (code,))  # 기사가 없어도 30분은 다시 안 받는다
         except Exception:  # noqa: BLE001 뉴스는 덤이다. 못 받아도 분석은 한다
             logging.getLogger(__name__).warning("뉴스를 받지 못했어요: %s", code, exc_info=True)
     rows = conn.execute(

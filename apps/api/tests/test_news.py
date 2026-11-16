@@ -71,6 +71,33 @@ def test_recent_news_survives_fetch_failure(migrated, monkeypatch) -> None:
         assert analysis.recent_news(conn, "666662", "뉴스실패") == []  # 뉴스 없이도 분석은 계속한다
 
 
+def test_recent_news_skips_too_long_url(migrated, monkeypatch) -> None:
+    # 11/16: 3,440바이트 주소를 저장하다 색인 한도 초과 → 브리핑 전체 500
+    code, name = "666664", "긴주소"
+    published = datetime.now(KST) - timedelta(hours=1)
+    monkeypatch.setattr(google_news, "search", lambda *_: [
+        {"title": f"{name} 긴 기사", "press": "테스트일보", "url": "https://news/" + "a" * 3500, "published_at": published},
+        {"title": f"{name} 보통 기사", "press": "테스트일보", "url": "https://news/ok", "published_at": published}])
+    monkeypatch.setattr(config, "NEWS_FETCH", True)
+    with psycopg.connect(migrated) as conn:
+        conn.execute("INSERT INTO stocks VALUES (%s, %s, 'KOSPI', true) ON CONFLICT DO NOTHING", (code, name))
+    with connect(migrated, row_factory=dict_row) as conn:
+        ids = analysis.recent_news(conn, code, name)
+        assert analysis.load_source(conn, ids[0], {})["url"] == "https://news/ok" and len(ids) == 1
+
+
+def test_recent_news_db_error_does_not_break_connection(migrated, monkeypatch) -> None:
+    # 저장이 DB에서 실패해도 같은 연결로 다음 조회를 할 수 있어야 한다 (저장점으로 되돌림)
+    monkeypatch.setattr(google_news, "search", lambda *_: [
+        {"title": "깨진 기사", "press": "테스트일보", "url": "https://news/bad", "published_at": "날짜 아님"}])
+    monkeypatch.setattr(config, "NEWS_FETCH", True)
+    with psycopg.connect(migrated) as conn:
+        conn.execute("INSERT INTO stocks VALUES ('666665', '깨진저장', 'KOSPI', true) ON CONFLICT DO NOTHING")
+    with connect(migrated, row_factory=dict_row) as conn:
+        assert analysis.recent_news(conn, "666665", "깨진저장") == []
+        assert conn.execute("SELECT 1 AS ok").fetchone()["ok"] == 1  # 트랜잭션이 깨지지 않았다
+
+
 def test_stock_feed_shows_news_with_nearby_disclosure(client, user, migrated) -> None:
     code = "666663"
     published = datetime.now(KST) - timedelta(hours=2)
