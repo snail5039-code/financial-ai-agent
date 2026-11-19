@@ -251,7 +251,7 @@ const autoRiskPct = 2; // 평소 하루 변동의 2배만큼 빠지면 계좌(�
 const autoMaxExposurePct = 70; // 주식 평가액이 총자산의 이만큼(%)을 넘게 사지 않는다
 /// 모의투자 얕은 하락장 매수 "B 규칙" (2026-11-10 사용자 결정, 11/19쯤 하락장 매수 손익을 보고 판단한다).
 /// 코스피가 20일 평균보다 autoBearShallowPct% 이내로만 아래면 사되, 주식 비중은 총자산의 autoBearExposurePct%까지,
-/// 한 종목은 총자산의 autoBearStockPct%까지, 첫 매수는 그 1/3(autoBearTranches)만. 더 깊게 빠지면 새로 안 산다.
+/// 한 종목은 총자산의 autoBearStockPct%까지, 첫 매수는 그 1/3(autoBearTranches)만. 더 깊게 빠지면 새로 안 샀지만 11/19부터 같은 한도로 산다(autoBearDeepBuy).
 /// 과거 1년 규칙 시험(AI 0원): 얕은 하락(−5%)만 50%로 사면 1년 +59.7%·뒤 4개월 −6.9%·낙폭 −20%, 첫 1/3만이면 +57.4%·−7.0%·−21%.
 /// 안 사는 것(+61.9%·−9.7%·−28%)과 매수 10%를 무작위로 빼는 소음 안에서 구분되지 않는다. 이득이 확인된 게 아니라 시험이다.
 /// 2·3일째 추가 매수는 서버가 이미 가진 종목을 후보에서 빼서 아직 없다
@@ -308,6 +308,13 @@ double? bearDepth(Map<String, dynamic>? kospi, String todayYmd) {
 
 /// 얕은 하락장: 20일 평균 아래이면서 autoBearShallowPct% 이내 (딱 그만큼 빠진 것은 깊은 쪽)
 bool shallowBear(double? depth) => depth != null && depth < 0 && depth > -autoBearShallowPct / 100;
+
+/// 깊은 하락장에서도 B 규칙 한도로 산다 (2026-11-19 사용자 결정, 모의투자만: 11/18 코스피 +1.99% 반등일에 −6.8%라 하루 종일 못 샀다)
+const autoBearDeepBuy = true;
+
+/// 하락장인데 막지 않고 B 규칙 한도(비중·종목당 상한)로 살지. 실전·지수 모름은 그대로 막는다
+bool bearLimited(double? depth, {required bool real}) =>
+    !real && depth != null && depth < 0 && (autoBearDeepBuy || shallowBear(depth));
 
 /// 강제 손절 (2026-10-15 사용자 결정): 매입가 대비 −autoHardStopPct%면 AI에게 팔지 묻지 않고 절반, −autoHardStopAllPct%면 남은 것 전부.
 /// 10/15 NH투자증권 −9.16%에서 AI가 매번 "공포 매도 피하기"로 보유해 −7% 손절선이 걸리지 않았다. 주문은 그래도 검증 AI를 거친다
@@ -545,7 +552,7 @@ class AutoTrader extends ChangeNotifier {
     }
     final depthText = depth == null ? '' : ', 평균 대비 ${(depth * 100).toStringAsFixed(1)}%';
     // 모의투자만, 총자산을 알 때만, 얕은 하락장(B 규칙)이면 사되 비중·종목당 상한을 낮춘다. 깊은 하락장·실전은 그대로 막는다
-    final bearLimit = bear && !realMode.value && equity != null && shallowBear(depth);
+    final bearLimit = bear && equity != null && bearLimited(depth, real: realMode.value);
     final exposurePct = bearLimit ? autoBearExposurePct : autoMaxExposurePct;
     final blocked = newBuyBlock(bear, _now(), indexPct(market, 'KOSPI'), indexPct(market, 'KOSDAQ'), bearLimit: bearLimit);
     if (blocked != null) {
@@ -560,7 +567,7 @@ class AutoTrader extends ChangeNotifier {
     }
     if (bearLimit && await _box.read('auto_bear_note2:$_today') == null) {
       await _box.write('auto_bear_note2:$_today', '1'); // 하루 한 번만 알린다
-      await _note('코스피가 20일 평균 아래(얕은 하락장$depthText)라 주식 비중을 총자산의 $autoBearExposurePct%까지만, '
+      await _note('코스피가 20일 평균 아래(${shallowBear(depth) ? '얕은' : '깊은'} 하락장$depthText)라 주식 비중을 총자산의 $autoBearExposurePct%까지만, '
           '한 종목은 $autoBearStockPct%(첫 매수는 그 1/$autoBearTranches)까지만 새로 사요 (모의투자 시험)');
     }
     for (final pick in picks.where((p) => !skip(p))) {
@@ -674,7 +681,6 @@ class AutoTrader extends ChangeNotifier {
       await _note('${p['name']}: 계좌에 없어서 자동매매 보유 기록에서 뺐어요');
     }
     await _cancelStuckSells(broker, holdings);
-    if (positions.isEmpty) return;
     // 시장 급락이면 보유 종목을 모두 바로 묻는다. 지수를 못 받으면 종목별 판단만 한다
     List<Map<String, dynamic>>? market;
     try {
@@ -687,6 +693,8 @@ class AutoTrader extends ChangeNotifier {
       await api.post('/api/snapshot', {...balance, if (equityTime(_now())) ...{
         'total_krw': equityOf(balance, broker.lastPrices), 'kospi_pct': kospi, 'kosdaq_pct': indexPct(market, 'KOSDAQ')}});
     } catch (_) {}
+    // 보유가 없어도 위 스냅샷은 남긴다 (2026-11-18: 다 판 뒤 10:19~15:16 자산 그래프·코스피 기록이 비었다)
+    if (positions.isEmpty) return;
     await _restoreUnfilledSells(holdings);
     final reviews = (jsonDecode(await _box.read('auto_reviews:$_today') ?? '{}') as Map).cast<String, dynamic>();
     final marketDrop = marketDropped(kospi, ((reviews['_market'] as Map?)?['pct'] as num?)?.toDouble(), _now());

@@ -106,6 +106,11 @@ void main() {
     // 깊이: 20일 평균 아래 5% 이내만 얕은 하락장 (딱 5%·평균 위·값 없음은 아니다)
     expect([shallowBear(-0.03), shallowBear(-0.049), shallowBear(-0.05), shallowBear(-0.08), shallowBear(0.01), shallowBear(null)],
         [true, true, false, false, false, false]);
+    // 11/19: 모의투자는 깊은 하락장(−6.8%)도 B 규칙 한도로 산다. 실전·평균 위·지수 모름은 아니다
+    expect([bearLimited(-0.03, real: false), bearLimited(-0.068, real: false), bearLimited(-0.068, real: true),
+        bearLimited(0.01, real: false), bearLimited(null, real: false)], [true, true, false, false, false]);
+    expect(newBuyBlock(true, afternoon, 2.0, 2.0, bearLimit: bearLimited(-0.068, real: false)), null);
+    expect(newBuyBlock(true, afternoon, 2.0, 2.0, bearLimit: bearLimited(-0.068, real: true)), 'bear');
     final data = {
       'days': [{'date': '2026-10-16', 'total_krw': 9428986}, {'date': '2026-10-19', 'total_krw': 9416713}],
       'intraday': {'date': '2026-10-19', 'points': [{'time': '09:54', 'total_krw': 9322536}]},
