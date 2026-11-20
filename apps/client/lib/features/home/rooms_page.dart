@@ -2,6 +2,8 @@
 // 대화방: 투자 비서(대화) · 처리안(승인·실행 대기) · 코치(규칙에 걸린 요청) · 종목별 최근 기록.
 // 넓은 화면(웹)에서는 왼쪽 목록 + 오른쪽 투자 비서 대화.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -40,6 +42,7 @@ class RoomsPage extends StatefulWidget {
 class _RoomsPageState extends State<RoomsPage> {
   late Future<Overview> _data = loadOverview();
   bool _wasBusy = false;
+  Timer? _poll;
   final _seen = <String, String>{}; // 방 → 마지막으로 연 시각(브리핑·처리안) 또는 본 처리안 ID(투자 비서). 폰에만 둔다
 
   Future<void> _loadSeen() async {
@@ -58,6 +61,15 @@ class _RoomsPageState extends State<RoomsPage> {
 
   void _reload() => setState(() { _data = loadOverview(); });
 
+  /// 화면을 켜 둔 채로 있어도 5분마다 조용히 다시 읽는다. 다 읽은 뒤에 바꿔서 로딩 표시가 깜빡이지 않고, 실패하면 이전 화면을 둔다
+  /// (2026-11-20: 08:10에 켠 앱이 08:21에 나온 아침 브리핑 대신 전날 브리핑을 계속 보여줬다)
+  void _quietReload() {
+    if (!widget.active) return;
+    loadOverview().then((value) {
+      if (mounted) setState(() { _data = Future.value(value); });
+    }, onError: (Object _) {});
+  }
+
   /// 대화가 끝나면(처리안이 새로 왔을 수 있다) 목록을 다시 읽는다
   void _onConversation() {
     final busy = widget.conversation.busy;
@@ -70,11 +82,13 @@ class _RoomsPageState extends State<RoomsPage> {
     super.initState();
     widget.conversation.addListener(_onConversation);
     _loadSeen();
+    _poll = Timer.periodic(const Duration(minutes: 5), (_) => _quietReload());
   }
 
   @override
   void dispose() {
     widget.conversation.removeListener(_onConversation);
+    _poll?.cancel();
     super.dispose();
   }
 
