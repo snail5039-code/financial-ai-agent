@@ -65,7 +65,7 @@ class _RoomsPageState extends State<RoomsPage> {
   /// (2026-11-20: 08:10에 켠 앱이 08:21에 나온 아침 브리핑 대신 전날 브리핑을 계속 보여줬다)
   void _quietReload() {
     if (!widget.active) return;
-    loadOverview().then((value) {
+    loadOverview(snapshot: false).then((value) {
       if (mounted) setState(() { _data = Future.value(value); });
     }, onError: (Object _) {});
   }

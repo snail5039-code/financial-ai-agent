@@ -25,7 +25,8 @@ typedef Overview = ({
   Map<String, dynamic>? close, // 가장 최근 장 마감 요약, 없으면 null
 });
 
-Future<Overview> loadOverview() async {
+/// snapshot: 서버에 스냅샷을 올릴지. 채팅 탭 5분 다시 읽기는 false (자동매매가 이미 5분마다 코스피와 함께 올린다, 2026-11-20 중복)
+Future<Overview> loadOverview({bool snapshot = true}) async {
   Map<String, dynamic>? balance;
   final broker = currentBroker.value;
   if (kIsWeb) {
@@ -41,8 +42,10 @@ Future<Overview> loadOverview() async {
       throw ApiError(0, '지금 ${broker.name}에 연결할 수 없어요 ($error)');
     }
     // 웹에서 볼 수 있게 계좌번호 없이 올린다. 총자산(현재가 기준)은 자산 그래프용 (서버엔 실시간 시세가 없다)
-    await api.post('/api/snapshot',
-        {...balance, if (equityTime(DateTime.now())) 'total_krw': equityOf(balance, broker.lastPrices)});
+    if (snapshot) {
+      await api.post('/api/snapshot',
+          {...balance, if (equityTime(DateTime.now())) 'total_krw': equityOf(balance, broker.lastPrices)});
+    }
     await syncFills(broker, get: api.get, post: api.post);
   }
   final results = await Future.wait([
